@@ -1,36 +1,73 @@
 body{
-    background:#050505;
-    color:#00ffff;
-    font-family:Arial, sans-serif;
     margin:0;
-    padding:20px;
+    background:#1E1E1E;
+    color:#EAEAEA;
+    font-family:Arial,sans-serif;
 }
 
-.container{
-    max-width:1200px;
-    margin:auto;
+.top-header{
+    background:#2B2B2B;
+    border-bottom:1px solid #4A4A4A;
+    padding:15px 20px;
 }
 
-h1{
-    text-align:center;
+.top-header h1{
+    margin:0;
+    font-size:28px;
 }
 
-button{
-    padding:12px 25px;
-    font-size:18px;
+.top-header span{
+    color:#5FB8B8;
+    font-size:12px;
+}
+
+.main-layout{
+    display:flex;
+}
+
+.sidebar{
+    width:220px;
+    background:#242424;
+    min-height:100vh;
+    padding:15px;
+    border-right:1px solid #4A4A4A;
+}
+
+.sidebar h3{
+    color:#5FB8B8;
+    margin-top:20px;
+    margin-bottom:10px;
+}
+
+.sidebar button{
+    width:100%;
+    margin-bottom:8px;
+    padding:10px;
+    background:#333;
+    color:white;
+    border:none;
     cursor:pointer;
 }
 
+.sidebar button:hover{
+    background:#444;
+}
+
+.content{
+    flex:1;
+    padding:20px;
+}
+
 .info{
-    margin-top:20px;
+    margin-bottom:20px;
 }
 
 #hexViewer{
-    margin-top:20px;
-    border:1px solid #00ffff;
+    border:1px solid #5FB8B8;
+    background:#111;
     padding:10px;
     height:600px;
     overflow:auto;
     white-space:pre;
-    font-family:Consolas, monospace;
+    font-family:Consolas,monospace;
 }
