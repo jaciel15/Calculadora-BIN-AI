@@ -1,17 +1,28 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
+
 <meta charset="UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>VELOCÍMETROS CDMX</title>
 
 <link rel="stylesheet" href="style.css">
+
 </head>
+
 <body>
 
 <header class="top-header">
+
     <h1>VELOCÍMETROS CDMX</h1>
-    <span>Ingeniería EEPROM • BIN Analysis</span>
+
+    <span>
+        Ingeniería EEPROM • BIN Analysis
+    </span>
+
 </header>
 
 <div class="main-layout">
@@ -20,33 +31,53 @@
 
         <h3>ARCHIVO</h3>
 
-        <button id="openBtn">Abrir BIN</button>
+        <button id="openBtn">
+            Abrir BIN
+        </button>
 
-        <button>Guardar BIN</button>
+        <button>
+            Guardar BIN
+        </button>
 
-        <button>Comparar BIN</button>
+        <button>
+            Comparar BIN
+        </button>
 
         <h3>ANÁLISIS</h3>
 
-        <button>Memory Map</button>
+        <button>
+            Memory Map
+        </button>
 
-        <button>Counters</button>
+        <button>
+            Counters
+        </button>
 
-        <button>Checksums</button>
+        <button>
+            Checksums
+        </button>
 
         <h3>IA</h3>
 
-        <button>DNA BIN</button>
+        <button>
+            DNA BIN
+        </button>
 
-        <button>AI Discovery</button>
+        <button>
+            AI Discovery
+        </button>
 
         <h3>SIMULACIÓN</h3>
 
-        <button>Digital Twin</button>
+        <button>
+            Digital Twin
+        </button>
 
         <h3>GENERACIÓN</h3>
 
-        <button>Generar BIN</button>
+        <button>
+            Generar BIN
+        </button>
 
     </aside>
 
@@ -58,30 +89,137 @@
             accept=".bin,.eep,.hex"
             hidden>
 
-        <div class="info">
+        <div class="top-actions">
 
-            <p>
-                Archivo:
-                <span id="fileName">Ninguno</span>
-            </p>
+            <button class="action-btn">
+                ABRIR BIN
+            </button>
 
-            <p>
-                Tamaño:
-                <span id="fileSize">0</span>
-                bytes
-            </p>
+            <button class="action-btn green">
+                ANALIZAR BIN
+            </button>
+
+            <button class="action-btn">
+                MEMORY MAP
+            </button>
+
+            <button class="action-btn">
+                COUNTERS
+            </button>
+
+            <button class="action-btn">
+                CHECKSUMS
+            </button>
+
+            <button class="action-btn">
+                DNA BIN
+            </button>
+
+        </div>
+
+        <div class="info-cards">
+
+            <div class="card">
+
+                <h3>ARCHIVO</h3>
+
+                <p>
+                    Archivo:
+                    <span id="fileName">
+                        Ninguno
+                    </span>
+                </p>
+
+                <p>
+                    Tamaño:
+                    <span id="fileSize">
+                        0
+                    </span>
+                    bytes
+                </p>
+
+            </div>
+
+            <div class="card">
+
+                <h3>EEPROM</h3>
+
+                <p>
+                    Sin detectar
+                </p>
+
+            </div>
+
+            <div class="card">
+
+                <h3>DNA SCORE</h3>
+
+                <p>
+                    0%
+                </p>
+
+            </div>
+
+            <div class="card">
+
+                <h3>ESTADO</h3>
+
+                <p>
+                    Esperando BIN
+                </p>
+
+            </div>
 
         </div>
 
         <div id="hexViewer"></div>
+
+        <div class="bottom-panels">
+
+            <div class="panel">
+
+                <h3>MEMORY MAP</h3>
+
+            </div>
+
+            <div class="panel">
+
+                <h3>COUNTER HUNTER</h3>
+
+            </div>
+
+            <div class="panel">
+
+                <h3>CHECKSUM HUNTER</h3>
+
+            </div>
+
+            <div class="panel">
+
+                <h3>DNA BIN</h3>
+
+            </div>
+
+        </div>
+
+        <div class="log-panel">
+
+            <h3>
+                ANALYSIS LOG
+            </h3>
+
+        </div>
 
     </main>
 
 </div>
 
 <script src="bin-object.js"></script>
+
 <script src="bin-core.js"></script>
+
 <script src="app.js"></script>
 
 </body>
+
 </html>
