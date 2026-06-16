@@ -2,11 +2,53 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Calculadora BIN AI PRO</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BIN HUNTER AI PRO</title>
+
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-<h1>CALCULADORA BIN AI PRO</h1>
+<div class="container">
+
+    <h1>BIN HUNTER AI PRO</h1>
+
+    <button id="openBtn">
+        ABRIR BIN
+    </button>
+
+    <input
+        type="file"
+        id="fileInput"
+        accept=".bin,.eep,.hex"
+        hidden>
+
+    <div class="info">
+
+        <p>
+            Archivo:
+            <span id="fileName">
+                Ninguno
+            </span>
+        </p>
+
+        <p>
+            Tamaño:
+            <span id="fileSize">
+                0
+            </span>
+            bytes
+        </p>
+
+    </div>
+
+    <div id="hexViewer"></div>
+
+</div>
+
+<script src="js/bin-object.js"></script>
+<script src="js/bin-core.js"></script>
+<script src="js/app.js"></script>
 
 </body>
 </html>
