@@ -192,7 +192,7 @@ body{
 }
 .hex-container{
     width:45%;
-    min-width:800px;  /* 600 */
+    min-width:1000px;  /* 600 */
 }
 
 .hex-toolbar{
@@ -255,7 +255,7 @@ body{
 .counter-panel{
     position:absolute;
     top:365px;
-    left:1250px;
+    left:1125px;
     width:420px;
     min-height:180px;
 }
