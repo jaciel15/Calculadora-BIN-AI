@@ -254,8 +254,8 @@ body{
 }
 .counter-panel{
     position:absolute;
-    top:445px;
-    right:20px;
-    width:32%;
+    top:250px;
+    left:760px;
+    width:420px;
     min-height:180px;
 }
