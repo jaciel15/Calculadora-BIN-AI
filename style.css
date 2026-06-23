@@ -191,7 +191,7 @@ body{
     color:#FF5252;
 }
 .hex-container{
-    width:60%;
+    width:48%;
     min-width:600px;
 }
 
@@ -255,7 +255,7 @@ body{
 .counter-panel{
     position:absolute;
     top:365px;
-    left:1350px;
+    left:1000px;
     width:420px;
     min-height:180px;
 }
