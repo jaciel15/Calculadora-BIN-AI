@@ -262,3 +262,26 @@ body{
 .full-width{
     grid-column: 1 / -1;
 }
+.counter-table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+.counter-table th{
+    padding:10px 15px;
+    text-align:left;
+    color:#5FB8B8;
+    border-bottom:1px solid #4A4A4A;
+    white-space:nowrap;
+}
+
+.counter-table td{
+    padding:8px 15px;
+    text-align:left;
+    white-space:nowrap;
+}
+
+.counter-table th,
+.counter-table td{
+    min-width:90px;
+}
