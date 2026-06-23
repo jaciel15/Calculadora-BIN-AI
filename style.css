@@ -224,3 +224,6 @@ body{
     padding:4px 10px;
     cursor:pointer;
 }
+.memory-panel{
+    min-height:160px;
+}
