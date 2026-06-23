@@ -102,7 +102,7 @@ body{
     background:#111;
     padding:10px;
     height:280px;
-    width:100%;
+    width:90%;
     overflow:auto;
     white-space:pre;
     font-family:Consolas,monospace;
@@ -190,7 +190,7 @@ body{
     color:#FF5252;
 }
 .hex-container{
-    width:50%;
+    width:40%;
 }
 
 .hex-toolbar{
