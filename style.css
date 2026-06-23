@@ -252,12 +252,12 @@ body{
     grid-column:2;
     grid-row:2;
 }
-.counter-panel{
+.counter-panel{       /* AQUI ANCHO LARGO Y ALTO DEL COUTER_PANEL */
     position:absolute;
     top:363px;
     left:1175px;
     width:1083px;
-    min-height:280px;
+    min-height:300px;
 }
 .full-width{
     grid-column: 1 / -1;
