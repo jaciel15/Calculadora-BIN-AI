@@ -110,7 +110,8 @@ body{
 
 .bottom-panels{
     display:grid;
-    grid-template-columns:1.5fr 1fr 1fr;
+    grid-template-columns:2fr 1.3fr 1.3fr;
+    grid-auto-rows:minmax(140px,auto);
     gap:10px;
     margin-top:10px;
 }
@@ -226,4 +227,28 @@ body{
 }
 .memory-panel{
     min-height:160px;
+}
+.memory-panel{
+    grid-column:1;
+    grid-row:1;
+}
+
+.counter-panel{
+    grid-column:2;
+    grid-row:1;
+}
+
+.checksum-panel{
+    grid-column:3;
+    grid-row:1;
+}
+
+.dna-panel{
+    grid-column:1;
+    grid-row:2;
+}
+
+.discovery-panel{
+    grid-column:2;
+    grid-row:2;
 }
