@@ -198,7 +198,7 @@ body{
 }
 .hex-container{
     width:45%;
-    min-width:750px;  /* 600 */
+    min-width:850px;  /* 600 */
 }
 
 .hex-toolbar{
@@ -263,7 +263,7 @@ body{
     top:363px;
     left:1175px;
     width:1083px;
-    min-height:350px;
+    min-height:380px;
 }
 .full-width{
     grid-column: 1 / -1;
