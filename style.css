@@ -252,3 +252,10 @@ body{
     grid-column:2;
     grid-row:2;
 }
+.counter-panel{
+    position:absolute;
+    top:445px;
+    right:20px;
+    width:32%;
+    min-height:180px;
+}
