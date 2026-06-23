@@ -319,3 +319,25 @@ body{
     color:#00C853;
     font-weight:bold;
 }
+/* TABLAS MEMORY MAP Y CHECKSUM */
+
+.mini-table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:18px;
+}
+
+.mini-table th{
+    padding:10px 15px;
+    text-align:left;
+    color:#5FB8B8;
+    border-bottom:1px solid #4A4A4A;
+    font-size:18px;
+    white-space:nowrap;
+}
+
+.mini-table td{
+    padding:8px 15px;
+    font-size:18px;
+    white-space:nowrap;
+}
