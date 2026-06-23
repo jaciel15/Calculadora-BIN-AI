@@ -263,7 +263,7 @@ body{
     top:363px;
     left:1175px;
     width:1083px;
-    min-height:300px;
+    min-height:350px;
 }
 .full-width{
     grid-column: 1 / -1;
