@@ -170,3 +170,22 @@ body{
 }
 
 /* HASTA AQUÍ */
+.purple{
+    border:1px solid #B388FF;
+    color:#B388FF;
+}
+
+.blue{
+    border:1px solid #00B0FF;
+    color:#00B0FF;
+}
+
+.yellow{
+    border:1px solid #FFD54F;
+    color:#FFD54F;
+}
+
+.red{
+    border:1px solid #FF5252;
+    color:#FF5252;
+}
