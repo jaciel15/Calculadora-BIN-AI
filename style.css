@@ -411,7 +411,7 @@ body{
 /* AI DISCOVERY */
 .discovery-panel{
     position:absolute;
-    top:900px;
+    top:1000px;
     left:1050px;
 
     width:350px;
