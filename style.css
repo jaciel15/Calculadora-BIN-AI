@@ -722,3 +722,38 @@ body{
     flex-wrap:wrap;
 
 }
+/* BOTÓN GENERAR BIN */
+
+.generate-bin-btn{
+
+    width:100%;
+
+    margin-top:18px;
+
+    padding:16px 0;
+
+    background:#1A1A1A;
+
+    border:2px solid #FFC107;
+
+    color:#FFC107;
+
+    font-size:30px;
+
+    font-weight:bold;
+
+    letter-spacing:1px;
+
+    cursor:pointer;
+
+    border-radius:6px;
+
+    transition:.2s;
+
+}
+
+.generate-bin-btn:hover{
+
+    background:#2A2A2A;
+
+}
