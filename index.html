@@ -527,6 +527,10 @@
 <p>0</p>
 
 </div> 
+
+
+
+           
 <div class="panel editor-panel">
 
     <h3>EDITOR DE VALORES</h3>
@@ -537,17 +541,30 @@
 
         <label>TIPO DE DATO:</label>
 
-        <select>
+        <select id="dataType">
             <option>KILOMETRAJE (KM)</option>
+            <option>HORAS MOTOR</option>
+            <option>HORAS BCK</option>
+            <option>ARRANQUES</option>
+            <option>VELOCIDAD MAX</option>
+            <option>RPM MAX</option>
+            <option>VIN</option>
+            <option>SERIAL</option>
         </select>
 
         <label>VALOR ACTUAL:</label>
 
-        <input type="text" value="25,340 KM">
+        <input
+            type="text"
+            id="currentValue"
+            value="25,340 KM">
 
         <label>NUEVO VALOR:</label>
 
-        <input type="text" value="125,000 KM">
+        <input
+            type="text"
+            id="newValue"
+            value="125,000 KM">
 
     </div>
 
@@ -557,17 +574,23 @@
 
         <label>DIRECCIÓN:</label>
 
-        <input type="text" value="0048 - 004B">
+        <input
+            type="text"
+            id="address"
+            value="0048 - 004B">
 
         <label>TAMAÑO:</label>
 
-        <select>
+        <select id="dataSize">
             <option>4 BYTES</option>
+            <option>2 BYTES</option>
+            <option>1 BYTE</option>
+            <option>8 BYTES</option>
         </select>
 
         <label>MODO:</label>
 
-        <select>
+        <select id="editMode">
             <option>AUTOMÁTICO</option>
             <option>MANUAL</option>
         </select>
