@@ -620,3 +620,30 @@ body{
     background:#2A2A2A;
 
 }
+/* VALOR ACTUAL */
+
+.current-value{
+
+    color:#29B6F6 !important;
+
+    font-weight:bold;
+
+    font-size:24px;
+
+    text-align:center;
+
+}
+
+/* NUEVO VALOR */
+
+.new-value{
+
+    color:#66BB6A !important;
+
+    font-weight:bold;
+
+    font-size:24px;
+
+    text-align:center;
+
+}
