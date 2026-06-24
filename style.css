@@ -347,9 +347,9 @@ body{
 
 .checksum-panel{
     position:absolute;
-    top:750px;
+    top:900px;
     left:1175px;
-    width:1005px;
+    width:800px;
     min-height:380px;
 }
 
