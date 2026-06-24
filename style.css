@@ -757,3 +757,44 @@ body{
     background:#2A2A2A;
 
 }
+/* ========================= */
+/* ANALYSIS LOG */
+/* ========================= */
+
+.analysis-table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+    font-size:14px;
+
+}
+
+.analysis-table th{
+
+    color:#5FB8B8;
+
+    text-align:left;
+
+    padding:8px 10px;
+
+    border-bottom:1px solid #4A4A4A;
+
+}
+
+.analysis-table td{
+
+    padding:7px 10px;
+
+    border-bottom:1px solid #333;
+
+    color:#EAEAEA;
+
+}
+
+.analysis-table tr:hover{
+
+    background:#2A2A2A;
+
+}
