@@ -391,7 +391,7 @@ body{
 /* MEMORY MAP */
 .memory-panel{
     position:absolute;
-    top:1300px;
+    top:1100px;
     left:270px;
 
     width:700px;
@@ -411,7 +411,7 @@ body{
 /* AI DISCOVERY */
 .discovery-panel{
     position:absolute;
-    top:1300px;
+    top:1500px;
     left:1100px;
 
     width:350px;
