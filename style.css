@@ -436,3 +436,12 @@ body{
     margin:20px 0;
     color:#B388FF;
 }
+.dna-panel p{
+    margin:8px 0;
+    font-size:15px;
+    color:#EAEAEA;
+}
+
+.dna-panel strong{
+    color:#5FB8B8;
+}
