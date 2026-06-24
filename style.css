@@ -391,8 +391,8 @@ body{
 /* MEMORY MAP */
 .memory-panel{
     position:absolute;
-    top:900px;
-    left:300px;
+    top:910px;
+    left:290px;
 
     width:500px;
     min-height:400px;
