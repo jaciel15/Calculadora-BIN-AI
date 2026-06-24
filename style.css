@@ -647,3 +647,20 @@ body{
     text-align:center;
 
 }
+/* ========================= */
+/* RESUMEN DE EDICIÓN */
+/* ========================= */
+
+.resumen-panel{
+
+    position:absolute;
+
+    top:970px;
+
+    left:170px;
+
+    width:720px;
+
+    min-height:220px;
+
+}
