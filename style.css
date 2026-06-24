@@ -388,3 +388,32 @@ body{
     color:#FF5252;
     font-weight:bold;
 }
+/* MEMORY MAP */
+.memory-panel{
+    position:absolute;
+    top:900px;
+    left:160px;
+
+    width:500px;
+    min-height:180px;
+}
+
+/* DNA BIN */
+.dna-panel{
+    position:absolute;
+    top:900px;
+    left:680px;
+
+    width:350px;
+    min-height:180px;
+}
+
+/* AI DISCOVERY */
+.discovery-panel{
+    position:absolute;
+    top:900px;
+    left:1050px;
+
+    width:350px;
+    min-height:180px;
+}
