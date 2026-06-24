@@ -493,3 +493,57 @@ body{
     width:950px;
     min-height:300px;
 }
+/* ========================= */
+/* EDITOR DE VALORES */
+/* ========================= */
+
+.editor-row{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:15px;
+
+    margin-top:15px;
+
+    flex-wrap:wrap;
+
+}
+
+.editor-row label{
+
+    color:#EAEAEA;
+
+    font-size:15px;
+
+    font-weight:bold;
+
+}
+
+.editor-row select,
+.editor-row input{
+
+    background:#1A1A1A;
+
+    color:#EAEAEA;
+
+    border:1px solid #4A4A4A;
+
+    padding:8px 10px;
+
+    font-size:15px;
+
+}
+
+.editor-row input{
+
+    width:150px;
+
+}
+
+.editor-row select{
+
+    width:170px;
+
+}
