@@ -445,3 +445,10 @@ body{
 .dna-panel strong{
     color:#5FB8B8;
 }
+.dna-score-value{
+    font-size:32px;
+    font-weight:bold;
+    color:#B388FF;
+    text-align:center;
+    margin-top:8px;
+}
