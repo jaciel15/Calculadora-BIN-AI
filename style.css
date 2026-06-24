@@ -391,7 +391,7 @@ body{
 /* MEMORY MAP */
 .memory-panel{
     position:absolute;
-    top:1000px;
+    top:695px;
     left:270px;
 
     width:500px;
@@ -402,7 +402,7 @@ body{
 .dna-panel{
     position:absolute;
     top:1300px;
-    left:800px;
+    left:950px;
 
     width:350px;
     min-height:180px;
