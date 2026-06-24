@@ -417,3 +417,14 @@ body{
     width:350px;
     min-height:180px;
 }
+/* ANALYSIS LOG */
+
+.analysis-panel{
+    position:absolute;
+
+    top:1120px;
+    left:160px;
+
+    width:1240px;
+    min-height:220px;
+}
