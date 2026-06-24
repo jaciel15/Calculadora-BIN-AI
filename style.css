@@ -391,7 +391,7 @@ body{
 /* MEMORY MAP */
 .memory-panel{
     position:absolute;
-    top:1100px;
+    top:1130px;
     left:270px;
 
     width:700px;
@@ -401,11 +401,11 @@ body{
 /* DNA BIN */
 .dna-panel{
     position:absolute;
-    top:1300px;
+    top:1130px;
     left:950px;
 
-    width:350px;
-    min-height:180px;
+    width:700px;
+    min-height:250px;
 }
 
 /* AI DISCOVERY */
