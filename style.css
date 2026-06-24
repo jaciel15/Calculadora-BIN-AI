@@ -422,9 +422,9 @@ body{
 .analysis-panel{
     position:absolute;
 
-    top:1400px;
-    left:1630px;
+    top:1410px;
+    left:1590px;
 
     width:700px;
-    min-height:250px;
+    min-height:300px;
 }
