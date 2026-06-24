@@ -391,31 +391,31 @@ body{
 /* MEMORY MAP */
 .memory-panel{
     position:absolute;
-    top:1130px;
+    top:1140px;
     left:270px;
 
-    width:700px;
+    width:550px;
     min-height:250px;
 }
 
 /* DNA BIN */
 .dna-panel{
     position:absolute;
-    top:1130px;
+    top:1140px;
     left:950px;
 
-    width:700px;
+    width:550px;
     min-height:250px;
 }
 
 /* AI DISCOVERY */
 .discovery-panel{
     position:absolute;
-    top:1500px;
-    left:1100px;
+    top:1140px;
+    left:960px;
 
-    width:350px;
-    min-height:180px;
+    width:550px;
+    min-height:250px;
 }
 /* ANALYSIS LOG */
 
