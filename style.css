@@ -346,8 +346,11 @@ body{
 /* ========================= */
 
 .checksum-panel{
-    min-height:260px;
-    min-width:450px;
+    position:absolute;
+    top:500px;
+    left:700px;
+    width:1083px;
+    min-height:380px;
 }
 
 .checksum-table{
