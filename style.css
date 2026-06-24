@@ -347,7 +347,7 @@ body{
 
 .checksum-panel{
     position:absolute;
-    top:740px;
+    top:750px;
     left:1175px;
     width:1083px;
     min-height:300px;
@@ -391,11 +391,11 @@ body{
 /* MEMORY MAP */
 .memory-panel{
     position:absolute;
-    top:500px;
-    left:500px;
+    top:900px;
+    left:300px;
 
     width:500px;
-    min-height:180px;
+    min-height:400px;
 }
 
 /* DNA BIN */
