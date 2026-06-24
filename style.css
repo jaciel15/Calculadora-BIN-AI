@@ -664,3 +664,73 @@ body{
     min-height:350px;
 
 }
+/* ========================= */
+/* RESUMEN DE EDICIÓN */
+/* ========================= */
+
+.resumen-panel{
+
+    position:absolute;
+
+    top:970px;
+    left:170px;
+
+    width:720px;
+
+    min-height:220px;
+
+}
+
+.resumen-panel p{
+
+    margin:10px 0;
+
+    color:#EAEAEA;
+
+    font-size:15px;
+
+}
+
+.resumen-panel strong{
+
+    color:#5FB8B8;
+
+}
+
+.resume-value{
+
+    color:#66BB6A;
+
+    font-weight:bold;
+
+    font-size:20px;
+
+}
+
+.resume-ok{
+
+    color:#00C853;
+
+    font-weight:bold;
+
+}
+
+.resume-info{
+
+    color:#29B6F6;
+
+    font-weight:bold;
+
+}
+
+.resume-buttons{
+
+    display:flex;
+
+    gap:12px;
+
+    margin-top:20px;
+
+    flex-wrap:wrap;
+
+}
