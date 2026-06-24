@@ -463,3 +463,16 @@ body{
 .discovery-panel strong{
     color:#5FB8B8;
 }
+/* AI DISCOVERY */
+
+.ai-algorithm{
+    color:#B388FF;
+    font-size:18px;
+    font-weight:bold;
+}
+
+.ai-confidence{
+    color:#00C853;
+    font-size:18px;
+    font-weight:bold;
+}
