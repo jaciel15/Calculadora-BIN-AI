@@ -391,10 +391,10 @@ body{
 /* MEMORY MAP */
 .memory-panel{
     position:absolute;
-    top:695px;
+    top:1300px;
     left:270px;
 
-    width:500px;
+    width:700px;
     min-height:250px;
 }
 
