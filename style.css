@@ -347,6 +347,7 @@ body{
 
 .checksum-panel{
     min-height:260px;
+    min-width:450px;
 }
 
 .checksum-table{
