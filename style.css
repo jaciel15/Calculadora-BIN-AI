@@ -476,3 +476,19 @@ body{
     font-size:18px;
     font-weight:bold;
 }
+/* ========================= */
+/* EDITOR DE VALORES */
+/* ========================= */
+
+.editor-panel{
+
+    position:absolute;
+
+    top:900px;
+    left:160px;
+
+    width:900px;
+
+    min-height:180px;
+
+}
