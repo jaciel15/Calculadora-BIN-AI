@@ -350,7 +350,7 @@ body{
     top:750px;
     left:1175px;
     width:1083px;
-    min-height:350px;
+    min-height:355px;
 }
 
 .checksum-table{
@@ -391,8 +391,8 @@ body{
 /* MEMORY MAP */
 .memory-panel{
     position:absolute;
-    top:1300px;
-    left:290px;
+    top:1000px;
+    left:270px;
 
     width:500px;
     min-height:250px;
@@ -402,7 +402,7 @@ body{
 .dna-panel{
     position:absolute;
     top:1300px;
-    left:680px;
+    left:800px;
 
     width:350px;
     min-height:180px;
@@ -412,7 +412,7 @@ body{
 .discovery-panel{
     position:absolute;
     top:1300px;
-    left:600px;
+    left:1100px;
 
     width:350px;
     min-height:180px;
@@ -422,8 +422,8 @@ body{
 .analysis-panel{
     position:absolute;
 
-    top:1300px;
-    left:160px;
+    top:1500px;
+    left:800px;
 
     width:700px;
     min-height:220px;
