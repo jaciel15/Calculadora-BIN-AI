@@ -452,3 +452,14 @@ body{
     text-align:center;
     margin-top:8px;
 }
+/* AI DISCOVERY */
+
+.discovery-panel p{
+    margin:8px 0;
+    font-size:15px;
+    color:#EAEAEA;
+}
+
+.discovery-panel strong{
+    color:#5FB8B8;
+}
