@@ -477,7 +477,7 @@ body{
     top:1570px;
     left:270px;
 
-    width:900px;
+    width:950px;
 
     min-height:300px;
 
@@ -487,9 +487,9 @@ body{
 .analysis-panel{
     position:absolute;
 
-    top:1570px;
-    left:1300px;
+    top:1555px;
+    left:1250px;
 
-    width:900px;
+    width:950px;
     min-height:300px;
 }
