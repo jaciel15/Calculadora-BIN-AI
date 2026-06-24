@@ -405,7 +405,7 @@ body{
     left:1010px;
 
     width:560px;
-    min-height:380px;
+    min-height:390px;
 }
 
 /* AI DISCOVERY */
@@ -415,14 +415,14 @@ body{
     left:1630px;
 
     width:630px;
-    min-height:380px;
+    min-height:390px;
 }
 /* ANALYSIS LOG */
 
 .analysis-panel{
     position:absolute;
 
-    top:1500px;
+    top:1600px;
     left:1590px;
 
     width:700px;
