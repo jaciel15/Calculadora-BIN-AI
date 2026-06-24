@@ -402,7 +402,7 @@ body{
 .dna-panel{
     position:absolute;
     top:1140px;
-    left:950px;
+    left:940px;
 
     width:630px;
     min-height:250px;
@@ -412,7 +412,7 @@ body{
 .discovery-panel{
     position:absolute;
     top:1140px;
-    left:1650px;
+    left:1630px;
 
     width:630px;
     min-height:250px;
