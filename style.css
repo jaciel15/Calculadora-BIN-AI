@@ -428,3 +428,11 @@ body{
     width:700px;
     min-height:300px;
 }
+/* DNA BIN */
+
+.dna-center{
+    font-size:72px;
+    text-align:center;
+    margin:20px 0;
+    color:#B388FF;
+}
