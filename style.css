@@ -341,3 +341,46 @@ body{
     font-size:18px;
     white-space:nowrap;
 }
+/* ========================= */
+/* CHECKSUM HUNTER */
+/* ========================= */
+
+.checksum-panel{
+    min-height:260px;
+}
+
+.checksum-table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:15px;
+}
+
+.checksum-table th{
+    padding:10px;
+    text-align:left;
+    color:#FFFFFF;
+    border-bottom:1px solid #4A4A4A;
+    white-space:nowrap;
+    font-size:14px;
+}
+
+.checksum-table td{
+    padding:8px 10px;
+    border-bottom:1px solid #333;
+    white-space:nowrap;
+}
+
+.checksum-table td:first-child{
+    color:#37FF55;
+    font-weight:600;
+}
+
+.checksum-table .ok{
+    color:#37FF55;
+    font-weight:bold;
+}
+
+.checksum-table .error{
+    color:#FF5252;
+    font-weight:bold;
+}
