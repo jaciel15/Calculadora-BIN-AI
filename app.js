@@ -30,6 +30,7 @@ async function loadBIN(event){
         file,
         bytes
     );
+    console.log("binCore =", binCore);
     binCore.load(currentBIN);
     document.getElementById(
         "fileName"

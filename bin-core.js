@@ -1,18 +1,16 @@
-let currentBIN = null;
+class BINCore {
 
-function createBINObject(
-    file,
-    bytes
-){
+    constructor() {
+        this.currentBIN = null;
+    }
 
-    const bin = new BINObject();
+    load(binObject) {
+        this.currentBIN = binObject;
 
-    bin.fileName = file.name;
-
-    bin.fileSize = bytes.length;
-
-    bin.rawData = bytes;
-
-    return bin;
+        console.log("BIN Core iniciado");
+        console.log(this.currentBIN);
+    }
 
 }
+
+const binCore = new BINCore();
