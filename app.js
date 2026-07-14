@@ -30,7 +30,7 @@ async function loadBIN(event){
         file,
         bytes
     );
-
+    binCore.load(currentBIN);
     document.getElementById(
         "fileName"
     ).textContent =
@@ -44,7 +44,36 @@ async function loadBIN(event){
     showHEX(bytes);
 
 }
+function createBINObject(file, bytes){
 
+    return {
+
+        // Información del archivo
+        fileName: file.name,
+
+        extension: file.name.includes(".")
+            ? file.name.split(".").pop().toUpperCase()
+            : "",
+
+        fileSize: file.size,
+
+        created: new Date(),
+
+        // Información de la memoria
+        bytes: bytes,
+
+        totalBytes: bytes.length,
+
+        // Estado
+        loaded: true,
+
+        version: "1.0",
+
+        status: "LOADED"
+
+    };
+
+}
 function showHEX(bytes){
 
     let output = "";
