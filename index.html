@@ -2,715 +2,350 @@
 <html lang="es">
 
 <head>
-
-<meta charset="UTF-8">
-
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>VELOCÍMETROS CDMX</title>
-
-<link rel="stylesheet" href="style.css">
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VELOCÍMETROS CDMX</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
 <header class="top-header">
-
     <h1>VELOCÍMETROS CDMX</h1>
-
-    <span>
-        Ingeniería EEPROM • BIN Analysis
-    </span>
-
+    <span>Ingeniería EEPROM • BIN Analysis • Plataforma Inteligente</span>
 </header>
 
+<button id="menuBtn" class="action-btn menu-btn">MENÚ</button>
 <div class="main-layout">
 
-   <aside class="sidebar">
+    <aside class="sidebar">
+        <h3>ARCHIVO</h3>
+        <button id="openBtn">Abrir BIN</button>
+        <button id="saveBinBtn">Guardar BIN</button>
+        <button id="saveProjectBtn">Guardar Proyecto</button>
+        <button id="exportReportBtn">Exportar Reporte</button>
+        <button id="compareBinBtn">Comparar BIN</button>
+        <button id="closeProjectBtn">Cerrar Proyecto</button>
 
-    <h3>ARCHIVO</h3>
+        <h3>ANÁLISIS</h3>
+        <button id="memoryMapBtn">Memory Map</button>
+        <button id="countersBtn">Counters</button>
+        <button id="checksumBtn">Checksum Hunter</button>
+        <button id="vinHunterBtn">VIN Hunter</button>
+        <button id="serialHunterBtn">Serial Hunter</button>
+        <button id="hoursHunterBtn">Hours Hunter</button>
+        <button id="universalCounterBtn">Universal Counter</button>
 
-    <button id="openBtn">Abrir BIN</button>
-    <button>Guardar BIN</button>
-    <button>Guardar Proyecto</button>
-    <button>Exportar Reporte</button>
-    <button>Comparar BIN</button>
-    <button>Cerrar Proyecto</button>
+        <h3>INTELIGENCIA ARTIFICIAL</h3>
+        <button id="dnaBtn">DNA BIN</button>
+        <button id="discoveryBtn">Algorithm Discovery</button>
+        <button id="hypothesisBtn">Hypothesis Factory</button>
+        <button id="correlationBtn">Correlation Engine</button>
+        <button id="predictorBtn">Predictor Engine</button>
+        <button id="truthBtn">Truth Engine</button>
+        <button id="reasoningBtn">Reasoning Engine</button>
 
-    <h3>ANÁLISIS</h3>
+        <h3>SIMULACIÓN</h3>
+        <button id="digitalTwinBtn">Digital Twin</button>
+        <button id="virtualEepromBtn">Virtual EEPROM</button>
+        <button id="binEvolutionBtn">BIN Evolution Simulator</button>
+        <button id="stressTestBtn">Stress Test Engine</button>
 
-    <button>Memory Map</button>
-    <button>Counters</button>
-    <button>Checksum Hunter</button>
-    <button>VIN Hunter</button>
-    <button>Serial Hunter</button>
-    <button>Hours Hunter</button>
-    <button>Universal Counter</button>
+        <h3>GENERACIÓN</h3>
+        <button id="autoKmBtn">Auto KM Generator</button>
+        <button id="autoChecksumBtn">Auto Checksum</button>
+        <button id="binGenBtn">BIN Generator</button>
+        <button id="upaBtn">UPA Script Generator</button>
 
-    <h3>INTELIGENCIA ARTIFICIAL</h3>
+        <h3>APRENDIZAJE</h3>
+        <button id="knowledgeBtn">Knowledge Graph</button>
+        <button id="patternBtn">Master Pattern Library</button>
+        <button id="selfLearnBtn">Self Learning DB</button>
+        <button id="algoLibraryBtn">Algoritmos Guardados</button>
 
-    <button>DNA BIN</button>
-    <button>Algorithm Discovery</button>
-    <button>Hypothesis Factory</button>
-    <button>Correlation Engine</button>
-    <button>Predictor Engine</button>
-    <button>Truth Engine</button>
-    <button>Reasoning Engine</button>
-
-    <h3>SIMULACIÓN</h3>
-
-    <button>Digital Twin</button>
-    <button>Virtual EEPROM</button>
-    <button>BIN Evolution Simulator</button>
-    <button>Stress Test Engine</button>
-
-    <h3>GENERACIÓN</h3>
-
-    <button>Auto KM Generator</button>
-    <button>Auto Checksum</button>
-    <button>BIN Generator</button>
-    <button>UPA Script Generator</button>
-
-    <h3>APRENDIZAJE</h3>
-
-    <button>Knowledge Graph</button>
-    <button>Master Pattern Library</button>
-    <button>Self Learning DB</button>
-
-</aside>
+        <h3>OMEGA</h3>
+        <button id="omegaBtn">BIN Hunter Omega</button>
+        <button id="forensicBtn">Forensic Mode</button>
+        <button id="unknownBtn">Unknown Decoder</button>
+        <button id="impossibleBtn">Impossible Case</button>
+        <button id="autopilotBtn">RE Autopilot</button>
+    </aside>
 
     <main class="content">
 
-        <input
-            type="file"
-            id="fileInput"
-            accept=".bin,.eep,.hex"
-            hidden>
+        <input type="file" id="fileInput" accept=".bin,.eep,.hex" hidden>
+        <input type="file" id="compareInput" accept=".bin,.eep,.hex" multiple hidden>
 
         <div class="top-actions">
-
-            <button class="action-btn">
-                ABRIR BIN
-            </button>
-
-            <button class="action-btn green">
-                ANALIZAR BIN
-            </button>
-
-            <button class="action-btn">
-                MEMORY MAP
-            </button>
-
-            <button class="action-btn">
-                COUNTERS
-            </button>
-
-            <button class="action-btn">
-                CHECKSUMS
-            </button>
-
-           <button class="action-btn purple">
-    DNA BIN
-</button>
-
-<button class="action-btn purple">
-    AI DISCOVERY
-</button>
-
-<button class="action-btn blue">
-    DIGITAL TWIN
-</button>
-
-<button class="action-btn yellow">
-    GENERAR BIN
-</button>
-
-<button class="action-btn green">
-    VALIDAR
-</button>
-
-<button class="action-btn red">
-    REPORTE
-</button>
-
-</div>
-
-    <div class="info-cards">
-
-    <div class="card">
-        <h3>ARCHIVO</h3>
-
-        <p>Archivo:
-            <span id="fileName">Ninguno</span>
-        </p>
-
-        <p>Tamaño:
-            <span id="fileSize">0</span>
-            bytes
-        </p>
-    </div>
-
-    <div class="card">
-        <h3>EEPROM</h3>
-
-        <p>Sin detectar</p>
-
-        <p>Capacidad:</p>
-
-        <p>0 Bytes</p>
-    </div>
-
-    <div class="card dna-card">
-
-    <h3>DNA SCORE</h3>
-
-    <div class="dna-score">
-        0%
-    </div>
-
-    <p>Sin analizar</p>
-
-</div>
-
-<div class="card">
-
-    <h3>CHECKSUMS</h3>
-
-    <p style="color:#00C853;">
-        ✔ 0 Válidos
-    </p>
-
-    <p style="color:#ff5252;">
-        ✖ 0 Errores
-    </p>
-
-</div>
-
-<div class="card status-card">
-
-    <h3>ESTADO GENERAL</h3>
-
-    <div class="status-circle">
-        LISTO
-    </div>
-
-</div>
-</div>        
-
-
-        <div class="hex-container">
-
-    <div class="hex-toolbar">
-
-        <span class="hex-title">
-            HEX VIEWER
-        </span>
-
-        <select>
-            <option>16-BIT</option>
-            <option>8-BIT</option>
-        </select>
-
-        <select>
-            <option>ANSI</option>
-            <option>ASCII</option>
-        </select>
-
-        <button>🔍</button>
-
-        <button>⚙</button>
-
-    </div>
-
-    <div id="hexViewer"></div>
-
-</div>
-
-       <div class="bottom-panels">
-
-    <!-- COUNTER HUNTER -->
-   <div class="panel counter-panel full-width">
-
-        <h3>COUNTER HUNTER</h3>
-
-       <table class="counter-table">
-
-<tr>
-    <th>NOMBRE</th>
-    <th>VALOR ACTUAL</th>
-    <th>DIRECCIÓN</th>
-    <th>TAMAÑO</th>
-    <th>TIPO</th>
-    <th>CONFIANZA</th>
-    <th>ESTADO</th>
-</tr>
-
-<tr>
-    <td>KILOMETRAJE</td>
-    <td>---</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>0%</td>
-    <td class="ok">VALIDANDO</td>
-</tr>
-
-<tr>
-    <td>KILOMETRAJE BCK</td>
-    <td>---</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>0%</td>
-    <td class="ok">VALIDANDO</td>
-</tr>
-
-<tr>
-    <td>HORAS MOTOR</td>
-    <td>---</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>0%</td>
-    <td class="ok">VALIDANDO</td>
-</tr>
-
-<tr>
-    <td>HORAS BCK</td>
-    <td>---</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>0%</td>
-    <td class="ok">VALIDANDO</td>
-</tr>
-
-<tr>
-    <td>ARRANQUES</td>
-    <td>---</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>0%</td>
-    <td class="ok">VALIDANDO</td>
-</tr>
-
-<tr>
-    <td>MAX RPM</td>
-    <td>---</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>0%</td>
-    <td class="ok">VALIDANDO</td>
-</tr>
-
-<tr>
-    <td>VELOCIDAD MAX</td>
-    <td>---</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>0%</td>
-    <td class="ok">VALIDANDO</td>
-</tr>
-
-</table>
-
-    </div>
-
-    <!-- MEMORY MAP -->
-    <div class="panel memory-panel">
-
-        <h3>MEMORY MAP</h3>
-
-        <table class="mini-table">
-            <tr>
-    <th>REGIÓN</th>
-    <th>INICIO</th>
-    <th>FIN</th>
-    <th>TAMAÑO</th>
-    <th>DESCRIPCIÓN</th>
-    <th>COPIAS</th>
-</tr>
-
-            <tr>
-    <td>R01</td>
-    <td>0000</td>
-    <td>003F</td>
-    <td>0040</td>
-    <td>CONFIGURACIÓN</td>
-    <td>1</td>
-</tr>
-
-           <tr>
-    <td>R02</td>
-    <td>0040</td>
-    <td>007F</td>
-    <td>0040</td>
-    <td>KILOMETRAJE</td>
-    <td>3</td>
-</tr>
-            <tr>
-    <td>R03</td>
-    <td>0080</td>
-    <td>00BF</td>
-    <td>0040</td>
-    <td>KILOMETRAJE BACKUP</td>
-    <td>2</td>
-</tr>
-            <tr>
-    <td>R04</td>
-    <td>00C0</td>
-    <td>00FF</td>
-    <td>0020</td>
-    <td>CHECKSUM AREA</td>
-    <td>1</td>
-</tr>
-            <tr>
-    <td>R05</td>
-    <td>00D0</td>
-    <td>00EF</td>
-    <td>0020</td>
-    <td>VIN VEHÍCULO</td>
-    <td>1</td>
-</tr>
-            <tr>
-    <td>R06</td>
-    <td>00F0</td>
-    <td>010F</td>
-    <td>0020</td>
-    <td>NÚMERO DE SERIE</td>
-    <td>2</td>
-</tr>
-            <tr>
-    <td>R07</td>
-    <td>0110</td>
-    <td>013F</td>
-    <td>0030</td>
-    <td>HORAS MOTOR</td>
-    <td>2</td>
-</tr>
-            <tr>
-    <td>R08</td>
-    <td>0140</td>
-    <td>01FF</td>
-    <td>00C0</td>
-    <td>DATOS DESCONOCIDOS</td>
-    <td>0</td>
-</tr>
-        </table>
-
-    </div>
-
-
-
-            
-<div class="panel checksum-panel">
-
-    <h3>CHECKSUM HUNTER</h3>
-
-    <table class="checksum-table">
-
-       <tr>
-    <th>ALGORITMO</th>
-    <th>INICIO</th>
-    <th>FIN</th>
-    <th>VALOR BIN</th>
-    <th>CALCULADO</th>
-    <th>ESTADO</th>
-    <th>CONFIANZA</th>
-</tr>
-
-<tr>
-    <td>CRC16</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td class="ok">VALIDANDO</td>
-    <td>0%</td>
-</tr>
-
-<tr>
-    <td>CRC32</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td class="ok">VALIDANDO</td>
-    <td>0%</td>
-</tr>
-
-<tr>
-    <td>SUM16</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td class="ok">VALIDANDO</td>
-    <td>0%</td>
-</tr>
-
-<tr>
-    <td>XOR</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td class="ok">VALIDANDO</td>
-    <td>0%</td>
-</tr>
-
-<tr>
-    <td>CRC64</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td>----</td>
-    <td class="ok">VALIDANDO</td>
-    <td>0%</td>
-</tr>
-
-    </table>
-
-</div>
-
-   <div class="panel dna-panel">
-
-    <h3>DNA BIN</h3>
-
-    <div class="dna-center">
-        🧬
-    </div>
-
-    <p><strong>FABRICANTE</strong><br>Sin identificar</p>
-
-<p><strong>FAMILIA</strong><br>-----</p>
-
-<p><strong>VERSIÓN</strong><br>-----</p>
-
-<p><strong>DNA SCORE</strong></p>
-
-<div class="dna-score-value">
-    0%
-</div>
-
-</div>
-<div class="panel discovery-panel">
-
-    <h3>AI DISCOVERY</h3>
-
-    <p><strong>ALGORITMO ENCONTRADO:</strong></p>
-
-<p class="ai-algorithm">
-    Sin analizar
-</p>
-
-<p><strong>TIPO:</strong></p>
-
-<p>-----</p>
-
-<p><strong>REGIÓN:</strong></p>
-
-<p>-----</p>
-
-<p><strong>CONFIANZA:</strong></p>
-
-<p class="ai-confidence">
-    0%
-</p>
-
-<p><strong>PATRONES:</strong></p>
-
-<p>0</p>
-
-</div> 
-
-
-
-           
-<div class="panel editor-panel">
-
-    <h3>EDITOR DE VALORES</h3>
-
-    <!-- FILA 1 -->
-    <div class="editor-row">
-
-        <label>TIPO DE DATO:</label>
-
-        <select id="dataType">
-            <option>KILOMETRAJE (KM)</option>
-            <option>HORAS MOTOR</option>
-            <option>HORAS BCK</option>
-            <option>ARRANQUES</option>
-            <option>VELOCIDAD MAX</option>
-            <option>RPM MAX</option>
-            <option>VIN</option>
-            <option>SERIAL</option>
-        </select>
-
-        <label>VALOR ACTUAL:</label>
-
-        <input type="text" id="currentValue" class="current-value" value="25,340 KM">
-
-        <label>NUEVO VALOR:</label>
-
-        <input type="text" id="newValue" class="new-value" value="125,000 KM">
-
-    </div>
-
-    <!-- FILA 2 -->
-    <div class="editor-row">
-
-        <label>DIRECCIÓN:</label>
-
-        <input type="text" id="address" value="0048 - 004B">
-
-        <label>TAMAÑO:</label>
-
-        <select id="dataSize">
-            <option>4 BYTES</option>
-            <option>2 BYTES</option>
-            <option>1 BYTE</option>
-            <option>8 BYTES</option>
-        </select>
-
-        <label>MODO:</label>
-
-        <select id="editMode">
-            <option>AUTOMÁTICO</option>
-            <option>MANUAL</option>
-        </select>
-
-    </div>
-
-    <!-- FILA 3 -->
-
-    <div class="editor-buttons">
-
-        <button class="btn-blue">SIMULAR</button>
-
-        <button class="btn-green">VALIDAR</button>
-
-        <button class="btn-yellow">APLICAR CAMBIOS</button>
-
-        <button class="btn-red">RESTAURAR</button>
-
-    </div>
-
-</div>
-
-
-
-
-<div class="panel resumen-panel">
-
-    <h3>RESUMEN DE EDICIÓN</h3>
-
-<p><strong>NUEVO VALOR:</strong> <span class="resume-value">125,000 KM</span></p>
-
-<p><strong>COPIAS ENCONTRADAS:</strong> <span class="resume-ok">4</span></p>
-
-<p><strong>COPIAS ACTUALIZADAS:</strong> <span class="resume-ok">4</span></p>
-
-<p><strong>CHECKSUMS AFECTADOS:</strong> <span class="resume-ok">3</span></p>
-
-<p><strong>CHECKSUMS REPARADOS:</strong> <span class="resume-ok">3</span></p>
-
-<p><strong>VALIDACIÓN FINAL:</strong> <span class="resume-ok">99.6%</span></p>
-
-<h2 class="resume-ready">
-    LISTO PARA GENERAR BIN
-</h2>
-
-<button class="generate-bin-btn">
-    GENERAR BIN
-</button>
-
-    </div>
-
-</div>
-           
-
-
-
-           
-<div class="log-panel analysis-panel">
-
-    <h3>ANALYSIS LOG</h3>
-
-    <table class="analysis-table">
-
-        <tr>
-            <th>HORA</th>
-            <th>MÓDULO</th>
-            <th>MENSAJE</th>
-        </tr>
-
-        <tr>
-            <td>12:45:30</td>
-            <td>BIN CORE</td>
-            <td>Archivo cargado correctamente</td>
-        </tr>
-
-        <tr>
-            <td>12:45:31</td>
-            <td>MEMORY MAP</td>
-            <td>38 regiones identificadas</td>
-        </tr>
-
-        <tr>
-            <td>12:45:32</td>
-            <td>COUNTER HUNTER</td>
-            <td>7 posibles contadores encontrados</td>
-        </tr>
-
-        <tr>
-            <td>12:45:33</td>
-            <td>CHECKSUM HUNTER</td>
-            <td>5 checksums válidos, 2 errores</td>
-        </tr>
-
-        <tr>
-            <td>12:45:34</td>
-            <td>DNA BIN</td>
-            <td>Coincidencia 97.8%</td>
-        </tr>
-
-        <tr>
-            <td>12:45:35</td>
-            <td>AI DISCOVERY</td>
-            <td>12 algoritmos encontrados</td>
-        </tr>
-
-        <tr>
-            <td>12:45:36</td>
-            <td>VALIDATION</td>
-            <td>Validación general 99.6%</td>
-        </tr>
-
-        <tr>
-            <td>12:45:37</td>
-            <td>BIN GENERATOR</td>
-            <td>BIN listo para generar</td>
-        </tr>
-
-    </table>
-
-</div>
-
+            <button id="openBtnTop" class="action-btn">ABRIR BIN</button>
+            <button id="analyzeBtnTop" class="action-btn green">ANALIZAR BIN</button>
+            <button id="memoryMapBtnTop" class="action-btn">MEMORY MAP</button>
+            <button id="countersBtnTop" class="action-btn">COUNTERS</button>
+            <button id="checksumBtnTop" class="action-btn">CHECKSUMS</button>
+            <button id="dnaBtnTop" class="action-btn purple">DNA BIN</button>
+            <button id="discoveryBtnTop" class="action-btn purple">AI DISCOVERY</button>
+            <button id="digitalTwinBtnTop" class="action-btn blue">DIGITAL TWIN</button>
+            <button id="binGenBtnTop" class="action-btn yellow">GENERAR BIN</button>
+            <button id="validateBtnTop" class="action-btn green">VALIDAR</button>
+            <button id="reportBtnTop" class="action-btn red">REPORTE</button>
+            <button id="omegaBtnTop" class="action-btn purple">OMEGA</button>
+        </div>
+
+        <div class="known-bar">
+            <label>KM CONOCIDO</label>
+            <input id="knownKm" type="text" placeholder="Ej. 25340">
+            <label>HORAS MOTOR</label>
+            <input id="knownHours" type="text" placeholder="Opcional">
+            <button id="analyzeBtn" class="action-btn green">ANALIZAR</button>
+            <span id="familyCount" class="family-count">Familia: 0 BIN</span>
+        </div>
+
+        <div class="info-cards">
+            <div class="card">
+                <h3>ARCHIVO</h3>
+                <p>Archivo: <span id="fileName">Ninguno</span></p>
+                <p>Tamaño: <span id="fileSize">0</span> bytes</p>
+            </div>
+            <div class="card">
+                <h3>EEPROM</h3>
+                <p id="chipName">Sin detectar</p>
+                <p>Capacidad:</p>
+                <p id="chipSize">0 Bytes</p>
+            </div>
+            <div class="card dna-card">
+                <h3>DNA SCORE</h3>
+                <div id="dnaScoreCard" class="dna-score">0%</div>
+                <p id="dnaStatus">Sin analizar</p>
+            </div>
+            <div class="card">
+                <h3>CHECKSUMS</h3>
+                <p id="checkOk" class="ok-text">✔ 0 Válidos</p>
+                <p id="checkBad" class="err-text">✖ 0 Errores</p>
+            </div>
+            <div class="card status-card">
+                <h3>ESTADO GENERAL</h3>
+                <div id="statusCircle" class="status-circle">LISTO</div>
+            </div>
+        </div>
+
+        <div id="omegaPanel" class="panel omega-panel">
+            <h3>BIN HUNTER OMEGA</h3>
+            <pre id="omegaCard">Carga un BIN. Omega encadena Memory Map → Pattern → Counter → Math → Checksum → DNA → Correlation → Hypothesis → Validation → Truth.</pre>
+            <p id="omegaThink" class="omega-think">Thinking Engine en espera.</p>
+        </div>
+
+        <div class="workspace">
+
+            <div class="hex-container">
+                <div class="hex-toolbar">
+                    <span class="hex-title">HEX VIEWER</span>
+                    <select id="hexMode">
+                        <option>16-BIT</option>
+                        <option>8-BIT</option>
+                    </select>
+                    <select>
+                        <option>ANSI</option>
+                        <option>ASCII</option>
+                    </select>
+                </div>
+                <div id="hexViewer"></div>
+            </div>
+
+            <div id="counterPanel" class="panel">
+                <h3>COUNTER HUNTER</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>NOMBRE</th>
+                            <th>VALOR ACTUAL</th>
+                            <th>DIRECCIÓN</th>
+                            <th>TAMAÑO</th>
+                            <th>TIPO</th>
+                            <th>CONFIANZA</th>
+                            <th>ESTADO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="counterBody"></tbody>
+                </table>
+            </div>
+
+            <div id="memoryPanel" class="panel">
+                <h3>MEMORY MAP</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>REGIÓN</th>
+                            <th>INICIO</th>
+                            <th>FIN</th>
+                            <th>TAMAÑO</th>
+                            <th>DESCRIPCIÓN</th>
+                            <th>COPIAS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="memoryBody"></tbody>
+                </table>
+            </div>
+
+            <div id="dnaPanel" class="panel">
+                <h3>DNA BIN</h3>
+                <p><strong>FABRICANTE</strong><br><span id="dnaMaker">Sin identificar</span></p>
+                <p><strong>FAMILIA</strong><br><span id="dnaFamily">-----</span></p>
+                <p><strong>VERSIÓN</strong><br><span id="dnaVersion">-----</span></p>
+                <p><strong>DNA SCORE</strong></p>
+                <div id="dnaScore" class="dna-score-value">0%</div>
+            </div>
+
+            <div id="discoveryPanel" class="panel">
+                <h3>AI DISCOVERY</h3>
+                <p><strong>ALGORITMO ENCONTRADO</strong></p>
+                <p id="aiAlgorithm" class="ai-algorithm">Sin analizar</p>
+                <p><strong>TIPO:</strong> <span id="aiType">-----</span></p>
+                <p><strong>REGIÓN:</strong> <span id="aiRegion">-----</span></p>
+                <p><strong>CONFIANZA:</strong></p>
+                <p id="aiConfidence" class="ai-confidence">0%</p>
+                <p><strong>PATRONES:</strong> <span id="aiPatterns">0</span></p>
+            </div>
+
+            <div id="checksumPanel" class="panel checksum-wide">
+                <h3>CHECKSUM HUNTER</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ALGORITMO</th>
+                            <th>INICIO</th>
+                            <th>FIN</th>
+                            <th>VALOR BIN</th>
+                            <th>CALCULADO</th>
+                            <th>ESTADO</th>
+                            <th>CONFIANZA</th>
+                        </tr>
+                    </thead>
+                    <tbody id="checksumBody"></tbody>
+                </table>
+            </div>
+
+            <div id="editorPanel" class="panel">
+                <h3>EDITOR DE VALORES</h3>
+                <div class="editor-row">
+                    <label>TIPO DE DATO:</label>
+                    <select id="dataType">
+                        <option>KILOMETRAJE (KM)</option>
+                        <option>HORAS MOTOR</option>
+                        <option>VIN</option>
+                        <option>SERIAL</option>
+                    </select>
+                    <label>VALOR ACTUAL:</label>
+                    <input type="text" id="currentValue" class="current-value" value="">
+                    <label>NUEVO VALOR:</label>
+                    <input type="text" id="newValue" class="new-value" value="">
+                </div>
+                <div class="editor-row">
+                    <label>DIRECCIÓN:</label>
+                    <input type="text" id="address" value="">
+                    <label>TAMAÑO:</label>
+                    <select id="dataSize">
+                        <option>4 BYTES</option>
+                        <option>2 BYTES</option>
+                        <option>3 BYTES</option>
+                        <option>1 BYTE</option>
+                    </select>
+                    <label>MODO:</label>
+                    <select id="editMode">
+                        <option>AUTOMÁTICO</option>
+                        <option>MANUAL</option>
+                    </select>
+                </div>
+                <div class="editor-buttons">
+                    <button id="simBtn" class="btn-blue">SIMULAR</button>
+                    <button id="valBtn" class="btn-green">VALIDAR</button>
+                    <button id="applyBtn" class="btn-yellow">APLICAR CAMBIOS</button>
+                    <button id="restoreBtn" class="btn-red">RESTAURAR</button>
+                </div>
+            </div>
+
+            <div id="resumenPanel" class="panel">
+                <h3>RESUMEN DE EDICIÓN</h3>
+                <p><strong>NUEVO VALOR:</strong> <span id="resumeValue" class="resume-value">---</span></p>
+                <p><strong>COPIAS ENCONTRADAS:</strong> <span id="resumeCopies" class="resume-ok">0</span></p>
+                <p><strong>COPIAS ACTUALIZADAS:</strong> <span id="resumeUpdated" class="resume-ok">0</span></p>
+                <p><strong>CHECKSUMS AFECTADOS:</strong> <span id="resumeChecksums" class="resume-ok">0</span></p>
+                <p><strong>CHECKSUMS REPARADOS:</strong> <span id="resumeRepaired" class="resume-ok">0</span></p>
+                <p><strong>VALIDACIÓN FINAL:</strong> <span id="resumeValid" class="resume-ok">---</span></p>
+                <h2 id="resumeReady" class="resume-ready">ESPERANDO ANÁLISIS</h2>
+                <button id="generateBinBtn" class="generate-bin-btn">GENERAR BIN</button>
+            </div>
+
+            <div id="logPanel" class="panel log-panel">
+                <h3>ANALYSIS LOG</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>HORA</th>
+                            <th>MÓDULO</th>
+                            <th>MENSAJE</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logBody"></tbody>
+                </table>
+            </div>
+
+        </div>
     </main>
-
 </div>
 
+<footer class="status-bar">
+    <span id="footerState">ESTADO: LISTO</span>
+    <span>PROYECTO: VELOCIMETROS CDMX</span>
+    <span id="footerFile">SIN ARCHIVO</span>
+    <span id="footerSize">0 bytes</span>
+    <span id="footerChip">EEPROM</span>
+    <span id="statusText">LISTO</span>
+</footer>
+
+<div id="labModal" class="modal">
+    <div class="modal-card">
+        <div class="modal-head">
+            <h3 id="labTitle">LABORATORIO</h3>
+            <button id="closeLab" class="action-btn">CERRAR</button>
+        </div>
+        <div id="labBody"></div>
+    </div>
+</div>
+
+<div id="algoModal" class="modal">
+    <div class="modal-card">
+        <div class="modal-head">
+            <h3>ALGORITMOS GUARDADOS</h3>
+            <button id="closeAlgo" class="action-btn">CERRAR</button>
+        </div>
+        <p class="modal-help">Memoria del núcleo: nombre, fórmula, cómo se escribe y en qué archivos se vio.</p>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>NOMBRE</th>
+                    <th>FÓRMULA</th>
+                    <th>ESTRUCTURA</th>
+                    <th>CÓMO ESCRIBIR</th>
+                    <th>VISTOS</th>
+                    <th>ÚLTIMO BIN</th>
+                </tr>
+            </thead>
+            <tbody id="algoBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="math-engine.js"></script>
+<script src="checksum-engine.js"></script>
+<script src="knowledge-base.js"></script>
+<script src="hunters.js"></script>
+<script src="dna-discovery.js"></script>
+<script src="editor-upa.js"></script>
 <script src="bin-object.js"></script>
-
+<script src="family-library.js"></script>
+<script src="omega-kernel.js"></script>
 <script src="bin-core.js"></script>
-
 <script src="app.js"></script>
 
 </body>
-
 </html>

@@ -2,13 +2,167 @@ class BINCore {
 
     constructor() {
         this.currentBIN = null;
+        this.log = [];
     }
 
     load(binObject) {
         this.currentBIN = binObject;
+        this.log = [];
+        this.addLog("BIN CORE", "Archivo cargado: " + binObject.fileName + " (" + binObject.fileSize + " bytes)");
+        const family = FamilyLibrary.identify(binObject.original);
+        if (family) {
+            binObject.chip = family.family.chip;
+            binObject.family = family;
+            this.addLog("DNA MATCH", family.family.id + " · " + family.family.status);
+            if (family.decodedKm !== null) {
+                this.addLog("FAMILY KERNEL", "KM leído: " + family.decodedKm);
+            }
+        } else {
+            this.addLog("EEPROM", "Chip estimado: " + binObject.chip);
+        }
+        return binObject;
+    }
 
-        console.log("BIN Core iniciado");
-        console.log(this.currentBIN);
+    addLog(module, message) {
+        this.log.push({
+            time: new Date().toLocaleTimeString(),
+            module,
+            message
+        });
+        if (this.log.length > 80) this.log.shift();
+    }
+
+    analyze(knownKm, knownHours, extra) {
+        const bin = this.currentBIN;
+        if (!bin) return null;
+
+        bin.knownKm = knownKm;
+        bin.knownHours = knownHours;
+        this.addLog("MASTER ORCHESTRATOR", "Cadena Omega: Core → Map → Pattern → Counter → Math → Checksum → DNA → Correlation → Hypothesis → Validation → Truth");
+
+        const report = OmegaKernel.run(bin, {
+            knownKm,
+            knownHours,
+            impossible: extra && extra.impossible
+        });
+
+        (report.log || []).forEach((row) => this.addLog(row.module, row.message));
+
+        bin.analysis = {
+            mileageHits: report.mileageHits,
+            hoursHits: report.hoursHits,
+            vins: report.vins,
+            serials: report.serials,
+            copies: report.copies,
+            checksums: report.checksums,
+            counters: report.counters,
+            memoryMap: report.map,
+            hypotheses: report.hypotheses,
+            dna: report.dna,
+            discovery: report.discovery,
+            best: report.best,
+            validChecksums: report.validChecksums,
+            errorChecksums: report.errorChecksums,
+            omega: report
+        };
+        bin.status = "ANALIZADO";
+        this.addLog("VALIDATION", report.truth.status + " · " + report.truth.confidence + "%");
+        return bin.analysis;
+    }
+
+    buildCounters(mileageHits, hoursHits, vins, serials) {
+        const pick = (label, hits, unit) => {
+            const hit = hits[0] || null;
+            return {
+                name: label,
+                value: hit ? hit.value + (unit ? " " + unit : "") : "---",
+                address: hit ? hit.addressText : "----",
+                size: hit ? hit.width + " B" : "----",
+                type: hit ? hit.endian : "----",
+                confidence: hit ? hit.confidence + "%" : "0%",
+                status: hit ? (hit.confidence >= 80 ? "VALIDADO" : "HIPOTESIS") : "SIN DATOS",
+                hit
+            };
+        };
+
+        return [
+            pick("KILOMETRAJE", mileageHits, "KM"),
+            pick("KILOMETRAJE BCK", mileageHits.slice(1), "KM"),
+            pick("HORAS MOTOR", hoursHits, "h"),
+            pick("HORAS BCK", hoursHits.slice(1), "h"),
+            pick("VIN", vins.map((v) => Object.assign({
+                value: v.value,
+                addressText: v.addressText,
+                width: v.width,
+                endian: "ASCII",
+                confidence: v.confidence,
+                copies: [v.address],
+                formula: "ASCII",
+                name: "VIN_ASCII"
+            })), ""),
+            pick("SERIAL", serials.map((v) => Object.assign({
+                value: v.value,
+                addressText: v.addressText,
+                width: v.width,
+                endian: "ASCII",
+                confidence: v.confidence,
+                copies: [v.address],
+                formula: "ASCII",
+                name: "SERIAL_ASCII"
+            })), "")
+        ];
+    }
+
+    simulate(newValue) {
+        const bin = this.currentBIN;
+        if (!bin || !bin.analysis || !bin.analysis.best) return null;
+        if (bin.analysis.best.writable === false) {
+            this.addLog("TRUTH ENGINE", "Esta familia no se escribe: " + (bin.analysis.best.familyId || "desconocida"));
+            return null;
+        }
+        const applied = EditorEngine.apply(bin.original, bin.analysis.best, newValue);
+        const repaired = ChecksumEngine.recalculate(applied.bytes, bin.analysis.checksums);
+        return {
+            applied,
+            repaired,
+            copies: applied.copies,
+            checksums: repaired.length
+        };
+    }
+
+    applyValue(newValue) {
+        const sim = this.simulate(newValue);
+        if (!sim) return null;
+        this.currentBIN.working = sim.applied.bytes;
+        this.currentBIN.status = "EDITADO";
+        this.addLog("EDITOR", "Nuevo valor aplicado: " + newValue + " · " + sim.copies + " copias");
+        this.addLog("AUTO CHECKSUM", sim.repaired.length + " checksums recalculados");
+        return sim;
+    }
+
+    restore() {
+        if (!this.currentBIN) return;
+        this.currentBIN.working = new Uint8Array(this.currentBIN.original);
+        this.currentBIN.status = "RESTAURADO";
+        this.addLog("EDITOR", "BIN restaurado al original");
+    }
+
+    generateBIN() {
+        if (!this.currentBIN) return null;
+        this.addLog("BIN GENERATOR", "BIN listo: " + this.currentBIN.fileName);
+        return this.currentBIN.working;
+    }
+
+    generateUPA() {
+        const bin = this.currentBIN;
+        if (!bin || !bin.analysis || !bin.analysis.best) return "";
+        const hit = bin.analysis.best;
+        const changes = (hit.copies || [hit.address]).map((addr) => ({
+            address: addr,
+            hex: MathEngine.hexBytes(bin.working.slice(addr, addr + hit.width))
+        }));
+        this.addLog("UPA SCRIPT", "Script generado para " + bin.chip);
+        return EditorEngine.generateUPA(bin.fileName, bin.chip, changes, bin.analysis.checksums);
     }
 
 }
