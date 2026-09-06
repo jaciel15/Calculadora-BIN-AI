@@ -24,6 +24,18 @@ const FamilyLibrary = {
             writable: false,
             writeHow: "NO escribir. El fino está en 0062 (AF xx yy FF × 3) y hay sellos 80/FF. Fórmula pendiente de un tercer BIN.",
             binsProven: 2
+        },
+        {
+            id: "YAMAHA_R5F10",
+            name: "YAMAHA MT-07 R5F10",
+            manufacturer: "YAMAHA",
+            chip: "R5F10",
+            version: "RL78 data flash 8K",
+            size: 8192,
+            status: "DEMOSTRADO",
+            writable: true,
+            writeHow: "Última página de 32 B: lo mid hi = (KM×10−5) little-endian. Byte 31 = SUM8 de esos 3 bytes. Bajar KM exige borrar el anillo.",
+            binsProven: 5
         }
     ],
 
@@ -173,8 +185,76 @@ const FamilyLibrary = {
         };
     },
 
+    le24(bytes, i) {
+        return bytes[i] + (bytes[i + 1] << 8) + (bytes[i + 2] << 16);
+    },
+
+    r5fPages(bytes) {
+        const pages = [];
+        for (let p = 0; p + 32 <= bytes.length; p += 0x20) {
+            let pad = 0;
+            for (let i = 3; i < 31; i++) {
+                if (bytes[p + i] === 0) pad++;
+            }
+            if (pad < 26) continue;
+            const value = this.le24(bytes, p);
+            if (value < 50 || value > 2500000) continue;
+            const sum = (bytes[p] + bytes[p + 1] + bytes[p + 2]) & 0xFF;
+            const tail = bytes[p + 31];
+            pages.push({
+                addr: p,
+                value,
+                sum,
+                tail,
+                ok: tail === sum
+            });
+        }
+        return pages;
+    },
+
+    detectR5F(bytes) {
+        if (bytes.length !== 8192) return null;
+        const pages = this.r5fPages(bytes);
+        const valid = pages.filter((p) => p.ok);
+        if (valid.length < 6) return null;
+        const last = valid.reduce((a, b) => (a.value >= b.value ? a : b));
+        const km = Math.round(last.value / 10);
+        const hex = MathEngine.hexBytes(bytes.slice(last.addr, last.addr + 3));
+        const hit = {
+            fromMemory: true,
+            fromFamily: true,
+            familyId: "YAMAHA_R5F10",
+            label: "KILOMETRAJE",
+            name: "YAMAHA_R5F10_LE24_X10",
+            formula: "X * 10 - 5",
+            width: 3,
+            endian: "LE",
+            copies: [last.addr],
+            address: last.addr,
+            addressText: Hunters.range(last.addr, 3),
+            hex,
+            numeric: km,
+            value: km,
+            writeHow: "LE24 (KM×10−5) en la última página 0x" + last.addr.toString(16).toUpperCase() +
+                ". Byte +31 = SUM8. Anillo de " + valid.length + " páginas.",
+            confidence: 99.1,
+            representation: "lo mid hi de (KM×10−5) + SUM8 @ +31",
+            writable: true,
+            checksumAt: last.addr + 31,
+            checksumName: "SUM8"
+        };
+        return {
+            family: this.families[2],
+            decodedKm: km,
+            backupKm: null,
+            swapped: false,
+            hits: [hit],
+            confidence: 99.1
+        };
+    },
+
     identify(bytes) {
-        return this.detectYamaha(bytes) || this.detectOdyssey(bytes) || null;
+        return this.detectYamaha(bytes) || this.detectR5F(bytes) || this.detectOdyssey(bytes) || null;
     },
 
     list() {

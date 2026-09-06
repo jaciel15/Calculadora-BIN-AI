@@ -22,6 +22,8 @@ const EditorEngine = {
         if (xorMul) return (value ^ parseInt(xorMul[1], 16)) * Number(xorMul[2]);
         const xorOnly = formula.match(/^X XOR ([0-9A-F]+)$/i);
         if (xorOnly) return value ^ parseInt(xorOnly[1], 16);
+        const mulSub = formula.match(/^X \* (\d+) - (\d+)$/);
+        if (mulSub) return value * Number(mulSub[1]) - Number(mulSub[2]);
         const mul = formula.match(/^X \* (\d+)$/);
         if (mul) return value * Number(mul[1]);
         const div = formula.match(/^X \/ (\d+)$/);
@@ -38,6 +40,9 @@ const EditorEngine = {
         const working = new Uint8Array(bytes);
         (hit.copies || [hit.address]).forEach((addr) => {
             working.set(encoded, addr);
+            if (hit.familyId === "YAMAHA_R5F10" && encoded.length >= 3) {
+                working[addr + 31] = (encoded[0] + encoded[1] + encoded[2]) & 0xFF;
+            }
         });
         return {
             bytes: working,

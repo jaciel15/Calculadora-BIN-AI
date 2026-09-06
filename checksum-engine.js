@@ -165,6 +165,9 @@ const ChecksumEngine = {
         if (hit.familyId === "ODYSSEY_DENSO_93C86") {
             layout = "AF + word fino + FF · 3 copias seguidas. Orden interno aún no demostrado";
         }
+        if (hit.familyId === "YAMAHA_R5F10") {
+            layout = "página 32 B: lo mid hi = (KM×10−5) LE24 · byte 31 = SUM8(lo+mid+hi)";
+        }
         return {
             layout,
             hex,
@@ -177,6 +180,24 @@ const ChecksumEngine = {
 
     linkToKm(bytes, hit) {
         if (!hit || hit.address === undefined) return [];
+        if (hit.familyId === "YAMAHA_R5F10") {
+            const start = hit.address;
+            const calc = this.sum8(bytes, start, start + 3);
+            return [{
+                name: "SUM8",
+                start,
+                end: start + 3,
+                storedAt: start + 31,
+                valueBin: calc,
+                calculated: calc,
+                endian: "LE",
+                size: 1,
+                status: bytes[start + 31] === calc ? "VALIDO" : "ROTO",
+                confidence: 99,
+                window: "payload-LE24",
+                linkedTo: "KM"
+            }];
+        }
         const copies = hit.copies && hit.copies.length ? hit.copies : [hit.address];
         const width = hit.width || 2;
         const found = [];
