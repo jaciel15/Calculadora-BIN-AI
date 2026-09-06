@@ -296,7 +296,9 @@ const MindEngine = {
             { formula: "X * 10 - 1", fn: (k) => k * 10 - 1, widths: [3, 4] },
             { formula: "X * 10 - 5", fn: (k) => k * 10 - 5, widths: [3, 4] },
             { formula: "X * 100", fn: (k) => k * 100, widths: [3, 4] },
-            { formula: "X * 16", fn: (k) => k * 16, widths: [2, 3, 4] }
+            { formula: "X * 16", fn: (k) => k * 16, widths: [2, 3, 4] },
+            { formula: "X * 10 + 5", fn: (k) => k * 10 + 5, widths: [3, 4] },
+            { formula: "X * 1000", fn: (k) => k * 1000, widths: [3, 4] }
         ];
     },
 
@@ -467,13 +469,16 @@ const MindEngine = {
     scanStairs(bytes, knownKm) {
         const hits = [];
         const widths = [2, 3, 4];
-        const strides = [4, 8, 16, 32, 64];
+        const strides = [2, 3, 4, 6, 8, 12, 16, 20, 24, 32, 48, 64];
         const scales = [
             { formula: "X", fn: (k) => k },
             { formula: "X * 10", fn: (k) => k * 10 },
             { formula: "X * 10 - 1", fn: (k) => k * 10 - 1 },
+            { formula: "X * 10 + 5", fn: (k) => k * 10 + 5 },
             { formula: "X * 10 - 5", fn: (k) => k * 10 - 5 },
-            { formula: "X * 100", fn: (k) => k * 100 }
+            { formula: "X * 16", fn: (k) => k * 16 },
+            { formula: "X * 100", fn: (k) => k * 100 },
+            { formula: "X * 1000", fn: (k) => k * 1000 }
         ];
         const matchScale = (raw) => {
             if (knownKm === null || knownKm === undefined) {
@@ -727,8 +732,9 @@ const MindEngine = {
         const transforms = knownKm !== null && knownKm !== undefined ? MathEngine.transforms(knownKm) : [];
         const extraCopies = MarkBook.lessonRanges("COPY").map((range) => range.start);
         MarkBook.lessonRanges("KM").concat(MarkBook.lessonRanges("HINT")).forEach((range) => {
-            const width = Math.min(4, Math.max(1, range.size));
+            const widths = [Math.min(4, Math.max(2, range.size)), 2, 3, 4];
             const start = range.start;
+            widths.forEach((width) => {
             ["LE", "BE"].forEach((endian) => {
                 const raw = MathEngine.fromBytes(bytes, start, width, endian !== "BE");
                 if (raw === null) return;
@@ -768,8 +774,55 @@ const MindEngine = {
                     representation: "marca usuario " + endian
                 });
             });
+            });
         });
-        return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 10);
+        return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 16);
+    },
+
+    deepMarkHunt(bytes, knownKm) {
+        if (typeof MarkBook === "undefined" || knownKm === null || knownKm === undefined) return [];
+        const ranges = MarkBook.lessonRanges("KM").concat(MarkBook.lessonRanges("HINT"));
+        if (!ranges.length) return [];
+        const variants = MathEngine.variantsForValue(knownKm);
+        const extraCopies = MarkBook.lessonRanges("COPY").map((range) => range.start);
+        const hits = [];
+        const seen = new Set();
+        ranges.forEach((range) => {
+            const from = Math.max(0, range.start - 48);
+            const to = Math.min(bytes.length, range.end + 81);
+            const window = bytes.subarray(from, to);
+            const index = MathEngine.indexFile(window);
+            variants.forEach((variant) => {
+                const rel = MathEngine.lookupIndex(index, variant.bytes);
+                rel.forEach((off) => {
+                    const addr = from + off;
+                    const key = variant.formula + "|" + variant.endian + "|" + addr;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    hits.push({
+                        fromMind: true,
+                        fromUser: true,
+                        fromLesson: true,
+                        fromDeep: true,
+                        label: "KILOMETRAJE",
+                        name: "AYUDA_" + (variant.endian || "LE") + variant.width,
+                        formula: variant.formula,
+                        width: variant.width,
+                        endian: variant.endian,
+                        copies: [addr].concat(extraCopies.filter((a) => a !== addr)),
+                        address: addr,
+                        addressText: Hunters.range(addr, variant.width),
+                        hex: variant.hex,
+                        numeric: knownKm,
+                        value: knownKm,
+                        writeHow: "Zona que pintaste: " + variant.formula + " " + (variant.endian || "") + " en " + Hunters.range(addr, variant.width) + ".",
+                        confidence: addr >= range.start && addr <= range.end ? 99.3 : 97.1,
+                        representation: "ayuda profunda " + (variant.endian || "")
+                    });
+                });
+            });
+        });
+        return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 24);
     },
 
     classifyDiffs(bytesA, bytesB, ctx) {

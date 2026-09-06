@@ -280,6 +280,7 @@ const OmegaKernel = {
         if (hit.fromStair && (hit.copies || []).length >= 8) score += 6;
         if (hit.fromUser) score += 14;
         if (hit.fromLesson) score += 18;
+        if (hit.fromDeep) score += 12;
         if (hit.fromFamily && hit.writable === false) score += 8;
         if (hit.scatter) score -= 10;
         return score;
@@ -507,6 +508,9 @@ const OmegaKernel = {
         const userHits = MindEngine.fromUserMarks(bytes, knownKm);
         userHits.forEach((hit) => mileageHits.unshift(hit));
         if (userHits.length) say("USER MARKS", userHits.length + " zonas KM marcadas a mano");
+        const deepHelp = MindEngine.deepMarkHunt(bytes, knownKm);
+        deepHelp.forEach((hit) => mileageHits.unshift(hit));
+        if (deepHelp.length) say("ZONA AYUDA", deepHelp.length + " fórmulas dentro de lo que pintaste (tope " + MathEngine.COMBO_CAP + ")");
         const recalled = MindEngine.recall(bytes);
         recalled.forEach((hit) => mileageHits.unshift(hit));
         if (recalled.length) say("SELF LEARNING", "Memoria reutiliza " + recalled[0].formula + " @ " + recalled[0].addressText);

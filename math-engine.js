@@ -144,7 +144,7 @@ const MathEngine = {
     },
 
     lastComboCount: 0,
-    COMBO_CAP: 200000,
+    COMBO_CAP: 350000,
 
     transforms(value) {
         const items = [];
@@ -160,9 +160,9 @@ const MathEngine = {
             return true;
         };
 
-        const factors = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 25, 32, 40, 50, 64, 80, 100, 125, 128, 160, 200, 256, 500, 512, 1000, 1024, 10000];
-        const xorMasks = [0x01, 0x0F, 0xF0, 0x7F, 0x80, 0xFF, 0x55, 0xAA, 0x5A, 0xA5, 0x3C, 0xC3, 0x69, 0x96, 0xFF00, 0x00FF, 0xFFFF, 0xFF0000, 0xFFFFFF, 0xFFFFFFFF, 0x0101, 0x1010, 0x1111];
-        const adds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 20, 32, 50, 64, 100, 128, 255, 256];
+        const factors = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 25, 32, 40, 50, 64, 80, 100, 125, 128, 160, 200, 256, 500, 512, 1000, 1024, 1609, 10000, 100000];
+        const xorMasks = [0x01, 0x0F, 0xF0, 0x7F, 0x80, 0xFF, 0x55, 0xAA, 0x5A, 0xA5, 0x3C, 0xC3, 0x69, 0x96, 0x0F0F, 0xF0F0, 0x3333, 0xCCCC, 0xFF00, 0x00FF, 0xFFFF, 0xFF0000, 0xFFFFFF, 0xFFFFFFFF, 0x0101, 0x1010, 0x1111, 0x00FF00FF];
+        const adds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 20, 32, 50, 64, 100, 128, 255, 256, 1000];
         const mods = [10, 16, 100, 128, 255, 256, 1000, 4096, 65536];
         const rolls = [1, 2, 3, 4, 5, 6, 7, 8];
 
@@ -176,6 +176,9 @@ const MathEngine = {
         push("GRAY(X)", (value ^ (value >>> 1)) >>> 0);
         push("X*10+1", value * 10 + 1);
         push("X*10-1", value * 10 - 1);
+        push("X*10+5", value * 10 + 5);
+        push("X*1000", value * 1000);
+        push("SWAP16(X*10)", this.swap16(value * 10));
         push("(X<<8)|LO", ((value << 8) | (value & 0xFF)) >>> 0);
 
         factors.forEach((factor) => {
@@ -252,6 +255,9 @@ const MathEngine = {
         if (m) return (n * Number(m[1]) + Number(m[2])) >>> 0;
         m = f.match(/^X\s*\*\s*(\d+)\s*-\s*(\d+)$/);
         if (m) return (n * Number(m[1]) - Number(m[2])) >>> 0;
+        if (f === "X*10+5" || f === "X * 10 + 5") return (n * 10 + 5) >>> 0;
+        if (f === "X*1000" || f === "X * 1000") return (n * 1000) >>> 0;
+        if (f === "SWAP16(X*10)") return this.swap16(n * 10);
         m = f.match(/^X\s*\*\s*(\d+)$/);
         if (m) return (n * Number(m[1])) >>> 0;
         m = f.match(/^X\s*\/\s*(\d+)$/);
@@ -341,6 +347,16 @@ const MathEngine = {
                 if (width < 4 && item.value >= max) return;
                 addBytes(item.name, this.toBytes(item.value, width, true), { endian: "LE", numeric: item.value });
                 addBytes(item.name, this.toBytes(item.value, width, false), { endian: "BE", numeric: item.value });
+                if (width >= 2) {
+                    const le = this.toBytes(item.value, width, true);
+                    const sw = new Uint8Array(le.length);
+                    for (let i = 0; i + 1 < le.length; i += 2) {
+                        sw[i] = le[i + 1];
+                        sw[i + 1] = le[i];
+                    }
+                    if (le.length % 2) sw[le.length - 1] = le[le.length - 1];
+                    addBytes(item.name, sw, { endian: "SWAP16", numeric: item.value });
+                }
             });
         });
 
