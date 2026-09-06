@@ -45,8 +45,9 @@ const MarkBook = {
 
     paint(addr) {
         if (addr === undefined || addr === null || isNaN(addr)) return;
-        if (this.brush === "ERASE") delete this.user[addr];
-        else this.user[addr] = this.brush;
+        const key = String(addr);
+        if (this.brush === "ERASE") delete this.user[key];
+        else this.user[key] = this.brush;
     },
 
     emptyLessons() {
@@ -67,6 +68,18 @@ const MarkBook = {
         Object.keys(this.user).forEach((key) => {
             if (this.user[key] === kind) delete this.user[key];
         });
+    },
+
+    guiding() {
+        return !this.revealed;
+    },
+
+    paintedAddrs(kind) {
+        const addrs = [];
+        this.lessonRanges(kind).forEach((range) => {
+            for (let addr = range.start; addr <= range.end; addr++) addrs.push(addr);
+        });
+        return addrs;
     },
 
     persist() {
@@ -91,7 +104,7 @@ const MarkBook = {
     restoreAccepted() {
         Object.keys(this.lessons).forEach((kind) => {
             (this.lessons[kind] || []).forEach((range) => {
-                for (let addr = range.start; addr <= range.end; addr++) this.user[addr] = kind;
+                for (let addr = range.start; addr <= range.end; addr++) this.user[String(addr)] = kind;
             });
         });
         this.revealed = true;
@@ -99,7 +112,7 @@ const MarkBook = {
     },
 
     ranges(kind) {
-        const addrs = Object.keys(this.user).map(Number).filter((a) => this.user[a] === kind).sort((a, b) => a - b);
+        const addrs = Object.keys(this.user).map(Number).filter((a) => this.user[String(a)] === kind).sort((a, b) => a - b);
         const out = [];
         addrs.forEach((addr) => {
             const last = out[out.length - 1];
@@ -221,6 +234,9 @@ const MarkBook = {
             if (addr === null) return;
             event.preventDefault();
             this.painting = true;
+            if (event.currentTarget && event.currentTarget.setPointerCapture && event.pointerId !== undefined) {
+                try { event.currentTarget.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+            }
             this.paint(addr);
             this.refresh(addr);
         };
@@ -238,7 +254,7 @@ const MarkBook = {
     },
 
     refresh(addr) {
-        const kind = this.user[addr];
+        const kind = this.user[String(addr)];
         document.querySelectorAll("[data-addr=\"" + addr + "\"]").forEach((node) => {
             Object.keys(this.kinds).forEach((key) => node.classList.remove(this.kinds[key].cls));
             if (kind && this.kinds[kind]) node.classList.add(this.kinds[kind].cls);

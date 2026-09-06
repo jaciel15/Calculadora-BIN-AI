@@ -74,11 +74,12 @@ function collectMarks() {
             (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
         });
     }
-    if (LabMode.is("KM") && currentBIN.analysis && currentBIN.analysis.best) {
+    const guiding = typeof MarkBook !== "undefined" && MarkBook.guiding();
+    if (!guiding && LabMode.is("KM") && currentBIN.analysis && currentBIN.analysis.best) {
         const hit = currentBIN.analysis.best;
         (hit.copies || [hit.address]).forEach((addr) => paint(addr, hit.width || 2, "hex-km"));
     }
-    if ((LabMode.is("CHK") || LabMode.is("KM")) && omega && omega.kmChecksums) {
+    if (!guiding && (LabMode.is("CHK") || LabMode.is("KM")) && omega && omega.kmChecksums) {
         omega.kmChecksums.forEach((c) => {
             if (c.storedAt !== null && c.storedAt !== undefined) paint(c.storedAt, c.size || 2, "hex-chk");
         });
@@ -100,6 +101,12 @@ function collectMarks() {
         });
     }
     if (typeof MarkBook !== "undefined") {
+        if (MarkBook.revealed) {
+            MarkBook.allRanges().forEach((range) => {
+                const info = MarkBook.kinds[range.kind];
+                if (info) paint(range.start, range.size, info.cls);
+            });
+        }
         Object.keys(MarkBook.user).forEach((key) => {
             const kind = MarkBook.user[key];
             const info = MarkBook.kinds[kind];

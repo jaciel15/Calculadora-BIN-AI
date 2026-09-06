@@ -730,50 +730,73 @@ const MindEngine = {
         if (typeof MarkBook === "undefined") return [];
         const hits = [];
         const transforms = knownKm !== null && knownKm !== undefined ? MathEngine.transforms(knownKm) : [];
-        const extraCopies = MarkBook.lessonRanges("COPY").map((range) => range.start);
-        MarkBook.lessonRanges("KM").concat(MarkBook.lessonRanges("HINT")).forEach((range) => {
-            const widths = [Math.min(4, Math.max(2, range.size)), 2, 3, 4];
-            const start = range.start;
-            widths.forEach((width) => {
+        const extraCopies = MarkBook.paintedAddrs("COPY");
+        const painted = MarkBook.paintedAddrs("KM").concat(MarkBook.paintedAddrs("HINT"));
+        if (!painted.length) return [];
+        const paintedSet = new Set(painted);
+        [2, 3, 4].forEach((width) => {
             ["LE", "BE"].forEach((endian) => {
-                const raw = MathEngine.fromBytes(bytes, start, width, endian !== "BE");
-                if (raw === null) return;
+                const starts = [];
+                painted.forEach((start) => {
+                    if (start + width > bytes.length) return;
+                    let inside = true;
+                    for (let i = 0; i < width; i++) {
+                        if (!paintedSet.has(start + i)) { inside = false; break; }
+                    }
+                    if (!inside) return;
+                    const raw = MathEngine.fromBytes(bytes, start, width, endian !== "BE");
+                    if (raw === null) return;
+                    starts.push({ start, raw });
+                });
+                if (!starts.length) return;
                 let formula = "X";
-                let km = raw;
-                let confidence = 94;
+                let km = starts[0].raw;
+                let confidence = 93;
+                let chosen = starts[0];
                 if (knownKm !== null && knownKm !== undefined) {
-                    const match = transforms.find((item) => item.value === raw);
-                    if (match) {
-                        formula = match.name;
+                    const matched = starts.filter((slot) => {
+                        const hit = transforms.find((item) => item.value === slot.raw);
+                        return !!(hit || slot.raw === knownKm || slot.raw === knownKm * 10 ||
+                            slot.raw === knownKm * 10 - 1 || slot.raw === knownKm * 10 - 5 ||
+                            slot.raw === knownKm * 10 + 5 || slot.raw === knownKm * 100 || slot.raw === knownKm * 1000);
+                    });
+                    if (matched.length) {
+                        chosen = matched.reduce((a, b) => (a.raw >= b.raw ? a : b));
+                        const hit = transforms.find((item) => item.value === chosen.raw);
+                        formula = hit ? hit.name : (chosen.raw === knownKm * 10 ? "X * 10" : "X");
                         km = knownKm;
-                        confidence = 98.4;
-                    } else if (raw === knownKm * 10) { formula = "X * 10"; km = knownKm; confidence = 97.8; }
-                    else if (raw === knownKm * 10 - 5) { formula = "X * 10 - 5"; km = knownKm; confidence = 97.2; }
-                    else if (raw === knownKm * 100) { formula = "X * 100"; km = knownKm; confidence = 97; }
-                    else km = width >= 3 ? Math.round(raw / 10) : raw;
+                        confidence = 99.2;
+                    } else {
+                        chosen = starts.reduce((a, b) => (a.raw >= b.raw ? a : b));
+                        km = width >= 3 ? Math.round(chosen.raw / 10) : chosen.raw;
+                    }
                 } else {
-                    km = width >= 3 ? Math.round(raw / 10) : raw;
+                    chosen = starts.reduce((a, b) => (a.raw >= b.raw ? a : b));
+                    km = width >= 3 ? Math.round(chosen.raw / 10) : chosen.raw;
                 }
+                const copies = starts.map((slot) => slot.start).concat(extraCopies.filter((addr) => starts.every((s) => s.start !== addr)));
                 hits.push({
                     fromMind: true,
                     fromUser: true,
                     fromLesson: MarkBook.hasLessons(),
+                    fromStair: starts.length >= 4,
                     label: "KILOMETRAJE",
                     name: "USER_KM_" + endian + width,
                     formula,
                     width,
                     endian,
-                    copies: [start].concat(extraCopies.filter((addr) => addr !== start)),
-                    address: start,
-                    addressText: Hunters.range(start, width),
-                    hex: MathEngine.hexBytes(bytes.slice(start, start + width)),
+                    copies,
+                    stair: starts.map((slot) => ({ addr: slot.start, value: slot.raw })),
+                    address: chosen.start,
+                    addressText: Hunters.range(chosen.start, width),
+                    hex: MathEngine.hexBytes(bytes.slice(chosen.start, chosen.start + width)),
                     numeric: km,
                     value: km,
-                    writeHow: "Zona " + (range.kind === "HINT" ? "pista" : "KM") + " que me mostraste. Pruebo la misma fórmula en cada copia y en el BIN 2.",
-                    confidence: MarkBook.hasLessons() ? Math.min(99.4, confidence + 4) : (range.kind === "HINT" ? Math.max(80, confidence - 8) : confidence),
-                    representation: "marca usuario " + endian
+                    writeHow: "Usé TODOS los " + painted.length + " bytes que pintaste. " +
+                        starts.length + " huecos de " + width + " B. El actual es el más alto.",
+                    confidence: MarkBook.hasLessons() ? Math.min(99.5, confidence + 2) : confidence,
+                    representation: "ayuda " + painted.length + " bytes " + endian
                 });
-            });
             });
         });
         return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 16);
@@ -782,7 +805,8 @@ const MindEngine = {
     deepMarkHunt(bytes, knownKm) {
         if (typeof MarkBook === "undefined" || knownKm === null || knownKm === undefined) return [];
         const ranges = MarkBook.lessonRanges("KM").concat(MarkBook.lessonRanges("HINT"));
-        if (!ranges.length) return [];
+        const painted = MarkBook.paintedAddrs("KM").concat(MarkBook.paintedAddrs("HINT"));
+        if (!ranges.length && !painted.length) return [];
         const variants = MathEngine.variantsForValue(knownKm);
         const extraCopies = MarkBook.lessonRanges("COPY").map((range) => range.start);
         const hits = [];
