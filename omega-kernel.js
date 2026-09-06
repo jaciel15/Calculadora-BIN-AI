@@ -482,8 +482,21 @@ const OmegaKernel = {
         if (best) hot.push(best.address);
         map.filter((r) => r.kind === "COUNTER CANDIDATE").forEach((r) => hot.push(r.start));
         const checksums = ChecksumEngine.hunt(bytes, hot);
+        const kmChecksums = ChecksumEngine.linkToKm(bytes, best);
+        kmChecksums.forEach((item) => {
+            if (!checksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
+                checksums.unshift(item);
+            }
+        });
+        const kmOrder = ChecksumEngine.describeKmOrder(best, bytes);
         const valid = checksums.filter((c) => c.status === "VALIDO").length;
         say("CHECKSUM HUNTER", valid + " válidos");
+        say("ORDEN KM", kmOrder.layout + " · " + kmOrder.hex);
+        if (kmChecksums.length) {
+            say("KM+CHECKSUM", kmChecksums[0].name + " @ " + this.hex(kmChecksums[0].storedAt) + " cubre " + kmChecksums[0].window);
+        } else {
+            say("KM+CHECKSUM", "Sin checksum pegado al KM. La integridad puede ser solo las copias.");
+        }
 
         const diffs = this.familyDiffs(bytes);
         const links = this.correlate(best, checksums, copiesHidden, diffs);
@@ -605,7 +618,9 @@ const OmegaKernel = {
             errorChecksums: checksums.length - valid,
             mileageHits,
             hoursHits,
-            familyMatch
+            familyMatch,
+            kmOrder,
+            kmChecksums
         };
         say("BIN HUNTER OMEGA", truth.status + " · confianza " + truth.confidence + "%");
         this.lastReport.log = log;

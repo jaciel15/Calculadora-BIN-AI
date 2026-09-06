@@ -147,6 +147,18 @@ function renderDNA(dna, discovery) {
     const best = currentBIN && currentBIN.analysis ? currentBIN.analysis.best : null;
     if ($("aiHow")) $("aiHow").textContent = best ? describeOperation(best) : (discovery.note || "-----");
     if ($("aiEdited")) $("aiEdited").textContent = describeEdited(best, $("newValue") ? $("newValue").value.replace(/[^\d]/g, "") : "");
+    const omega = currentBIN && currentBIN.analysis ? currentBIN.analysis.omega : null;
+    if ($("aiKmOrder")) {
+        $("aiKmOrder").textContent = omega && omega.kmOrder
+            ? omega.kmOrder.layout + " · bytes " + omega.kmOrder.hex + " · " + omega.kmOrder.copies + " copias"
+            : "-----";
+    }
+    if ($("aiKmChecksum")) {
+        const linked = omega && omega.kmChecksums && omega.kmChecksums[0];
+        $("aiKmChecksum").textContent = linked
+            ? linked.name + " " + linked.endian + " @ " + padHex(linked.storedAt) + " (ventana " + linked.window + ")"
+            : "Sin checksum ligado al KM. Puede valerse solo de copias espejo.";
+    }
 }
 
 function fillEditorFromBest(analysis) {
@@ -483,7 +495,13 @@ function showPairReport() {
         "<p><strong>BIN 2:</strong> " + OmegaKernel.compareBins[0].fileName + " · KM " + (km2 || "?") + "</p>" +
         "<p><strong>Bytes distintos:</strong> " + diffs.length + "</p>" +
         "<p>" + diffs.slice(0, 40).map((i) => padHex(i) + ": " + padHex(a[i], 2) + " → " + padHex(b[i], 2)).join("<br>") + "</p>" +
-        (currentBIN.analysis && currentBIN.analysis.best ? "<p><strong>Operación:</strong> " + describeOperation(currentBIN.analysis.best) + "</p>" : "");
+        (currentBIN.analysis && currentBIN.analysis.best ? "<p><strong>Operación:</strong> " + describeOperation(currentBIN.analysis.best) + "</p>" : "") +
+        (currentBIN.analysis && currentBIN.analysis.omega && currentBIN.analysis.omega.kmOrder
+            ? "<p><strong>Orden KM:</strong> " + currentBIN.analysis.omega.kmOrder.layout + " · " + currentBIN.analysis.omega.kmOrder.hex + "</p>"
+            : "") +
+        (currentBIN.analysis && currentBIN.analysis.omega && currentBIN.analysis.omega.kmChecksums && currentBIN.analysis.omega.kmChecksums[0]
+            ? "<p><strong>Checksum KM:</strong> " + currentBIN.analysis.omega.kmChecksums[0].name + " @ " + padHex(currentBIN.analysis.omega.kmChecksums[0].storedAt) + "</p>"
+            : "<p><strong>Checksum KM:</strong> no ligado; revisar copias espejo</p>");
     openLab("COMPARADOR 2 BIN", html);
     if (currentBIN.analysis && currentBIN.analysis.omega) {
         $("omegaThink").textContent = "Par analizado: " + diffs.length + " bytes cambian entre los dos archivos.";

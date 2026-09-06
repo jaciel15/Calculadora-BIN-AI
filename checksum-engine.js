@@ -148,6 +148,81 @@ const ChecksumEngine = {
         ];
     },
 
+    describeKmOrder(hit, bytes) {
+        if (!hit) {
+            return { layout: "Sin KM", hex: "----", copies: 0, endian: "----" };
+        }
+        const raw = bytes.slice(hit.address, hit.address + hit.width);
+        const hex = MathEngine.hexBytes(raw);
+        let layout = hit.endian || "RAW";
+        if (hit.endian === "LE") layout = "lo + hi  (little-endian: primero el byte bajo)";
+        if (hit.endian === "BE") layout = "hi + lo  (big-endian: primero el byte alto)";
+        if (hit.endian === "BCD") layout = "BCD  (cada nibble es un dígito decimal)";
+        if (hit.familyId === "YAMAHA_MT09_93C86") {
+            layout = (hit.swapped ? "DUMP SWAP 16: hi+lo en el word" : "00 00 + KM uint16 LE (lo hi)") +
+                " · 6 ranuras de 4 bytes";
+        }
+        if (hit.familyId === "ODYSSEY_DENSO_93C86") {
+            layout = "AF + word fino + FF · 3 copias seguidas. Orden interno aún no demostrado";
+        }
+        return {
+            layout,
+            hex,
+            copies: (hit.copies || [hit.address]).length,
+            endian: hit.endian || "RAW",
+            formula: hit.formula,
+            address: hit.addressText
+        };
+    },
+
+    linkToKm(bytes, hit) {
+        if (!hit || hit.address === undefined) return [];
+        const copies = hit.copies && hit.copies.length ? hit.copies : [hit.address];
+        const width = hit.width || 2;
+        const found = [];
+        const seen = new Set();
+        const windows = [];
+        const regionStart = Math.min.apply(null, copies);
+        const regionEnd = Math.max.apply(null, copies) + width;
+        windows.push({ start: regionStart, end: regionEnd, label: "bloque-KM" });
+        copies.forEach((addr) => {
+            windows.push({ start: addr, end: addr + width, label: "slot-" + addr.toString(16) });
+            if (addr >= 2) windows.push({ start: addr - 2, end: addr + width, label: "prefijo-" + addr.toString(16) });
+        });
+        this.algorithms().forEach((algo) => {
+            windows.forEach((win) => {
+                if (win.end - win.start < 1) return;
+                const calc = algo.fn(bytes, win.start, win.end);
+                const spots = [win.end, win.end + 0];
+                copies.forEach((addr) => spots.push(addr + width));
+                ["LE", "BE"].forEach((endian) => {
+                    const hits = this.storeMatches(bytes, calc, algo.size, endian === "LE")
+                        .filter((addr) => spots.indexOf(addr) !== -1 || (addr >= win.end && addr <= win.end + 4));
+                    hits.forEach((addr) => {
+                        const key = algo.name + "|" + win.start + "|" + addr;
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        found.push({
+                            name: algo.name,
+                            start: win.start,
+                            end: win.end,
+                            storedAt: addr,
+                            valueBin: calc,
+                            calculated: calc,
+                            endian,
+                            size: algo.size,
+                            status: "VALIDO",
+                            confidence: 90,
+                            window: win.label,
+                            linkedTo: "KM"
+                        });
+                    });
+                });
+            });
+        });
+        return found.sort((a, b) => b.confidence - a.confidence).slice(0, 8);
+    },
+
     hunt(bytes, hotAddresses) {
         const results = [];
         const seen = new Set();
