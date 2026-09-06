@@ -112,6 +112,25 @@ function renderChecksums(items) {
     }).join("");
 }
 
+function describeOperation(hit) {
+    if (!hit) return "Sin operación.";
+    return "Valor " + hit.value + " → " + hit.formula + " → bytes " + hit.hex +
+        " (" + (hit.endian || "") + " " + hit.width + "B) en " + hit.addressText +
+        " × " + (hit.copies ? hit.copies.length : 1) + " copias. " + (hit.writeHow || "");
+}
+
+function describeEdited(hit, newKm) {
+    if (!hit || hit.writable === false) return "Esta familia no tiene operación de escritura demostrada.";
+    if (newKm === "" || newKm === null) return "Escribe un nuevo KM para ver la operación editada.";
+    try {
+        const encoded = EditorEngine.encodeValue(Number(newKm), hit);
+        return "Nuevo KM " + newKm + " → " + hit.formula + " → " + MathEngine.hexBytes(encoded) +
+            " en " + (hit.copies || [hit.address]).length + " copias (" + (hit.endian || "") + ").";
+    } catch (error) {
+        return "No se pudo calcular la operación editada.";
+    }
+}
+
 function renderDNA(dna, discovery) {
     $("dnaScore").textContent = dna.score + "%";
     $("dnaScoreCard").textContent = dna.score + "%";
@@ -124,6 +143,10 @@ function renderDNA(dna, discovery) {
     $("aiRegion").textContent = discovery.region;
     $("aiConfidence").textContent = discovery.confidence + "%";
     $("aiPatterns").textContent = String(discovery.patterns);
+    if ($("aiCombos")) $("aiCombos").textContent = String(MathEngine.lastComboCount || 0);
+    const best = currentBIN && currentBIN.analysis ? currentBIN.analysis.best : null;
+    if ($("aiHow")) $("aiHow").textContent = best ? describeOperation(best) : (discovery.note || "-----");
+    if ($("aiEdited")) $("aiEdited").textContent = describeEdited(best, $("newValue") ? $("newValue").value.replace(/[^\d]/g, "") : "");
 }
 
 function fillEditorFromBest(analysis) {
@@ -186,6 +209,8 @@ async function loadBIN(event) {
     currentBIN = new BINObject(file, bytes);
     binCore.load(currentBIN);
     $("fileName").textContent = currentBIN.fileName;
+    if ($("bin1Name")) $("bin1Name").textContent = currentBIN.fileName;
+    if ($("knownKm1") && $("knownKm").value) $("knownKm1").value = $("knownKm").value;
     $("fileSize").textContent = currentBIN.fileSize;
     $("chipName").textContent = currentBIN.chip;
     $("chipSize").textContent = currentBIN.totalBytes + " Bytes";
@@ -228,6 +253,9 @@ function runSimulate() {
     const value = $("newValue").value.replace(/[^\d]/g, "");
     lastSimulation = binCore.simulate(value);
     if (!lastSimulation) return;
+    if ($("aiEdited") && currentBIN.analysis) {
+        $("aiEdited").textContent = describeEdited(currentBIN.analysis.best, value);
+    }
     $("resumeValue").textContent = value + " KM";
     $("resumeCopies").textContent = String(lastSimulation.copies);
     $("resumeUpdated").textContent = "0";
@@ -261,6 +289,9 @@ function runApply() {
     }
     lastSimulation = binCore.applyValue(value);
     if (!lastSimulation) return;
+    if ($("aiEdited") && currentBIN.analysis) {
+        $("aiEdited").textContent = describeEdited(currentBIN.analysis.best, value);
+    }
     $("resumeValue").textContent = value + " KM";
     $("resumeCopies").textContent = String(lastSimulation.copies);
     $("resumeUpdated").textContent = String(lastSimulation.copies);
@@ -404,9 +435,121 @@ async function loadCompare(event) {
             bytes: new Uint8Array(buffer)
         });
     }
+    if (files[0] && $("bin2Name")) $("bin2Name").textContent = files[0].name;
     $("familyCount").textContent = "Familia: " + (1 + OmegaKernel.compareBins.length) + " BIN";
     binCore.addLog("GENOME", OmegaKernel.compareBins.length + " BIN de familia cargados");
     addLogRows();
+}
+
+async function loadBIN2(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const buffer = await file.arrayBuffer();
+    OmegaKernel.compareBins = [{
+        fileName: file.name,
+        bytes: new Uint8Array(buffer)
+    }];
+    if ($("bin2Name")) $("bin2Name").textContent = file.name;
+    $("familyCount").textContent = "Familia: " + (1 + OmegaKernel.compareBins.length) + " BIN";
+    if (binCore.currentBIN) binCore.addLog("COMPARADOR", "BIN 2 cargado: " + file.name);
+    addLogRows();
+}
+
+function runPairAnalysis() {
+    if (!needBIN()) return;
+    if (!OmegaKernel.compareBins.length) {
+        alert("Elige también el BIN 2 para analizar el par.");
+        return;
+    }
+    if ($("knownKm1") && $("knownKm1").value) $("knownKm").value = $("knownKm1").value;
+    runAnalysis();
+    setTimeout(function () {
+        showPairReport();
+    }, 80);
+}
+
+function showPairReport() {
+    if (!currentBIN || !OmegaKernel.compareBins.length) return;
+    const a = currentBIN.original;
+    const b = OmegaKernel.compareBins[0].bytes;
+    const diffs = [];
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+        if (a[i] !== b[i]) diffs.push(i);
+    }
+    const km1 = $("knownKm1") ? $("knownKm1").value : "";
+    const km2 = $("knownKm2") ? $("knownKm2").value : "";
+    const html = "<p><strong>BIN 1:</strong> " + currentBIN.fileName + " · KM " + (km1 || knownKm() || "?") + "</p>" +
+        "<p><strong>BIN 2:</strong> " + OmegaKernel.compareBins[0].fileName + " · KM " + (km2 || "?") + "</p>" +
+        "<p><strong>Bytes distintos:</strong> " + diffs.length + "</p>" +
+        "<p>" + diffs.slice(0, 40).map((i) => padHex(i) + ": " + padHex(a[i], 2) + " → " + padHex(b[i], 2)).join("<br>") + "</p>" +
+        (currentBIN.analysis && currentBIN.analysis.best ? "<p><strong>Operación:</strong> " + describeOperation(currentBIN.analysis.best) + "</p>" : "");
+    openLab("COMPARADOR 2 BIN", html);
+    if (currentBIN.analysis && currentBIN.analysis.omega) {
+        $("omegaThink").textContent = "Par analizado: " + diffs.length + " bytes cambian entre los dos archivos.";
+    }
+}
+
+function needAnalysis() {
+    if (!needBIN()) return false;
+    if (!currentBIN.analysis) {
+        alert("Primero pulsa ANALIZAR o ANALIZAR PAR.");
+        return false;
+    }
+    return true;
+}
+
+function showTwin() {
+    if (!needAnalysis()) return;
+    const omega = currentBIN.analysis.omega;
+    openLab("DIGITAL TWIN", "<p>Archivo físico: " + currentBIN.fileName + "</p>" +
+        "<p>Regiones: " + (omega && omega.twin ? omega.twin.regions : 0) + "</p>" +
+        "<p>Variables: " + (omega && omega.twin ? omega.twin.variables : 0) + "</p>" +
+        "<p>Relaciones: " + (omega && omega.twin ? omega.twin.relations : 0) + "</p>" +
+        "<p>Operación: " + describeOperation(currentBIN.analysis.best) + "</p>");
+    showHEX(currentBIN.working);
+}
+
+function showEvolution() {
+    if (!needAnalysis()) return;
+    const orig = currentBIN.original;
+    const work = currentBIN.working;
+    const changes = [];
+    for (let i = 0; i < orig.length; i++) {
+        if (orig[i] !== work[i]) changes.push(padHex(i) + ": " + padHex(orig[i], 2) + " → " + padHex(work[i], 2));
+    }
+    openLab("BIN EVOLUTION", changes.length
+        ? "<p>" + changes.join("<br>") + "</p>"
+        : "<p>Sin cambios aplicados. Simula o aplica un KM nuevo.</p>");
+    showHEX(work);
+}
+
+function showStress() {
+    if (!needAnalysis()) return;
+    const st = currentBIN.analysis.omega ? currentBIN.analysis.omega.stress : null;
+    openLab("STRESS TEST", st
+        ? "<p>" + st.status + " · " + st.passed + "/" + st.cases + " casos</p><p>" + describeOperation(currentBIN.analysis.best) + "</p>"
+        : "<p>Analiza primero.</p>");
+}
+
+function showReasoning() {
+    if (!needAnalysis()) return;
+    const rows = currentBIN.analysis.hypotheses || [];
+    openLab("REASONING ENGINE", rows.length
+        ? "<p>Prioridad por confianza.</p><table class=\"data-table\"><tr><th>#</th><th>FÓRMULA</th><th>CONF</th></tr>" +
+            rows.map((h) => "<tr><td>" + h.rank + "</td><td>" + h.formula + "</td><td>" + h.confidence + "%</td></tr>").join("") + "</table>"
+        : "<p>Sin hipótesis.</p>");
+    focusPanel("logPanel");
+}
+
+function showDiscoveryBrain() {
+    if (!needAnalysis()) return;
+    focusPanel("discoveryPanel");
+    const best = currentBIN.analysis.best;
+    openLab("AI DISCOVERY",
+        "<p><strong>Operación:</strong> " + describeOperation(best) + "</p>" +
+        "<p><strong>Editada:</strong> " + describeEdited(best, $("newValue").value.replace(/[^\d]/g, "")) + "</p>" +
+        "<p>Combinaciones: " + MathEngine.lastComboCount + "</p>");
 }
 
 function focusPanel(id) {
@@ -446,6 +589,7 @@ function wireUI() {
     bindClick("openBtnTop", () => $("fileInput").click());
     $("fileInput").addEventListener("change", loadBIN);
     $("compareInput").addEventListener("change", loadCompare);
+    if ($("fileInput2")) $("fileInput2").addEventListener("change", loadBIN2);
 
     bindClick("analyzeBtn", runAnalysis);
     bindClick("analyzeBtnTop", runAnalysis);
@@ -468,22 +612,36 @@ function wireUI() {
         const found = (currentBIN.analysis && currentBIN.analysis.serials) || Hunters.huntSerial(currentBIN.original);
         alert(found.length ? found.map((v) => v.value + " @ " + v.addressText).join("\n") : "Serial no encontrado");
     });
-    bindClick("hoursHunterBtn", () => focusPanel("counterPanel"));
-    bindClick("universalCounterBtn", () => focusPanel("counterPanel"));
-    bindClick("dnaBtn", () => focusPanel("dnaPanel"));
-    bindClick("dnaBtnTop", () => focusPanel("dnaPanel"));
-    bindClick("discoveryBtn", () => focusPanel("discoveryPanel"));
-    bindClick("discoveryBtnTop", () => focusPanel("discoveryPanel"));
+    bindClick("hoursHunterBtn", () => {
+        if (!needBIN()) return;
+        focusPanel("counterPanel");
+        const hours = currentBIN.analysis ? currentBIN.analysis.hoursHits : [];
+        openLab("HOURS HUNTER", hours.length
+            ? hours.map((h) => h.formula + " · " + h.addressText + " · " + h.value).join("<br>")
+            : "<p>Sin horas conocidas. Escríbelas arriba y analiza.</p>");
+    });
+    bindClick("universalCounterBtn", () => {
+        if (!needAnalysis()) return;
+        focusPanel("counterPanel");
+        openLab("UNIVERSAL COUNTER", "<pre>" + (currentBIN.analysis.omega ? currentBIN.analysis.omega.omegaCard : "") + "</pre>");
+    });
+    bindClick("dnaBtn", () => { if (!needAnalysis()) return; focusPanel("dnaPanel"); });
+    bindClick("dnaBtnTop", () => { if (!needAnalysis()) return; focusPanel("dnaPanel"); });
+    bindClick("discoveryBtn", showDiscoveryBrain);
+    bindClick("discoveryBtnTop", showDiscoveryBrain);
     bindClick("hypothesisBtn", showHypotheses);
     bindClick("correlationBtn", showCorrelation);
     bindClick("predictorBtn", runSimulate);
     bindClick("truthBtn", runValidate);
-    bindClick("reasoningBtn", () => focusPanel("logPanel"));
-    bindClick("digitalTwinBtn", () => showHEX(currentBIN ? currentBIN.working : new Uint8Array()));
-    bindClick("digitalTwinBtnTop", () => showHEX(currentBIN ? currentBIN.working : new Uint8Array()));
-    bindClick("virtualEepromBtn", () => showHEX(currentBIN ? currentBIN.working : new Uint8Array()));
-    bindClick("binEvolutionBtn", () => showHEX(currentBIN ? currentBIN.working : new Uint8Array()));
-    bindClick("stressTestBtn", runValidate);
+    bindClick("reasoningBtn", showReasoning);
+    bindClick("digitalTwinBtn", showTwin);
+    bindClick("digitalTwinBtnTop", showTwin);
+    bindClick("virtualEepromBtn", showTwin);
+    bindClick("binEvolutionBtn", showEvolution);
+    bindClick("stressTestBtn", showStress);
+    bindClick("pickBin1", () => $("fileInput").click());
+    bindClick("pickBin2", () => $("fileInput2").click());
+    bindClick("analyzePairBtn", runPairAnalysis);
     bindClick("autoKmBtn", runApply);
     bindClick("autoChecksumBtn", runApply);
     bindClick("binGenBtn", runGenerateBIN);

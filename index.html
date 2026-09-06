@@ -100,6 +100,21 @@
             <span id="familyCount" class="family-count">Familia: 0 BIN</span>
         </div>
 
+        <div class="known-bar pair-bar">
+            <label>BIN 1</label>
+            <button id="pickBin1" class="action-btn">ELEGIR BIN 1</button>
+            <span id="bin1Name" class="pair-name">Ninguno</span>
+            <label>KM 1</label>
+            <input id="knownKm1" type="text" placeholder="KM archivo 1">
+            <label>BIN 2</label>
+            <button id="pickBin2" class="action-btn">ELEGIR BIN 2</button>
+            <span id="bin2Name" class="pair-name">Ninguno</span>
+            <label>KM 2</label>
+            <input id="knownKm2" type="text" placeholder="KM archivo 2">
+            <button id="analyzePairBtn" class="action-btn green">ANALIZAR PAR</button>
+        </div>
+        <input type="file" id="fileInput2" accept=".bin,.eep,.hex" hidden>
+
         <div class="info-cards">
             <div class="card">
                 <h3>ARCHIVO</h3>
@@ -204,6 +219,11 @@
                 <p><strong>CONFIANZA:</strong></p>
                 <p id="aiConfidence" class="ai-confidence">0%</p>
                 <p><strong>PATRONES:</strong> <span id="aiPatterns">0</span></p>
+                <p><strong>COMBINACIONES:</strong> <span id="aiCombos">0</span></p>
+                <p><strong>CÓMO SE HACE</strong></p>
+                <p id="aiHow">-----</p>
+                <p><strong>OPERACIÓN EDITADA</strong></p>
+                <p id="aiEdited" class="ai-algorithm">Sin editar</p>
             </div>
 
             <div id="checksumPanel" class="panel checksum-wide">

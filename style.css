@@ -433,6 +433,16 @@ body {
     font-weight: 700;
 }
 
+.pair-name {
+    color: #EAEAEA;
+    font-size: 12px;
+    min-width: 90px;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .menu-btn {
     display: none;
     margin: 8px 18px 0;

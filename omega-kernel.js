@@ -454,6 +454,7 @@ const OmegaKernel = {
             familyMatch.hits.forEach((hit) => mileageHits.unshift(hit));
         }
         let hoursHits = Hunters.huntValue(bytes, knownHours, "HORAS MOTOR");
+        say("MOTOR MATEMATICO", MathEngine.lastComboCount + " combinaciones probadas");
         say("COUNTER HUNTER", mileageHits.length ? "KM: " + mileageHits[0].formula : "sin KM conocido");
         say("HOURS HUNTER", hoursHits.length ? "Horas: " + hoursHits[0].formula : "sin horas conocidas");
 

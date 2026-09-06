@@ -121,10 +121,16 @@ const MathEngine = {
         return "Codifica el valor con " + formula + ", luego escríbelo en " + width + " bytes " + order + ".";
     },
 
+    lastComboCount: 0,
+
     transforms(value) {
         const items = [];
+        const seen = new Set();
         const push = (name, val) => {
             if (!Number.isFinite(val) || val < 0 || val > 0xFFFFFFFF) return;
+            const key = name + "|" + (val >>> 0);
+            if (seen.has(key) || items.length >= 4000) return;
+            seen.add(key);
             items.push({ name, value: val >>> 0 });
         };
 
@@ -135,46 +141,59 @@ const MathEngine = {
         push("SWAP32(X)", this.swap32(value));
         push("NIBBLE_SWAP(X)", this.nibbleSwap(value));
 
-        this.FACTORS.forEach((factor) => {
+        const factors = [1, 2, 4, 8, 10, 16, 32, 64, 100, 160, 256, 1000];
+        const xorMasks = [0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF, 0x55, 0xAA, 0x5A, 0xA5, 0xF0, 0x0F];
+        const adds = [0, 1, 3, 5, 7, 8, 16, 32, 64, 100];
+        const mods = [10, 100, 255, 256];
+        const rolls = [1, 2, 4, 8];
+
+        factors.forEach((factor) => {
             push("X * " + factor, value * factor);
-            if (factor !== 1 && value % factor === 0) {
-                push("X / " + factor, value / factor);
-            }
+            if (factor !== 1 && value % factor === 0) push("X / " + factor, value / factor);
             push("X + " + factor, value + factor);
             if (value >= factor) push("X - " + factor, value - factor);
+            push("X MOD " + factor, value % factor);
         });
-
-        const xorMasks = [0xFF, 0xFFFF, 0xFFFFFFFF, 0x55, 0xAA];
-        const xorFactors = [1, 8, 10, 16, 100];
-        const xorAdds = [0, 1, 3];
 
         xorMasks.forEach((mask) => {
             const xored = value ^ mask;
-            push("X XOR " + mask.toString(16).toUpperCase(), xored);
-            xorFactors.forEach((factor) => {
-                xorAdds.forEach((add) => {
+            const m = mask.toString(16).toUpperCase();
+            push("X XOR " + m, xored);
+            factors.forEach((factor) => {
+                adds.forEach((add) => {
+                    const core = xored * factor + add;
                     const label = add
-                        ? "(X XOR " + mask.toString(16).toUpperCase() + ") * " + factor + " + " + add
-                        : (factor === 1 ? "X XOR " + mask.toString(16).toUpperCase() : "(X XOR " + mask.toString(16).toUpperCase() + ") * " + factor);
-                    push(label, xored * factor + add);
+                        ? "(X XOR " + m + ") * " + factor + " + " + add
+                        : (factor === 1 ? "X XOR " + m : "(X XOR " + m + ") * " + factor);
+                    push(label, core);
+                    rolls.forEach((bits) => {
+                        push("(" + label + ") ROL8 " + bits, this.rol(core, bits, 8));
+                        push("(" + label + ") ROL16 " + bits, this.rol(core, bits, 16));
+                    });
+                    mods.forEach((mod) => {
+                        push("(" + label + ") MOD " + mod, core % mod);
+                    });
                 });
             });
         });
 
-        [1, 3, 16, 100].forEach((add) => {
-            [1, 10, 16].forEach((factor) => {
+        adds.forEach((add) => {
+            factors.forEach((factor) => {
                 push("(X + " + add + ") * " + factor, (value + add) * factor);
                 push("X * " + factor + " + " + add, value * factor + add);
             });
         });
 
         [8, 16, 32].forEach((width) => {
-            [1, 4, 8].forEach((bits) => {
+            rolls.forEach((bits) => {
                 push("ROL" + width + "(" + bits + ")", this.rol(value, bits, width));
                 push("ROR" + width + "(" + bits + ")", this.ror(value, bits, width));
+                push("SHL" + width + "(" + bits + ")", (value << bits) >>> 0);
+                push("SHR" + width + "(" + bits + ")", value >>> bits);
             });
         });
 
+        this.lastComboCount = items.length;
         return items;
     },
 
