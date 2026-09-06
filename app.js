@@ -34,7 +34,9 @@ function collectMarks() {
         }
     };
     if (!currentBIN) return marks;
-    Hunters.huntVIN(currentBIN.original).forEach((v) => paint(v.address, 17, "hex-vin"));
+    Hunters.huntVIN(currentBIN.original).forEach((v) => {
+        (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
+    });
     if (currentBIN.analysis && currentBIN.analysis.best) {
         const hit = currentBIN.analysis.best;
         (hit.copies || [hit.address]).forEach((addr) => paint(addr, hit.width || 2, "hex-km"));
@@ -52,7 +54,9 @@ function collectMarks() {
         for (let i = 0; i < n; i++) {
             if (a[i] !== b[i]) paint(i, 1, "hex-diff");
         }
-        Hunters.huntVIN(b).forEach((v) => paint(v.address, 17, "hex-vin"));
+        Hunters.huntVIN(b).forEach((v) => {
+            (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
+        });
     }
     if (typeof MarkBook !== "undefined") {
         Object.keys(MarkBook.user).forEach((key) => {
@@ -130,7 +134,7 @@ function showVinCard(which, bytes) {
     const id = MindEngine.decodeVin(found[0].value);
     val.textContent = found[0].value;
     maker.textContent = id && id.maker ? id.maker + " · WMI " + id.wmi : "WMI " + (id ? id.wmi : "?");
-    addr.textContent = "Dir " + found[0].addressText;
+    addr.textContent = (found[0].layoutLabel || "ASCII") + " · " + (found[0].copies || [found[0].address]).length + " copias · " + found[0].addressText;
     box.classList.add("live");
     return found[0].value;
 }
@@ -271,9 +275,15 @@ function renderDNA(dna, discovery) {
     $("aiPatterns").textContent = String(discovery.patterns);
     if ($("aiCombos")) $("aiCombos").textContent = String(MathEngine.lastComboCount || 0);
     const best = currentBIN && currentBIN.analysis ? currentBIN.analysis.best : null;
-    if ($("aiHow")) $("aiHow").textContent = best ? describeOperation(best) : (discovery.note || "-----");
-    if ($("aiEdited")) $("aiEdited").textContent = describeEdited(best, $("newValue") ? $("newValue").value.replace(/[^\d]/g, "") : "");
     const omega = currentBIN && currentBIN.analysis ? currentBIN.analysis.omega : null;
+    if ($("aiHow")) {
+        const heart = omega && omega.vinHeart;
+        const kmHow = best ? describeOperation(best) : (discovery.note || "-----");
+        $("aiHow").textContent = heart
+            ? kmHow + " | VIN HEART: " + heart.value + " · " + heart.layoutLabel + " · " + (heart.copies || []).length + " copias"
+            : kmHow;
+    }
+    if ($("aiEdited")) $("aiEdited").textContent = describeEdited(best, $("newValue") ? $("newValue").value.replace(/[^\d]/g, "") : "");
     if ($("aiKmOrder")) {
         $("aiKmOrder").textContent = omega && omega.kmOrder
             ? omega.kmOrder.layout + " · bytes " + omega.kmOrder.hex + " · " + omega.kmOrder.copies + " copias"
@@ -287,7 +297,33 @@ function renderDNA(dna, discovery) {
     }
 }
 
+function activeEditorKind() {
+    const type = $("dataType") ? $("dataType").value : "";
+    if (type === "VIN") return "VIN";
+    if (type === "HORAS MOTOR") return "HOURS";
+    return "KM";
+}
+
+function fillEditorVin(analysis) {
+    const heart = (analysis && analysis.omega && analysis.omega.vinHeart) || (analysis && analysis.vins && analysis.vins[0]);
+    if (!heart) {
+        $("currentValue").value = "";
+        $("address").value = "";
+        $("newValue").value = "";
+        $("dataSize").value = "17 BYTES";
+        return;
+    }
+    $("currentValue").value = heart.value;
+    $("address").value = heart.addressText;
+    $("dataSize").value = (heart.span || 17) + " BYTES";
+    $("newValue").value = heart.value;
+}
+
 function fillEditorFromBest(analysis) {
+    if ($("dataType") && $("dataType").value === "VIN") {
+        fillEditorVin(analysis);
+        return;
+    }
     const best = analysis.best;
     if (!best) return;
     const unit = typeof best.value === "number" ? (best.label === "HORAS MOTOR" ? " h" : " KM") : "";
@@ -295,7 +331,7 @@ function fillEditorFromBest(analysis) {
     $("address").value = best.addressText;
     $("dataSize").value = best.width + " BYTES";
     $("newValue").value = typeof best.value === "number" ? String(best.value) : "";
-    $("dataType").value = best.label === "HORAS MOTOR" ? "HORAS MOTOR" : "KILOMETRAJE (KM)";
+    if ($("dataType").value !== "HORAS MOTOR") $("dataType").value = "KILOMETRAJE (KM)";
 }
 
 function renderOmega(analysis) {
@@ -400,13 +436,18 @@ function runAnalysis(extra) {
 
 function runSimulate() {
     if (!needBIN() || !currentBIN.analysis) return;
-    const value = $("newValue").value.replace(/[^\d]/g, "");
-    lastSimulation = binCore.simulate(value);
+    const kind = activeEditorKind();
+    const value = kind === "VIN"
+        ? $("newValue").value.trim().toUpperCase()
+        : $("newValue").value.replace(/[^\d]/g, "");
+    lastSimulation = binCore.simulate(value, kind);
     if (!lastSimulation) return;
     if ($("aiEdited") && currentBIN.analysis) {
-        $("aiEdited").textContent = describeEdited(currentBIN.analysis.best, value);
+        $("aiEdited").textContent = kind === "VIN"
+            ? "VIN " + value + " · " + lastSimulation.copies + " copias · layout propio"
+            : describeEdited(currentBIN.analysis.best, value);
     }
-    $("resumeValue").textContent = value + " KM";
+    $("resumeValue").textContent = kind === "VIN" ? value : value + " KM";
     $("resumeCopies").textContent = String(lastSimulation.copies);
     $("resumeUpdated").textContent = "0";
     $("resumeChecksums").textContent = String(lastSimulation.checksums);
@@ -428,25 +469,34 @@ function runValidate() {
 
 function runApply() {
     if (!needBIN() || !currentBIN.analysis) return;
-    if (currentBIN.analysis.best && currentBIN.analysis.best.writable === false) {
+    const kind = activeEditorKind();
+    if (kind !== "VIN" && currentBIN.analysis.best && currentBIN.analysis.best.writable === false) {
         alert("Esta familia está reconocida, pero la fórmula de escritura no está demostrada. No se genera BIN.");
         return;
     }
-    const value = $("newValue").value.replace(/[^\d]/g, "");
-    if (value === "") {
+    const value = kind === "VIN"
+        ? $("newValue").value.trim().toUpperCase()
+        : $("newValue").value.replace(/[^\d]/g, "");
+    if (kind === "VIN" && value.length !== 17) {
+        alert("El VIN debe tener 17 caracteres (A-H, J-N, P-R, Z y dígitos).");
+        return;
+    }
+    if (kind !== "VIN" && value === "") {
         alert("Escribe el nuevo KM antes de aplicar.");
         return;
     }
-    lastSimulation = binCore.applyValue(value);
+    lastSimulation = binCore.applyValue(value, kind);
     if (!lastSimulation) return;
     if ($("aiEdited") && currentBIN.analysis) {
-        $("aiEdited").textContent = describeEdited(currentBIN.analysis.best, value);
+        $("aiEdited").textContent = kind === "VIN"
+            ? "VIN escrito en todas sus copias: " + value
+            : describeEdited(currentBIN.analysis.best, value);
     }
-    $("resumeValue").textContent = value + " KM";
+    $("resumeValue").textContent = kind === "VIN" ? value : value + " KM";
     $("resumeCopies").textContent = String(lastSimulation.copies);
     $("resumeUpdated").textContent = String(lastSimulation.copies);
     $("resumeChecksums").textContent = String(lastSimulation.checksums);
-    $("resumeRepaired").textContent = String(lastSimulation.repaired.length);
+    $("resumeRepaired").textContent = String((lastSimulation.repaired || []).length);
     $("resumeValid").textContent = "APLICADO";
     $("resumeReady").textContent = "LISTO PARA GENERAR BIN";
     showHEX(currentBIN.working);
@@ -464,7 +514,7 @@ function runRestore() {
 
 function runGenerateBIN() {
     if (!needBIN()) return;
-    if (currentBIN.analysis && currentBIN.analysis.best && currentBIN.analysis.best.writable === false) {
+    if (activeEditorKind() !== "VIN" && currentBIN.analysis && currentBIN.analysis.best && currentBIN.analysis.best.writable === false) {
         alert("Familia reconocida, pero no se genera BIN: la fórmula no está demostrada.");
         return;
     }
@@ -955,7 +1005,19 @@ function wireUI() {
     bindClick("memoryMapBtn", () => focusPanel("memoryPanel"));
     bindClick("countersBtn", () => focusPanel("counterPanel"));
     bindClick("checksumBtn", () => focusPanel("checksumPanel"));
-    bindClick("vinHunterBtn", () => focusPanel("vinStrip"));
+    bindClick("vinHunterBtn", () => {
+        if ($("dataType")) $("dataType").value = "VIN";
+        if (currentBIN && currentBIN.analysis) fillEditorVin(currentBIN.analysis);
+        focusPanel("vinStrip");
+        focusPanel("editorPanel");
+    });
+    if ($("dataType")) {
+        $("dataType").onchange = () => {
+            if (!currentBIN || !currentBIN.analysis) return;
+            if ($("dataType").value === "VIN") fillEditorVin(currentBIN.analysis);
+            else fillEditorFromBest(currentBIN.analysis);
+        };
+    }
     bindClick("diffBtn", () => focusPanel("diffPanel"));
     bindClick("dnaBtn", () => { if (!needAnalysis()) return; focusPanel("dnaPanel"); });
     bindClick("discoveryBtn", showDiscoveryBrain);

@@ -430,11 +430,15 @@ const OmegaKernel = {
         say("BIN CORE", "Perfil: " + bytes.length + " bytes · " + bin.chip);
 
         const vins = MindEngine.extractVins(bytes);
-        const vinId = vins[0] ? MindEngine.decodeVin(vins[0].value) : null;
+        const vinHeart = vins[0] || null;
+        const vinId = vinHeart ? MindEngine.decodeVin(vinHeart.value) : null;
+        if (vinHeart) {
+            say("VIN HEART", vinHeart.value + " · " + vinHeart.layoutLabel + " · " + vinHeart.copies.length + " copias · " + vinHeart.span + " bytes");
+        }
         if (vinId && vinId.maker) {
             say("VIN MIND", vinId.maker + " · " + vinId.vin + " · WMI " + vinId.wmi);
         } else {
-            say("VIN MIND", vins.length ? vins[0].value + " (WMI sin marca)" : "sin VIN · ignoro el nombre del archivo");
+            say("VIN MIND", vinHeart ? vinHeart.value + " (WMI sin marca)" : "sin VIN · ignoro el nombre del archivo");
         }
 
         const familyMatch = FamilyLibrary.identify(bytes);
@@ -677,6 +681,7 @@ const OmegaKernel = {
             checksums,
             counters,
             vins,
+            vinHeart,
             serials,
             dna,
             discovery,
@@ -732,9 +737,9 @@ const OmegaKernel = {
             pick("HORAS MOTOR", hoursHits, "h"),
             pick("HORAS BCK", hoursHits.slice(1), "h"),
             pick("VIN", vins.map((v) => Object.assign({
-                value: v.value, addressText: v.addressText, width: v.width,
-                endian: "ASCII", confidence: v.confidence, copies: [v.address],
-                formula: "ASCII", name: "VIN_ASCII"
+                value: v.value, addressText: v.addressText, width: v.span || v.width,
+                endian: v.layoutLabel || "ASCII", confidence: v.confidence, copies: v.copies || [v.address],
+                formula: v.formula || "VIN_ASCII", name: "VIN_HEART"
             })), ""),
             pick("SERIAL", serials.map((v) => Object.assign({
                 value: v.value, addressText: v.addressText, width: v.width,
@@ -758,8 +763,9 @@ const OmegaKernel = {
             });
         });
         vins.forEach((v) => extra.push({
-            id: "VIN", name: "VIN", start: v.address, end: v.address + 16,
-            size: 17, description: v.value, copies: 1
+            id: "VIN", name: "VIN", start: v.address, end: v.address + (v.span || 17) - 1,
+            size: v.span || 17, description: v.value + " · " + (v.layoutLabel || "ASCII"),
+            copies: (v.copies || [v.address]).length
         }));
         checksums.filter((c) => c.status === "VALIDO").forEach((c) => extra.push({
             id: c.name, name: c.name, start: c.storedAt, end: c.storedAt + c.size - 1,

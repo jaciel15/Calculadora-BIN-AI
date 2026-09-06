@@ -114,9 +114,23 @@ class BINCore {
         ];
     }
 
-    simulate(newValue) {
+    simulate(newValue, kind) {
         const bin = this.currentBIN;
-        if (!bin || !bin.analysis || !bin.analysis.best) return null;
+        if (!bin || !bin.analysis) return null;
+        if (kind === "VIN") {
+            const heart = (bin.analysis.omega && bin.analysis.omega.vinHeart) || bin.analysis.vins[0];
+            if (!heart) {
+                this.addLog("VIN HEART", "No hay VIN en el dump para escribir.");
+                return null;
+            }
+            const applied = EditorEngine.applyVin(bin.original, heart, newValue);
+            if (!applied) {
+                this.addLog("VIN HEART", "El VIN debe tener 17 caracteres válidos.");
+                return null;
+            }
+            return { applied, repaired: [], copies: applied.copies, checksums: heart.checksum ? 1 : 0 };
+        }
+        if (!bin.analysis.best) return null;
         if (bin.analysis.best.writable === false) {
             this.addLog("TRUTH ENGINE", "Esta familia no se escribe: " + (bin.analysis.best.familyId || "desconocida"));
             return null;
@@ -131,13 +145,13 @@ class BINCore {
         };
     }
 
-    applyValue(newValue) {
-        const sim = this.simulate(newValue);
+    applyValue(newValue, kind) {
+        const sim = this.simulate(newValue, kind);
         if (!sim) return null;
         this.currentBIN.working = sim.applied.bytes;
         this.currentBIN.status = "EDITADO";
-        this.addLog("EDITOR", "Nuevo valor aplicado: " + newValue + " · " + sim.copies + " copias");
-        this.addLog("AUTO CHECKSUM", sim.repaired.length + " checksums recalculados");
+        this.addLog(kind === "VIN" ? "VIN HEART" : "EDITOR", "Nuevo valor aplicado: " + newValue + " · " + sim.copies + " copias");
+        if (kind !== "VIN") this.addLog("AUTO CHECKSUM", sim.repaired.length + " checksums recalculados");
         return sim;
     }
 

@@ -24,44 +24,103 @@ const MindEngine = {
         return /[A-HJ-NPR-Z0-9]/.test(c);
     },
 
-    extractVins(bytes) {
+    vinCharAt(bytes, start, index, layout) {
+        let addr;
+        if (layout.id === "SWAP16") addr = start + (index ^ 1);
+        else addr = start + index * layout.step;
+        if (addr < 0 || addr >= bytes.length) return { addr: -1, ch: "", pad: null };
+        if (layout.step === 2 && layout.pad !== null && layout.pad !== undefined) {
+            const padAddr = addr + 1;
+            if (padAddr >= bytes.length || bytes[padAddr] !== layout.pad) {
+                return { addr, ch: "", pad: padAddr };
+            }
+        }
+        const b = bytes[addr];
+        if (!this.isVinChar(b)) return { addr, ch: "", pad: null };
+        return { addr, ch: String.fromCharCode(b), pad: layout.step === 2 ? addr + 1 : null };
+    },
+
+    readVin(bytes, start, layout) {
+        let value = "";
+        const slots = [];
+        for (let i = 0; i < 17; i++) {
+            const slot = this.vinCharAt(bytes, start, i, layout);
+            if (!slot.ch) return null;
+            value += slot.ch;
+            slots.push(slot);
+        }
+        if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(value)) return null;
+        const last = slots[16];
+        const span = (last.pad !== null && last.pad !== undefined ? last.pad : last.addr) - start + 1;
+        return { value, slots, span: Math.max(17, span), layout };
+    },
+
+    vinHeart(bytes) {
+        const layouts = [
+            { id: "PACKED", step: 1, pad: null, label: "17 ASCII seguidos" },
+            { id: "PAD00", step: 2, pad: 0, label: "letra + 00 · 17 veces" },
+            { id: "PADFF", step: 2, pad: 0xFF, label: "letra + FF · 17 veces" },
+            { id: "SWAP16", step: 1, pad: null, label: "ASCII con words intercambiados" }
+        ];
         const found = [];
-        const push = (value, address, step) => {
-            if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(value)) return;
-            if (found.some((v) => v.value === value && v.address === address)) return;
-            found.push({
-                name: "VIN",
-                value,
-                address,
-                addressText: Hunters.range(address, step === 1 ? 17 : 33),
-                width: 17,
-                type: "ASCII",
-                confidence: step === 1 ? 93 : 86
-            });
-        };
-        const scan = (step) => {
-            let text = "";
-            let start = -1;
-            for (let i = 0; i <= bytes.length - step; i += step) {
-                const b = bytes[i];
-                const padOk = step === 1 || bytes[i + 1] === 0 || bytes[i + 1] === 0xFF;
-                if (padOk && this.isVinChar(b)) {
-                    if (start < 0) start = i;
-                    text += String.fromCharCode(b);
-                    if (text.length === 17) {
-                        push(text, start, step);
-                        text = "";
-                        start = -1;
-                    }
-                } else {
-                    text = "";
-                    start = -1;
+        layouts.forEach((layout) => {
+            const need = layout.id === "SWAP16" ? 18 : 17 * layout.step;
+            const max = bytes.length - need + 1;
+            for (let i = 0; i < max; i++) {
+                const read = this.readVin(bytes, i, layout);
+                if (!read) continue;
+                found.push({
+                    name: "VIN",
+                    value: read.value,
+                    address: i,
+                    addressText: Hunters.range(i, read.span),
+                    width: read.span,
+                    span: read.span,
+                    step: layout.step,
+                    pad: layout.pad,
+                    layout: layout.id,
+                    layoutLabel: layout.label,
+                    slots: read.slots,
+                    type: "ASCII",
+                    formula: "VIN_" + layout.id,
+                    endian: "ASCII",
+                    confidence: layout.id === "PACKED" ? 94 : 88
+                });
+            }
+        });
+        const grouped = [];
+        found.forEach((hit) => {
+            let group = grouped.find((g) => g.value === hit.value && g.layout === hit.layout);
+            if (!group) {
+                group = Object.assign({ copies: [], slotsAll: [] }, hit);
+                grouped.push(group);
+            }
+            if (group.copies.indexOf(hit.address) === -1) group.copies.push(hit.address);
+        });
+        grouped.forEach((group) => {
+            group.copies.sort((a, b) => a - b);
+            group.address = group.copies[0];
+            group.addressText = Hunters.range(group.address, group.span);
+            group.confidence = Math.min(99.2, group.confidence + Math.min(group.copies.length, 4) * 1.6);
+            group.writeHow = "VIN propio: escribe las 17 letras en " + group.layoutLabel +
+                ", en " + group.copies.length + " copias. No usa la fórmula del KM.";
+            const after = group.address + group.span;
+            if (after < bytes.length) {
+                let sum = 0;
+                for (let i = 0; i < 17; i++) {
+                    const slot = this.vinCharAt(bytes, group.address, i, { id: group.layout, step: group.step, pad: group.pad });
+                    if (slot.addr >= 0) sum = (sum + bytes[slot.addr]) & 0xFF;
+                }
+                if (bytes[after] === sum) {
+                    group.checksum = { name: "SUM8", storedAt: after, size: 1, endian: "LE", start: group.address, end: after };
                 }
             }
-        };
-        scan(1);
-        scan(2);
-        return found.slice(0, 6);
+        });
+        return grouped.sort((a, b) => b.confidence - a.confidence);
+    },
+
+    extractVins(bytes) {
+        return this.vinHeart(bytes).slice(0, 8);
     },
 
     invert(stored, formula) {

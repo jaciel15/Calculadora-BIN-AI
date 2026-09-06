@@ -12,6 +12,34 @@ const EditorEngine = {
         return MathEngine.applyFormula(value, formula);
     },
 
+    applyVin(bytes, heart, vin) {
+        const text = String(vin || "").toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
+        if (text.length !== 17 || !heart) return null;
+        const working = new Uint8Array(bytes);
+        const layout = { id: heart.layout || "PACKED", step: heart.step || 1, pad: heart.pad };
+        const copies = heart.copies && heart.copies.length ? heart.copies : [heart.address];
+        copies.forEach((start) => {
+            for (let i = 0; i < 17; i++) {
+                let addr;
+                if (layout.id === "SWAP16") addr = start + (i ^ 1);
+                else addr = start + i * layout.step;
+                if (addr >= 0 && addr < working.length) working[addr] = text.charCodeAt(i);
+            }
+            if (heart.checksum && heart.checksum.name === "SUM8") {
+                let sum = 0;
+                for (let i = 0; i < 17; i++) sum = (sum + text.charCodeAt(i)) & 0xFF;
+                const at = start + (heart.span || 17);
+                if (at < working.length) working[at] = sum;
+            }
+        });
+        return {
+            bytes: working,
+            encoded: new Uint8Array(Array.from(text).map((ch) => ch.charCodeAt(0))),
+            hex: text,
+            copies: copies.length
+        };
+    },
+
     apply(bytes, hit, newValue) {
         if (hit.familyId === "YAMAHA_R5F10") {
             const written = FamilyLibrary.writeR5FRing(new Uint8Array(bytes), hit.address, Number(newValue));

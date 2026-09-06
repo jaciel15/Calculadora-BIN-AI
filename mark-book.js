@@ -13,10 +13,18 @@ const MarkBook = {
     },
 
     setBrush(kind) {
+        if (!kind) return;
         this.brush = kind;
         document.querySelectorAll(".mark-swatch").forEach((btn) => {
             btn.classList.toggle("active", btn.getAttribute("data-mark") === kind);
         });
+        const label = $ ? $("markActive") : document.getElementById("markActive");
+        if (label) {
+            const info = this.kinds[kind];
+            label.textContent = kind === "ERASE" ? "Borrar" : (info ? info.label : kind);
+        }
+        document.body.classList.add("marking-on");
+        document.body.setAttribute("data-brush", kind);
     },
 
     paint(addr) {
@@ -48,21 +56,25 @@ const MarkBook = {
     bindPaint(el) {
         if (!el || el.getAttribute("data-mark-bound")) return;
         el.setAttribute("data-mark-bound", "1");
-        el.addEventListener("mousedown", (event) => {
+        const down = (event) => {
             const addr = this.addrFrom(event.target);
             if (addr === null) return;
             event.preventDefault();
             this.painting = true;
             this.paint(addr);
             this.refresh(addr);
-        });
-        el.addEventListener("mouseover", (event) => {
+        };
+        const move = (event) => {
             if (!this.painting) return;
             const addr = this.addrFrom(event.target);
             if (addr === null) return;
             this.paint(addr);
             this.refresh(addr);
-        });
+        };
+        el.addEventListener("pointerdown", down);
+        el.addEventListener("pointermove", move);
+        el.addEventListener("mousedown", down);
+        el.addEventListener("mouseover", move);
     },
 
     refresh(addr) {
@@ -73,10 +85,25 @@ const MarkBook = {
         });
     },
 
+    pickSwatch(event) {
+        const btn = event.target && event.target.closest ? event.target.closest(".mark-swatch") : null;
+        if (!btn) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        this.setBrush(btn.getAttribute("data-mark"));
+        return true;
+    },
+
     init() {
-        document.querySelectorAll(".mark-swatch").forEach((btn) => {
-            btn.onclick = () => this.setBrush(btn.getAttribute("data-mark"));
-        });
+        if (this._ready) {
+            this.setBrush(this.brush);
+            this.bindPaint(document.getElementById("hexViewer"));
+            this.bindPaint(document.getElementById("hexViewer2"));
+            return;
+        }
+        this._ready = true;
+        document.addEventListener("pointerdown", (event) => { this.pickSwatch(event); }, true);
+        document.addEventListener("click", (event) => { this.pickSwatch(event); }, true);
         this.setBrush(this.brush);
         this.bindPaint(document.getElementById("hexViewer"));
         this.bindPaint(document.getElementById("hexViewer2"));
@@ -90,4 +117,5 @@ const MarkBook = {
     }
 };
 
+document.addEventListener("pointerup", () => { MarkBook.painting = false; });
 document.addEventListener("mouseup", () => { MarkBook.painting = false; });
