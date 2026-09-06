@@ -181,6 +181,7 @@ const MathEngine = {
             factors.forEach((factor) => {
                 push("(X + " + add + ") * " + factor, (value + add) * factor);
                 push("X * " + factor + " + " + add, value * factor + add);
+                if (add) push("X * " + factor + " - " + add, value * factor - add);
             });
         });
 

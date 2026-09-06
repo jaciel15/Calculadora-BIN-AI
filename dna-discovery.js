@@ -12,7 +12,7 @@ const DNADiscovery = {
         return Number(ent.toFixed(3));
     },
 
-    build(bytes, best, checksums, familyMatch) {
+    build(bytes, best, checksums, familyMatch, vinId) {
         const validChecksums = checksums.filter((c) => c.status === "VALIDO").length;
         const copies = best ? (best.copies || []).length : 0;
         const formula = best ? best.formula : "SIN IDENTIFICAR";
@@ -22,6 +22,7 @@ const DNADiscovery = {
         if (copies >= 2) score += 12;
         if (validChecksums) score += 8;
         if (best && best.fromMemory) score += 10;
+        if (best && best.fromPair) score += 12;
         if (familyMatch) score = Math.max(score, familyMatch.confidence);
         score = Math.max(0, Math.min(99.8, score));
 
@@ -29,7 +30,7 @@ const DNADiscovery = {
             family,
             formula,
             version: best ? best.endian + " " + best.width + "B" : "-----",
-            manufacturer: this.guessMaker(best),
+            manufacturer: this.guessMaker(best, vinId),
             copies,
             entropy: this.entropy(bytes),
             size: bytes.length,
@@ -39,17 +40,22 @@ const DNADiscovery = {
 
         if (familyMatch && familyMatch.family) {
             dna.family = familyMatch.family.id;
-            dna.manufacturer = familyMatch.family.manufacturer;
+            dna.manufacturer = (vinId && vinId.maker) ? vinId.maker : familyMatch.family.manufacturer;
             dna.version = familyMatch.family.version;
             dna.formula = familyMatch.family.writable ? (best ? best.formula : "X") : "FINO SIN FÓRMULA";
             dna.status = familyMatch.family.status;
             dna.score = Number(familyMatch.confidence.toFixed(1));
+        } else if (vinId && vinId.maker) {
+            dna.manufacturer = vinId.maker;
         }
         return dna;
     },
 
-    guessMaker(best) {
-        if (!best) return "Sin identificar";
+    guessMaker(best, vinId) {
+        if (vinId && vinId.maker) return vinId.maker;
+        if (vinId && vinId.wmi) return "WMI " + vinId.wmi;
+        if (!best) return "Sin VIN";
+        if (best.familyId) return "Estructura " + best.familyId;
         if (best.formula.indexOf("XOR") !== -1) return "FAMILIA XOR";
         if (best.formula === "BCD") return "FAMILIA BCD";
         if (best.formula.indexOf("* 10") !== -1) return "FAMILIA x10";

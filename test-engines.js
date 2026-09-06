@@ -16,10 +16,13 @@ vm.createContext(context);
     "math-engine.js",
     "checksum-engine.js",
     "knowledge-base.js",
+    "mind-engine.js",
     "hunters.js",
     "dna-discovery.js",
     "editor-upa.js",
     "bin-object.js",
+    "family-library.js",
+    "omega-kernel.js",
     "bin-core.js"
 ].forEach((file) => {
     vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);

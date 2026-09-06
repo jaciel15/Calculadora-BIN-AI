@@ -207,6 +207,12 @@ function knownHours() {
     return raw === "" ? null : Number(raw);
 }
 
+function knownKm2() {
+    if (!$("knownKm2")) return null;
+    const raw = $("knownKm2").value.replace(/[^\d]/g, "");
+    return raw === "" ? null : Number(raw);
+}
+
 function needBIN() {
     if (currentBIN) return true;
     alert("Primero abre un archivo BIN.");
@@ -255,7 +261,9 @@ function runAnalysis(extra) {
     const hours = knownHours();
     setStatus("ANALIZANDO", false);
     setTimeout(function () {
-        const analysis = binCore.analyze(km, hours, extra || {});
+        const opts = extra || {};
+        if (opts.knownKm2 === undefined && knownKm2() !== null) opts.knownKm2 = knownKm2();
+        const analysis = binCore.analyze(km, hours, opts);
         renderAnalysis(analysis);
     }, 40);
 }
@@ -474,7 +482,7 @@ function runPairAnalysis() {
         return;
     }
     if ($("knownKm1") && $("knownKm1").value) $("knownKm").value = $("knownKm1").value;
-    runAnalysis();
+    runAnalysis({ knownKm2: knownKm2() });
     setTimeout(function () {
         showPairReport();
     }, 80);
@@ -501,7 +509,10 @@ function showPairReport() {
             : "") +
         (currentBIN.analysis && currentBIN.analysis.omega && currentBIN.analysis.omega.kmChecksums && currentBIN.analysis.omega.kmChecksums[0]
             ? "<p><strong>Checksum KM:</strong> " + currentBIN.analysis.omega.kmChecksums[0].name + " @ " + padHex(currentBIN.analysis.omega.kmChecksums[0].storedAt) + "</p>"
-            : "<p><strong>Checksum KM:</strong> no ligado; revisar copias espejo</p>");
+            : "<p><strong>Checksum KM:</strong> no ligado; revisar copias espejo</p>") +
+        (currentBIN.analysis && currentBIN.analysis.omega
+            ? "<p><strong>Mente:</strong> " + currentBIN.analysis.omega.thinking + "</p>"
+            : "");
     openLab("COMPARADOR 2 BIN", html);
     if (currentBIN.analysis && currentBIN.analysis.omega) {
         $("omegaThink").textContent = "Par analizado: " + diffs.length + " bytes cambian entre los dos archivos.";
@@ -552,11 +563,16 @@ function showStress() {
 
 function showReasoning() {
     if (!needAnalysis()) return;
+    const omega = currentBIN.analysis.omega || {};
     const rows = currentBIN.analysis.hypotheses || [];
-    openLab("REASONING ENGINE", rows.length
+    const vin = omega.vinId
+        ? "<p><strong>VIN:</strong> " + omega.vinId.vin + " → " + (omega.vinId.maker || "marca no mapeada") + " (WMI " + omega.vinId.wmi + ")</p>"
+        : "<p><strong>VIN:</strong> no está en el dump. El nombre del archivo no se usa.</p>";
+    const mind = "<p><strong>Mente:</strong> " + (omega.thinking || "") + "</p>";
+    openLab("REASONING ENGINE", vin + mind + (rows.length
         ? "<p>Prioridad por confianza.</p><table class=\"data-table\"><tr><th>#</th><th>FÓRMULA</th><th>CONF</th></tr>" +
             rows.map((h) => "<tr><td>" + h.rank + "</td><td>" + h.formula + "</td><td>" + h.confidence + "%</td></tr>").join("") + "</table>"
-        : "<p>Sin hipótesis.</p>");
+        : "<p>Sin hipótesis.</p>"));
     focusPanel("logPanel");
 }
 
@@ -623,7 +639,14 @@ function wireUI() {
     bindClick("vinHunterBtn", () => {
         if (!needBIN()) return;
         const found = (currentBIN.analysis && currentBIN.analysis.vins) || Hunters.huntVIN(currentBIN.original);
-        alert(found.length ? found.map((v) => v.value + " @ " + v.addressText).join("\n") : "VIN no encontrado");
+        if (!found.length) {
+            alert("VIN no encontrado en el dump. El nombre del archivo no cuenta.");
+            return;
+        }
+        alert(found.map((v) => {
+            const id = MindEngine.decodeVin(v.value);
+            return v.value + " @ " + v.addressText + (id && id.maker ? " → " + id.maker : "");
+        }).join("\n"));
     });
     bindClick("serialHunterBtn", () => {
         if (!needBIN()) return;
@@ -680,7 +703,10 @@ function wireUI() {
         focusPanel("counterPanel");
     });
     bindClick("impossibleBtn", () => runAnalysis({ impossible: true }));
-    bindClick("autopilotBtn", () => runAnalysis());
+    bindClick("autopilotBtn", () => {
+        if (OmegaKernel.compareBins.length) runPairAnalysis();
+        else runAnalysis();
+    });
     bindClick("menuBtn", () => document.querySelector(".sidebar").classList.toggle("open"));
     bindClick("closeLab", () => $("labModal").classList.remove("open"));
     bindClick("algoLibraryBtn", showAlgorithms);

@@ -59,7 +59,10 @@ const KnowledgeBase = {
         item.lastSeen = new Date().toISOString();
         item.lastFile = fileName;
         item.fileSize = fileSize;
+        item.addresses = hit.copies && hit.copies.length ? hit.copies.slice(0, 8) : (hit.address !== undefined ? [hit.address] : item.addresses);
         if (hit.copies) item.copies = hit.copies;
+        if (hit.familyId) item.familyId = hit.familyId;
+        if (hit.vinWmi) item.vinWmi = hit.vinWmi;
         if (fileName && item.files.indexOf(fileName) === -1) item.files.push(fileName);
         this.save(db);
         return item;

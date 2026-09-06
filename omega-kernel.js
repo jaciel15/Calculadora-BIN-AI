@@ -429,6 +429,14 @@ const OmegaKernel = {
         this.add(evidence, "BIN CORE", "profile", { size: bytes.length, chip: bin.chip }, 95, "tamaño y chip");
         say("BIN CORE", "Perfil: " + bytes.length + " bytes · " + bin.chip);
 
+        const vins = MindEngine.extractVins(bytes);
+        const vinId = vins[0] ? MindEngine.decodeVin(vins[0].value) : null;
+        if (vinId && vinId.maker) {
+            say("VIN MIND", vinId.maker + " · " + vinId.vin + " · WMI " + vinId.wmi);
+        } else {
+            say("VIN MIND", vins.length ? vins[0].value + " (WMI sin marca)" : "sin VIN · ignoro el nombre del archivo");
+        }
+
         const familyMatch = FamilyLibrary.identify(bytes);
         if (familyMatch) {
             bin.chip = familyMatch.family.chip;
@@ -453,12 +461,27 @@ const OmegaKernel = {
         if (familyMatch && familyMatch.hits) {
             familyMatch.hits.forEach((hit) => mileageHits.unshift(hit));
         }
+        const recalled = MindEngine.recall(bytes);
+        recalled.forEach((hit) => mileageHits.unshift(hit));
+        if (recalled.length) say("SELF LEARNING", "Memoria reutiliza " + recalled[0].formula + " @ " + recalled[0].addressText);
+
+        const km2 = options.knownKm2;
+        const pairHits = (this.compareBins[0] && knownKm !== null && km2 !== null)
+            ? MindEngine.reasonPair(bytes, this.compareBins[0].bytes, knownKm, km2)
+            : [];
+        pairHits.forEach((hit) => mileageHits.unshift(hit));
+        if (pairHits.length) say("PAIR MIND", pairHits[0].formula + " demostrado por los dos BIN");
+
         let hoursHits = Hunters.huntValue(bytes, knownHours, "HORAS MOTOR");
         say("MOTOR MATEMATICO", MathEngine.lastComboCount + " combinaciones probadas");
         say("COUNTER HUNTER", mileageHits.length ? "KM: " + mileageHits[0].formula : "sin KM conocido");
         say("HOURS HUNTER", hoursHits.length ? "Horas: " + hoursHits[0].formula : "sin horas conocidas");
 
         const unknown = this.unknownCounters(bytes, map);
+        MindEngine.scanRings(bytes).forEach((ring) => {
+            unknown.unshift(ring);
+            if (!mileageHits.length) mileageHits.unshift(ring);
+        });
         this.add(evidence, "UNKNOWN DECODER", "candidates", { count: unknown.length }, unknown[0] ? unknown[0].confidence : 30, "contadores sin etiqueta");
         say("UNKNOWN DECODER", unknown.length + " bloques candidatos");
 
@@ -468,7 +491,6 @@ const OmegaKernel = {
             say("ALGORITHM INVENTOR", invented.length + " cadenas nuevas");
         }
 
-        const vins = Hunters.huntVIN(bytes);
         const serials = Hunters.huntSerial(bytes);
         say("VIN HUNTER", vins.length ? vins[0].value : "no encontrado");
         say("SERIAL HUNTER", serials.length ? serials.length + " candidatos" : "no encontrado");
@@ -538,11 +560,26 @@ const OmegaKernel = {
                 confidence: 96.4,
                 note: "La región es correcta. La fórmula de escritura aún no está demostrada."
             };
+        } else if (best && best.fromPair) {
+            truth = {
+                status: "DEMOSTRADO",
+                confidence: 98.4,
+                note: "El par demuestra la misma fórmula en la misma dirección. No usé el nombre del archivo."
+            };
         }
+        const thought = MindEngine.think({
+            vinId,
+            familyMatch,
+            recalled,
+            pairHits,
+            best,
+            diffs,
+            knownKm
+        });
         say("TRUTH ENGINE", truth.status + " · " + truth.confidence + "%");
-        say("THINKING ENGINE", this.thinking(best, map, diffs, impossible));
+        say("THINKING ENGINE", thought);
 
-        const dna = DNADiscovery.build(bytes, best, checksums, familyMatch);
+        const dna = DNADiscovery.build(bytes, best, checksums, familyMatch, vinId);
         const fingerprint = this.dnaFingerprint(bytes, map, best, checksums);
         dna.fingerprint = fingerprint;
         const match = this.dnaMatch(fingerprint);
@@ -558,6 +595,7 @@ const OmegaKernel = {
         const taggedMap = this.mergeMap(map, counters, vins, checksums);
 
         if (best && truth.confidence >= 70 && best.writable !== false) {
+            if (vinId) best.vinWmi = vinId.wmi;
             KnowledgeBase.rememberAlgorithm(best, bin.fileName, bin.fileSize);
             say("SELF LEARNING", "Guardado: " + best.name);
         }
@@ -612,7 +650,10 @@ const OmegaKernel = {
             twin,
             docs,
             omegaCard,
-            thinking: this.thinking(best, map, diffs, impossible),
+            thinking: thought,
+            vinId,
+            recalled,
+            pairHits,
             binsChecked,
             validChecksums: valid,
             errorChecksums: checksums.length - valid,

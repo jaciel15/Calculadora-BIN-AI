@@ -43,6 +43,7 @@ class BINCore {
         const report = OmegaKernel.run(bin, {
             knownKm,
             knownHours,
+            knownKm2: extra && extra.knownKm2,
             impossible: extra && extra.impossible
         });
 

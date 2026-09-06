@@ -67,22 +67,7 @@ const Hunters = {
     },
 
     huntVIN(bytes) {
-        const text = Array.from(bytes).map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : ".")).join("");
-        const matches = [];
-        const re = /[A-HJ-NPR-Z0-9]{17}/g;
-        let match;
-        while ((match = re.exec(text)) !== null) {
-            matches.push({
-                name: "VIN",
-                value: match[0],
-                address: match.index,
-                addressText: this.range(match.index, 17),
-                width: 17,
-                type: "ASCII",
-                confidence: 91.5
-            });
-        }
-        return matches;
+        return MindEngine.extractVins(bytes);
     },
 
     huntSerial(bytes) {
