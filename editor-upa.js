@@ -45,6 +45,15 @@ const EditorEngine = {
     },
 
     apply(bytes, hit, newValue) {
+        if (hit.fromStair && hit.familyId !== "YAMAHA_R5F10") {
+            const written = FamilyLibrary.writeStair(new Uint8Array(bytes), hit, Number(newValue));
+            return {
+                bytes: written.bytes,
+                encoded: written.encoded,
+                hex: MathEngine.hexBytes(written.encoded),
+                copies: written.count
+            };
+        }
         if (hit.familyId === "YAMAHA_R5F10") {
             const written = FamilyLibrary.writeR5FRing(new Uint8Array(bytes), hit.address, Number(newValue));
             return {

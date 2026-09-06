@@ -320,15 +320,16 @@ const ChecksumEngine = {
         if (typeof MarkBook === "undefined") return [];
         const found = [];
         const seen = new Set();
-        const stores = MarkBook.ranges("CHK").concat(MarkBook.ranges("CRC"));
-        if (!stores.length) return found;
+        const stores = MarkBook.lessonRanges("CHK").concat(MarkBook.lessonRanges("CRC"));
+        const comps = MarkBook.lessonRanges("COMP");
+        if (!stores.length && !comps.length) return found;
         const windows = [];
         if (kmHit && kmHit.address !== undefined) {
             const copies = kmHit.copies && kmHit.copies.length ? kmHit.copies : [kmHit.address];
             const width = kmHit.width || 3;
             copies.forEach((addr) => windows.push({ start: addr, end: addr + width, label: "km-" + addr.toString(16) }));
         }
-        MarkBook.ranges("KM").forEach((range) => {
+        MarkBook.lessonRanges("KM").forEach((range) => {
             windows.push({ start: range.start, end: range.end + 1, label: "marca-km" });
         });
         stores.forEach((store) => {
@@ -367,6 +368,46 @@ const ChecksumEngine = {
                         window: win.label,
                         linkedTo: "MARCA " + store.kind,
                         fromUser: true
+                    });
+                });
+            });
+        });
+        comps.forEach((comp) => {
+            const size = Math.min(2, Math.max(1, comp.size));
+            windows.forEach((win) => {
+                if (win.end <= win.start) return;
+                const sum8 = this.sum8(bytes, win.start, win.end);
+                const sum16 = this.sum16(bytes, win.start, win.end);
+                const lrc = this.lrc(bytes, win.start, win.end);
+                const candidates = [
+                    { name: "LRC", calc: lrc, size: 1 },
+                    { name: "COMP8", calc: (0x100 - sum8) & 0xFF, size: 1 },
+                    { name: "COMP16", calc: (0x10000 - sum16) & 0xFFFF, size: 2 },
+                    { name: "NOT8", calc: (~sum8) & 0xFF, size: 1 },
+                    { name: "NOT16", calc: (~sum16) & 0xFFFF, size: 2 }
+                ].filter((item) => item.size === size);
+                candidates.forEach((algo) => {
+                    ["LE", "BE"].forEach((endian) => {
+                        const stored = MathEngine.fromBytes(bytes, comp.start, size, endian === "LE");
+                        if (stored !== algo.calc) return;
+                        const key = algo.name + "|" + win.start + "|" + comp.start;
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        found.push({
+                            name: algo.name,
+                            start: win.start,
+                            end: win.end,
+                            storedAt: comp.start,
+                            valueBin: stored,
+                            calculated: algo.calc,
+                            endian,
+                            size,
+                            status: "VALIDO",
+                            confidence: 97,
+                            window: win.label,
+                            linkedTo: "MARCA COMP",
+                            fromUser: true
+                        });
                     });
                 });
             });

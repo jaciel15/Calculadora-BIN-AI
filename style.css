@@ -380,6 +380,8 @@ body {
 .hex-ascii.hex-user-copy { background: #1f9d4a; color: #fff; font-weight: 700; }
 .hex-byte.hex-user-hint,
 .hex-ascii.hex-user-hint { background: #f08a12; color: #fff; font-weight: 700; }
+.hex-byte.hex-user-comp,
+.hex-ascii.hex-user-comp { background: #b8860b; color: #fff; font-weight: 700; }
 
 .mark-palette {
     width: 88px;
@@ -432,7 +434,24 @@ body {
 .mark-swatch[data-mark="CRC"] { background: #7a3cff; }
 .mark-swatch[data-mark="COPY"] { background: #1f9d4a; }
 .mark-swatch[data-mark="HINT"] { background: #f08a12; }
+.mark-swatch[data-mark="COMP"] { background: #b8860b; }
 .mark-swatch.erase { background: #ece7de; color: #3a332b; border-color: var(--line); }
+.mark-guide {
+    margin: 0;
+    font-size: 10px;
+    line-height: 1.35;
+    color: #3a332b;
+    font-weight: 700;
+    text-align: center;
+}
+.mark-accept,
+.mark-skip {
+    min-height: 32px;
+    height: 32px;
+    font-size: 10px;
+    padding: 0 6px;
+}
+.mark-skip { background: #ece7de; color: #3a332b; }
 .mark-swatch.active {
     box-shadow: 0 0 0 3px #1c1712;
     transform: scale(1.06);

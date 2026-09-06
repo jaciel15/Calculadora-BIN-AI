@@ -3,13 +3,26 @@ const MarkBook = {
     brush: "KM",
     painting: false,
     user: {},
+    lessons: { KM: [], CHK: [], CRC: [], COMP: [], COPY: [], HINT: [] },
+    guideStep: "KM",
+    guideOrder: ["KM", "CHK", "COMP", "LISTO"],
 
     kinds: {
         KM: { cls: "hex-user-km", label: "KM", help: "Kilometraje" },
         CHK: { cls: "hex-user-chk", label: "SUM", help: "Checksum / suma" },
         CRC: { cls: "hex-user-crc", label: "CRC", help: "CRC" },
+        COMP: { cls: "hex-user-comp", label: "COMP", help: "Complemento del checksum" },
         COPY: { cls: "hex-user-copy", label: "COPIA", help: "Copia espejo" },
         HINT: { cls: "hex-user-hint", label: "PISTA", help: "Otra zona" }
+    },
+
+    stepHelp() {
+        return {
+            KM: "1. Pinta el KM en rojo. Luego ACEPTO.",
+            CHK: "2. Pinta SUM o CRC. Luego ACEPTO.",
+            COMP: "3. Pinta el complemento (suma invertida / CRC). Luego ACEPTO.",
+            LISTO: "4. Ya guardé tus marcas. Pulsa ANALIZAR."
+        }[this.guideStep] || "Pinta y pulsa ACEPTO.";
     },
 
     setBrush(kind) {
@@ -18,13 +31,14 @@ const MarkBook = {
         document.querySelectorAll(".mark-swatch").forEach((btn) => {
             btn.classList.toggle("active", btn.getAttribute("data-mark") === kind);
         });
-        const label = $ ? $("markActive") : document.getElementById("markActive");
+        const label = document.getElementById("markActive");
         if (label) {
             const info = this.kinds[kind];
             label.textContent = kind === "ERASE" ? "Borrar" : (info ? info.label : kind);
         }
         document.body.classList.add("marking-on");
         document.body.setAttribute("data-brush", kind);
+        this.renderGuide();
     },
 
     paint(addr) {
@@ -35,6 +49,10 @@ const MarkBook = {
 
     clear() {
         this.user = {};
+        this.lessons = { KM: [], CHK: [], CRC: [], COMP: [], COPY: [], HINT: [] };
+        this.guideStep = "KM";
+        this.setBrush("KM");
+        this.renderGuide();
     },
 
     ranges(kind) {
@@ -49,8 +67,90 @@ const MarkBook = {
         return out;
     },
 
+    snapshot(kind) {
+        return this.ranges(kind).map((r) => ({ start: r.start, end: r.end, size: r.size, kind: r.kind }));
+    },
+
+    lessonRanges(kind) {
+        const accepted = this.lessons[kind] || [];
+        return accepted.length ? accepted : this.ranges(kind);
+    },
+
     allRanges() {
-        return ["KM", "CHK", "CRC", "COPY", "HINT"].reduce((acc, kind) => acc.concat(this.ranges(kind)), []);
+        return ["KM", "CHK", "CRC", "COMP", "COPY", "HINT"].reduce((acc, kind) => acc.concat(this.lessonRanges(kind)), []);
+    },
+
+    hasLessons() {
+        return ["KM", "CHK", "CRC", "COMP"].some((kind) => (this.lessons[kind] || []).length);
+    },
+
+    accept() {
+        const step = this.guideStep;
+        if (step === "LISTO") {
+            this.renderGuide();
+            return { ok: true, step, message: "Ya está listo. Pulsa ANALIZAR." };
+        }
+        if (step === "KM") {
+            const ranges = this.snapshot("KM");
+            if (!ranges.length) return { ok: false, step, message: "Pinta primero el KM en rojo." };
+            this.lessons.KM = ranges;
+            this.guideStep = "CHK";
+            this.setBrush("CHK");
+            return { ok: true, step: "KM", message: "KM aceptado: " + ranges.length + " zona(s)." };
+        }
+        if (step === "CHK") {
+            const sum = this.snapshot("CHK");
+            const crc = this.snapshot("CRC");
+            if (!sum.length && !crc.length) return { ok: false, step, message: "Pinta SUM (azul) o CRC (morado)." };
+            this.lessons.CHK = sum;
+            this.lessons.CRC = crc;
+            this.guideStep = "COMP";
+            this.setBrush("COMP");
+            return { ok: true, step: "CHK", message: "Checksum aceptado." };
+        }
+        if (step === "COMP") {
+            const ranges = this.snapshot("COMP");
+            if (!ranges.length) return { ok: false, step, message: "Pinta el complemento (COMP)." };
+            this.lessons.COMP = ranges;
+            this.guideStep = "LISTO";
+            this.renderGuide();
+            return { ok: true, step: "COMP", message: "Complemento aceptado. Pulsa ANALIZAR." };
+        }
+        return { ok: false, step, message: "Paso no válido." };
+    },
+
+    skip() {
+        if (this.guideStep === "KM") {
+            this.guideStep = "CHK";
+            this.setBrush("CHK");
+            return { ok: true, message: "Sin KM marcado. Sigue SUM o pulsa ANALIZAR." };
+        }
+        if (this.guideStep === "CHK") {
+            this.guideStep = "COMP";
+            this.setBrush("COMP");
+            return { ok: true, message: "Sin checksum. Puedes marcar COMP o ANALIZAR." };
+        }
+        if (this.guideStep === "COMP") {
+            this.guideStep = "LISTO";
+            this.renderGuide();
+            return { ok: true, message: "Sin complemento. Pulsa ANALIZAR." };
+        }
+        return { ok: true, message: "Listo." };
+    },
+
+    renderGuide() {
+        const guide = document.getElementById("markGuide");
+        const lessons = document.getElementById("markLessons");
+        if (guide) guide.textContent = this.stepHelp();
+        if (lessons) {
+            const bits = [];
+            if (this.lessons.KM.length) bits.push("KM " + this.lessons.KM.length);
+            if (this.lessons.CHK.length || this.lessons.CRC.length) bits.push("SUM/CRC");
+            if (this.lessons.COMP.length) bits.push("COMP");
+            lessons.textContent = bits.length ? "Aceptado: " + bits.join(" · ") : "Nada aceptado aún.";
+        }
+        const accept = document.getElementById("markAcceptBtn");
+        if (accept) accept.textContent = this.guideStep === "LISTO" ? "LISTO" : "ACEPTO";
     },
 
     bindPaint(el) {
@@ -99,6 +199,7 @@ const MarkBook = {
             this.setBrush(this.brush);
             this.bindPaint(document.getElementById("hexViewer"));
             this.bindPaint(document.getElementById("hexViewer2"));
+            this.renderGuide();
             return;
         }
         this._ready = true;
@@ -107,6 +208,7 @@ const MarkBook = {
         this.setBrush(this.brush);
         this.bindPaint(document.getElementById("hexViewer"));
         this.bindPaint(document.getElementById("hexViewer2"));
+        this.renderGuide();
     },
 
     addrFrom(node) {

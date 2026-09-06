@@ -533,7 +533,8 @@ function runAnalysis(extra) {
     const hours = knownHours();
     const stayChk = LabMode.is("CHK");
     if (!stayChk) LabMode.set("KM");
-    setStatus(stayChk ? "ANALIZANDO SUM" : "ANALIZANDO", false);
+    const guided = typeof MarkBook !== "undefined" && MarkBook.hasLessons();
+    setStatus(stayChk ? "ANALIZANDO SUM" : (guided ? "ANALIZANDO LO QUE MOSTRASTE" : "ANALIZANDO"), false);
     setTimeout(function () {
         const opts = extra || {};
         if (opts.knownKm2 === undefined && knownKm2() !== null) opts.knownKm2 = knownKm2();
@@ -728,6 +729,42 @@ function downloadUpaTxt() {
     }
     downloadBlob("CDMX_AutoKM_notas.txt", [script], "text/plain");
     addLogRows();
+}
+
+function acceptMarkLesson() {
+    if (typeof MarkBook === "undefined") return;
+    const result = MarkBook.accept();
+    if (!result.ok) {
+        alert(result.message);
+        return;
+    }
+    if (currentBIN) showHEX(currentBIN.working || currentBIN.original);
+    setStatus(result.message, true);
+}
+
+function skipMarkLesson() {
+    if (typeof MarkBook === "undefined") return;
+    const result = MarkBook.skip();
+    setStatus(result.message, true);
+}
+
+function exportBrain() {
+    downloadBlob("cerebro-velocimetros.json", [KnowledgeBase.exportBrain()], "application/json");
+    setStatus("CEREBRO EXPORTADO", true);
+}
+
+async function importBrain(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    try {
+        KnowledgeBase.importBrain(text);
+        setStatus("CEREBRO IMPORTADO", true);
+        alert("Cerebro importado. La próxima vez que analices usará esas familias.");
+    } catch (error) {
+        alert("Ese JSON no es un cerebro válido.");
+    }
+    event.target.value = "";
 }
 
 function saveAlgorithm() {
@@ -1124,6 +1161,11 @@ function wireUI() {
     bindClick("saveAlgoBtn", saveAlgorithm);
     bindClick("saveAlgoBtnTop", saveAlgorithm);
     bindClick("exportReportBtn", exportReport);
+    bindClick("exportBrainBtn", exportBrain);
+    bindClick("importBrainBtn", () => $("brainInput") && $("brainInput").click());
+    if ($("brainInput")) $("brainInput").addEventListener("change", importBrain);
+    bindClick("markAcceptBtn", acceptMarkLesson);
+    bindClick("markSkipBtn", skipMarkLesson);
     bindClick("closeProjectBtn", closeProject);
     bindClick("memoryMapBtn", () => focusPanel("memoryPanel"));
     bindClick("countersBtn", () => focusPanel("counterPanel"));

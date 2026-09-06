@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=combos200k">
+    <link rel="stylesheet" href="style.css?v=leccion1">
 </head>
 
 <body>
@@ -27,7 +27,10 @@
         <button id="saveAlgoBtn">Guardar algoritmo</button>
         <button id="algoLibraryBtn">Algoritmos guardados</button>
         <button id="exportReportBtn">Exportar reporte</button>
+        <button id="exportBrainBtn">Exportar cerebro</button>
+        <button id="importBrainBtn">Importar cerebro</button>
         <button id="closeProjectBtn">Cerrar</button>
+        <input type="file" id="brainInput" accept=".json" hidden>
 
         <h3>ANÁLISIS</h3>
         <button id="memoryMapBtn">Memory Map</button>
@@ -178,13 +181,17 @@
                     <aside class="mark-palette" id="markPalette">
                         <p class="mark-title">MARCAR</p>
                         <p class="mark-active">Activo: <strong id="markActive">KM</strong></p>
+                        <p id="markGuide" class="mark-guide">1. Pinta el KM en rojo. Luego ACEPTO.</p>
                         <button type="button" class="mark-swatch" data-mark="KM" title="Kilometraje">KM</button>
                         <button type="button" class="mark-swatch" data-mark="CHK" title="Checksum / suma">SUM</button>
                         <button type="button" class="mark-swatch" data-mark="CRC" title="CRC">CRC</button>
+                        <button type="button" class="mark-swatch" data-mark="COMP" title="Complemento del checksum">COMP</button>
                         <button type="button" class="mark-swatch" data-mark="COPY" title="Copia espejo">COPIA</button>
                         <button type="button" class="mark-swatch" data-mark="HINT" title="Otra pista">PISTA</button>
                         <button type="button" class="mark-swatch erase" data-mark="ERASE" title="Borrar marca">X</button>
-                        <p class="mark-help">Pulsa un color. Luego pinta el hex o el ASCII.</p>
+                        <button type="button" id="markAcceptBtn" class="action-btn green mark-accept">ACEPTO</button>
+                        <button type="button" id="markSkipBtn" class="action-btn mark-skip">SALTAR</button>
+                        <p id="markLessons" class="mark-help">Nada aceptado aún.</p>
                     </aside>
                 </div>
             </div>
@@ -485,19 +492,19 @@
     </div>
 </div>
 
-<script src="mark-book.js?v=combos200k"></script>
-<script src="math-engine.js?v=combos200k"></script>
-<script src="checksum-engine.js?v=combos200k"></script>
-<script src="knowledge-base.js?v=combos200k"></script>
-<script src="mind-engine.js?v=combos200k"></script>
-<script src="hunters.js?v=combos200k"></script>
-<script src="dna-discovery.js?v=combos200k"></script>
-<script src="editor-upa.js?v=combos200k"></script>
-<script src="bin-object.js?v=combos200k"></script>
-<script src="family-library.js?v=combos200k"></script>
-<script src="omega-kernel.js?v=combos200k"></script>
-<script src="bin-core.js?v=combos200k"></script>
-<script src="app.js?v=combos200k"></script>
+<script src="mark-book.js?v=leccion1"></script>
+<script src="math-engine.js?v=leccion1"></script>
+<script src="checksum-engine.js?v=leccion1"></script>
+<script src="knowledge-base.js?v=leccion1"></script>
+<script src="mind-engine.js?v=leccion1"></script>
+<script src="hunters.js?v=leccion1"></script>
+<script src="dna-discovery.js?v=leccion1"></script>
+<script src="editor-upa.js?v=leccion1"></script>
+<script src="bin-object.js?v=leccion1"></script>
+<script src="family-library.js?v=leccion1"></script>
+<script src="omega-kernel.js?v=leccion1"></script>
+<script src="bin-core.js?v=leccion1"></script>
+<script src="app.js?v=leccion1"></script>
 
 </body>
 </html>

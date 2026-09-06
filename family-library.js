@@ -253,8 +253,112 @@ const FamilyLibrary = {
         };
     },
 
+    fingerprint(bytes) {
+        let ff = 0;
+        for (let i = 0; i < bytes.length; i++) if (bytes[i] === 0xFF) ff++;
+        let hash = bytes.length;
+        const take = Math.min(64, bytes.length);
+        for (let i = 0; i < take; i++) hash = ((hash * 33) ^ bytes[i]) >>> 0;
+        for (let i = Math.max(0, bytes.length - take); i < bytes.length; i++) hash = ((hash * 33) ^ bytes[i]) >>> 0;
+        return {
+            size: bytes.length,
+            ffRatio: bytes.length ? ff / bytes.length : 0,
+            hash: hash.toString(16)
+        };
+    },
+
+    detectLearned(bytes) {
+        if (typeof KnowledgeBase === "undefined") return null;
+        const fp = this.fingerprint(bytes);
+        const list = KnowledgeBase.learnedFamilies();
+        for (let i = 0; i < list.length; i++) {
+            const fam = list[i];
+            if (fam.size !== bytes.length) continue;
+            if (fam.fingerprint && Math.abs((fam.fingerprint.ffRatio || 0) - fp.ffRatio) > 0.15) continue;
+            const copies = fam.copies || [];
+            const width = fam.width || 2;
+            if (!copies.length || copies[0] + width > bytes.length) continue;
+            const raw = MathEngine.fromBytes(bytes, copies[0], width, fam.endian !== "BE");
+            if (raw === null) continue;
+            let km = raw;
+            if (fam.formula === "X * 10") km = Math.round(raw / 10);
+            else if (fam.formula === "X * 10 - 1") km = Math.round((raw + 1) / 10);
+            else if (fam.formula === "X * 10 - 5") km = Math.round((raw + 5) / 10);
+            else if (fam.formula === "X * 100") km = Math.round(raw / 100);
+            const hit = {
+                fromMemory: true,
+                fromFamily: true,
+                fromLearned: true,
+                familyId: fam.key,
+                label: "KILOMETRAJE",
+                name: fam.key,
+                formula: fam.formula,
+                width,
+                endian: fam.endian || "LE",
+                copies: copies.slice(),
+                stair: fam.fromStair ? copies.map((addr) => ({ addr, value: MathEngine.fromBytes(bytes, addr, width, fam.endian !== "BE") })) : null,
+                step: fam.step,
+                address: copies[0],
+                addressText: Hunters.range(copies[0], width),
+                hex: MathEngine.hexBytes(bytes.slice(copies[0], copies[0] + width)),
+                numeric: km,
+                value: km,
+                writeHow: fam.writeHow || "Familia aprendida del par / marcas.",
+                confidence: Math.min(98.8, 90 + Math.min(fam.hits || 1, 6)),
+                representation: fam.fromStair ? "rampa aprendida" : "familia aprendida",
+                writable: true,
+                fromStair: !!fam.fromStair
+            };
+            return {
+                family: {
+                    id: fam.key,
+                    name: "APRENDIDA",
+                    manufacturer: "ESTRUCTURA",
+                    chip: Hunters.detectChip(bytes.length),
+                    version: "cerebro",
+                    status: "APRENDIDA",
+                    writable: true,
+                    writeHow: hit.writeHow,
+                    binsProven: fam.hits || 1
+                },
+                decodedKm: km,
+                backupKm: null,
+                swapped: false,
+                hits: [hit],
+                confidence: hit.confidence
+            };
+        }
+        return null;
+    },
+
     identify(bytes) {
-        return this.detectYamaha(bytes) || this.detectR5F(bytes) || this.detectOdyssey(bytes) || null;
+        return this.detectYamaha(bytes) || this.detectR5F(bytes) || this.detectOdyssey(bytes) || this.detectLearned(bytes) || null;
+    },
+
+    writeStair(bytes, hit, newKm) {
+        const working = bytes instanceof Uint8Array ? new Uint8Array(bytes) : new Uint8Array(bytes);
+        const width = hit.width || 2;
+        const little = hit.endian !== "BE";
+        const stair = (hit.stair && hit.stair.length)
+            ? hit.stair
+            : (hit.copies || [hit.address]).map((addr) => ({
+                addr,
+                value: MathEngine.fromBytes(working, addr, width, little)
+            }));
+        const newHigh = MathEngine.applyFormula(Number(newKm), hit.formula || "X");
+        const high = stair.reduce((a, b) => (Number(a.value) >= Number(b.value) ? a : b), stair[0]);
+        if (!high || high.value === null) return { bytes: working, encoded: new Uint8Array(width), count: 0 };
+        const delta = newHigh - high.value;
+        stair.forEach((slot) => {
+            if (slot.value === null || slot.addr === undefined) return;
+            const value = (slot.value + delta) >>> 0;
+            working.set(MathEngine.toBytes(value, width, little), slot.addr);
+        });
+        return {
+            bytes: working,
+            encoded: MathEngine.toBytes(newHigh, width, little),
+            count: stair.length
+        };
     },
 
     r5fBank(bytes, lastAddr) {

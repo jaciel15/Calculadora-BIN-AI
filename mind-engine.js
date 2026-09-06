@@ -307,9 +307,9 @@ const MindEngine = {
             if (bytesA[i] !== bytesB[i]) starts.add(i);
         }
         if (typeof MarkBook !== "undefined") {
-            MarkBook.ranges("KM").forEach((range) => starts.add(range.start));
-            MarkBook.ranges("COPY").forEach((range) => starts.add(range.start));
-            MarkBook.ranges("HINT").forEach((range) => starts.add(range.start));
+            MarkBook.lessonRanges("KM").forEach((range) => starts.add(range.start));
+            MarkBook.lessonRanges("COPY").forEach((range) => starts.add(range.start));
+            MarkBook.lessonRanges("HINT").forEach((range) => starts.add(range.start));
         }
         return starts;
     },
@@ -725,8 +725,8 @@ const MindEngine = {
         if (typeof MarkBook === "undefined") return [];
         const hits = [];
         const transforms = knownKm !== null && knownKm !== undefined ? MathEngine.transforms(knownKm) : [];
-        const extraCopies = MarkBook.ranges("COPY").map((range) => range.start);
-        MarkBook.ranges("KM").concat(MarkBook.ranges("HINT")).forEach((range) => {
+        const extraCopies = MarkBook.lessonRanges("COPY").map((range) => range.start);
+        MarkBook.lessonRanges("KM").concat(MarkBook.lessonRanges("HINT")).forEach((range) => {
             const width = Math.min(4, Math.max(1, range.size));
             const start = range.start;
             ["LE", "BE"].forEach((endian) => {
@@ -751,6 +751,7 @@ const MindEngine = {
                 hits.push({
                     fromMind: true,
                     fromUser: true,
+                    fromLesson: MarkBook.hasLessons(),
                     label: "KILOMETRAJE",
                     name: "USER_KM_" + endian + width,
                     formula,
@@ -762,8 +763,8 @@ const MindEngine = {
                     hex: MathEngine.hexBytes(bytes.slice(start, start + width)),
                     numeric: km,
                     value: km,
-                    writeHow: "Zona " + (range.kind === "HINT" ? "pista" : "KM") + " marcada por ti. Pruebo la misma fórmula en cada copia y en el BIN 2.",
-                    confidence: range.kind === "HINT" ? Math.max(80, confidence - 8) : confidence,
+                    writeHow: "Zona " + (range.kind === "HINT" ? "pista" : "KM") + " que me mostraste. Pruebo la misma fórmula en cada copia y en el BIN 2.",
+                    confidence: MarkBook.hasLessons() ? Math.min(99.4, confidence + 4) : (range.kind === "HINT" ? Math.max(80, confidence - 8) : confidence),
                     representation: "marca usuario " + endian
                 });
             });
@@ -778,9 +779,10 @@ const MindEngine = {
         const kmSpans = this.spansFrom(ctx.kmCopies, ctx.kmWidth || 3);
         const chkSpans = this.spansFrom(ctx.checksums, 2);
         if (typeof MarkBook !== "undefined") {
-            MarkBook.ranges("KM").forEach((r) => kmSpans.push({ start: r.start, end: r.end, label: "marca KM" }));
-            MarkBook.ranges("CHK").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca SUM" }));
-            MarkBook.ranges("CRC").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca CRC" }));
+            MarkBook.lessonRanges("KM").forEach((r) => kmSpans.push({ start: r.start, end: r.end, label: "marca KM" }));
+            MarkBook.lessonRanges("CHK").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca SUM" }));
+            MarkBook.lessonRanges("CRC").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca CRC" }));
+            MarkBook.lessonRanges("COMP").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca COMP" }));
         }
         let totalBytes = 0;
         ranges.forEach((range) => {

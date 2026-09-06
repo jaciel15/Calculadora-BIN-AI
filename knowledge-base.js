@@ -9,6 +9,7 @@ const KnowledgeBase = {
             const data = JSON.parse(raw);
             if (!data.algorithms) data.algorithms = [];
             if (!data.graph) data.graph = [];
+            if (!data.learned) data.learned = [];
             return data;
         } catch (error) {
             return this.empty();
@@ -21,6 +22,7 @@ const KnowledgeBase = {
             algorithms: [],
             files: [],
             graph: [],
+            learned: [],
             updated: null
         };
     },
@@ -208,6 +210,61 @@ const KnowledgeBase = {
             });
         });
         return matches.sort((a, b) => b.confidence - a.confidence);
+    },
+
+    rememberLearnedFamily(rec) {
+        if (!rec || !rec.size || !rec.formula) return null;
+        const db = this.load();
+        if (!db.learned) db.learned = [];
+        const key = rec.size + "|" + rec.formula + "|" + rec.width + "|" + rec.endian + "|" + ((rec.copies || [])[0] || 0);
+        let item = db.learned.find((a) => a.key === key);
+        if (!item) {
+            item = { key, hits: 0, created: new Date().toISOString() };
+            db.learned.push(item);
+        }
+        item.size = rec.size;
+        item.formula = rec.formula;
+        item.width = rec.width;
+        item.endian = rec.endian;
+        item.copies = rec.copies || item.copies || [];
+        item.fromStair = !!rec.fromStair;
+        item.step = rec.step;
+        item.writeHow = rec.writeHow;
+        item.fingerprint = rec.fingerprint || item.fingerprint;
+        item.checksums = this.packChecksums(rec.checksums || item.checksums);
+        item.hits += 1;
+        item.lastSeen = new Date().toISOString();
+        this.save(db);
+        return item;
+    },
+
+    learnedFamilies() {
+        return this.load().learned || [];
+    },
+
+    exportBrain() {
+        return JSON.stringify(this.load(), null, 2);
+    },
+
+    importBrain(raw) {
+        const incoming = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (!incoming || typeof incoming !== "object") return null;
+        const db = this.load();
+        (incoming.algorithms || []).forEach((algo) => {
+            if (!algo || !algo.name) return;
+            const exists = db.algorithms.find((a) => a.name === algo.name);
+            if (exists) Object.assign(exists, algo);
+            else db.algorithms.push(algo);
+        });
+        if (!db.learned) db.learned = [];
+        (incoming.learned || []).forEach((fam) => {
+            if (!fam || !fam.key) return;
+            const exists = db.learned.find((a) => a.key === fam.key);
+            if (exists) Object.assign(exists, fam);
+            else db.learned.push(fam);
+        });
+        this.save(db);
+        return db;
     },
 
     rememberGraph(node) {

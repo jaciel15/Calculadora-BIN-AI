@@ -17,7 +17,7 @@ const Hunters = {
         return Math.max(8, Math.min(99.7, score));
     },
 
-    huntValue(bytes, knownValue, label) {
+    huntValue(bytes, knownValue, label, preferAddrs) {
         if (knownValue === null || knownValue === undefined || knownValue === "") return [];
         const value = Number(String(knownValue).replace(/[^\d.]/g, ""));
         if (!Number.isFinite(value) || value < 0) return [];
@@ -36,7 +36,16 @@ const Hunters = {
         MathEngine.variantsForValue(value).forEach((variant) => {
             const key = variant.formula + "|" + variant.hex;
             if (seen.has(key)) return;
-            const hits = MathEngine.lookupIndex(index, variant.bytes);
+            let hits = MathEngine.lookupIndex(index, variant.bytes);
+            if (preferAddrs && preferAddrs.size) {
+                const filtered = hits.filter((addr) => {
+                    for (let i = 0; i < variant.width; i++) {
+                        if (preferAddrs.has(addr + i)) return true;
+                    }
+                    return false;
+                });
+                if (filtered.length) hits = filtered;
+            }
             if (!hits.length) return;
             if (variant.width <= 2 && hits.length > 12) return;
             seen.add(key);

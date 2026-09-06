@@ -279,6 +279,7 @@ const OmegaKernel = {
         if (hit.fromStair && !hit.scatter) score += 16;
         if (hit.fromStair && (hit.copies || []).length >= 8) score += 6;
         if (hit.fromUser) score += 14;
+        if (hit.fromLesson) score += 18;
         if (hit.fromFamily && hit.writable === false) score += 8;
         if (hit.scatter) score -= 10;
         return score;
@@ -483,7 +484,22 @@ const OmegaKernel = {
         this.add(evidence, "PATTERN HUNTER", "repeats", { count: patterns.length }, 72, "bloques 4B repetidos");
         say("PATTERN HUNTER", patterns.length + " patrones repetidos");
 
-        let mileageHits = Hunters.huntValue(bytes, knownKm, "KILOMETRAJE");
+        const preferDiff = new Set();
+        if (this.compareBins[0] && this.compareBins[0].bytes) {
+            const other = this.compareBins[0].bytes;
+            const n = Math.min(bytes.length, other.length);
+            for (let i = 0; i < n; i++) {
+                if (bytes[i] !== other[i]) preferDiff.add(i);
+            }
+        }
+        if (preferDiff.size) say("DIFF FIRST", preferDiff.size + " bytes cambian; busco el KM ahí primero");
+        if (typeof MarkBook !== "undefined" && MarkBook.hasLessons()) {
+            const kmL = MarkBook.lessons.KM || [];
+            say("LECCIÓN", "Analizo lo que me mostraste: KM " + kmL.length +
+                " · SUM " + ((MarkBook.lessons.CHK || []).length + (MarkBook.lessons.CRC || []).length) +
+                " · COMP " + ((MarkBook.lessons.COMP || []).length));
+        }
+        let mileageHits = Hunters.huntValue(bytes, knownKm, "KILOMETRAJE", preferDiff.size ? preferDiff : null);
         if (familyMatch && familyMatch.hits) {
             familyMatch.hits.forEach((hit) => mileageHits.unshift(hit));
         }
@@ -686,6 +702,21 @@ const OmegaKernel = {
             best.chip = bin.chip;
             KnowledgeBase.rememberAlgorithm(best, bin.fileName, bin.fileSize, kmChecksums.concat(checksums));
             say("SELF LEARNING", "Guardado: " + best.name);
+            if (truth.status === "DEMOSTRADO" || best.fromPair || best.fromStair || best.fromLesson) {
+                KnowledgeBase.rememberLearnedFamily({
+                    size: bytes.length,
+                    formula: best.formula,
+                    width: best.width,
+                    endian: best.endian,
+                    copies: best.copies || [best.address],
+                    fromStair: !!best.fromStair,
+                    step: best.step,
+                    writeHow: best.writeHow,
+                    fingerprint: FamilyLibrary.fingerprint(bytes),
+                    checksums: kmChecksums
+                });
+                say("FAMILIA NUEVA", "Aprendí esta estructura para el próximo BIN del mismo tamaño.");
+            }
         }
         KnowledgeBase.rememberFile(bin.fileName, Object.assign({}, dna, fingerprint), counters);
         KnowledgeBase.rememberGraph({
