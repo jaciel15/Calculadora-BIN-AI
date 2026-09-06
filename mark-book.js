@@ -2,6 +2,7 @@ const MarkBook = {
 
     brush: "KM",
     painting: false,
+    lastPaint: null,
     user: {},
     lessons: { KM: [], CHK: [], CRC: [], COMP: [], COPY: [], HINT: [] },
     guideStep: "KM",
@@ -48,6 +49,33 @@ const MarkBook = {
         const key = String(addr);
         if (this.brush === "ERASE") delete this.user[key];
         else this.user[key] = this.brush;
+        this.refresh(addr);
+    },
+
+    stroke(from, to) {
+        if (to === null || to === undefined) return;
+        if (from === null || from === undefined || from === to) {
+            this.paint(to);
+            this.lastPaint = to;
+            return;
+        }
+        const a = Math.min(from, to);
+        const b = Math.max(from, to);
+        if (b - a > 96) {
+            this.paint(to);
+            this.lastPaint = to;
+            return;
+        }
+        for (let i = a; i <= b; i++) this.paint(i);
+        this.lastPaint = to;
+    },
+
+    addrFromEvent(event) {
+        const x = event.clientX;
+        const y = event.clientY;
+        if (x === undefined || y === undefined) return this.addrFrom(event.target);
+        const top = document.elementFromPoint(x, y);
+        return this.addrFrom(top) !== null ? this.addrFrom(top) : this.addrFrom(event.target);
     },
 
     emptyLessons() {
@@ -90,18 +118,19 @@ const MarkBook = {
         else if (/x\s*1000|metros|por 1000/.test(t)) rec.formula = "X * 1000";
         else if (/x\s*100|por 100/.test(t)) rec.formula = "X * 100";
         else if (/x\s*16/.test(t)) rec.formula = "X * 16";
-        else if (/x\s*10|por 10|multiplicad/.test(t)) rec.formula = "X * 10";
-        else if (/\bx\b|sin formula|tal cual/.test(t) && /rojo|km/.test(t)) rec.formula = "X";
+        else if (/x\s*10|por\s*10|por diez|multiplicad|veces 10|x10/.test(t)) rec.formula = "X * 10";
+        else if (/\bx\b|sin formula|tal cual|directo|tal y como/.test(t) && /rojo|km|kilom/.test(t)) rec.formula = "X";
+        if (!rec.formula && /rojo|kilom|\bkm\b/.test(t) && /byte/.test(t)) rec.formula = "X";
         if (/4\s*byte/.test(t)) rec.width = 4;
         else if (/3\s*byte|tres byte/.test(t)) rec.width = 3;
         else if (/2\s*byte|dos byte/.test(t)) rec.width = 2;
-        if (/big|be\b|hi\s*lo|primero el alto/.test(t)) rec.endian = "BE";
-        else if (/little|le\b|lo\s*hi|primero el bajo/.test(t)) rec.endian = "LE";
+        if (/big|be\b|motorola|hi\s*lo|primero el alto/.test(t)) rec.endian = "BE";
+        else if (/little|le\b|intel|lo\s*hi|primero el bajo/.test(t)) rec.endian = "LE";
         if (/sum16|suma 16/.test(t)) rec.chk = "SUM16";
         else if (/crc32/.test(t)) rec.chk = "CRC32";
         else if (/crc16/.test(t)) rec.chk = "CRC16";
         else if (/crc8/.test(t)) rec.chk = "CRC8";
-        else if (/suma|sum8|sumas|checksum/.test(t)) rec.chk = "SUM8";
+        else if (/suma|sum8|sumas|checksum|la sum/.test(t)) rec.chk = "SUM8";
         if (/morado|crc/.test(t) && /escrib|guarda|ahi|allí|dónde|donde/.test(t)) rec.chkOn = "CRC";
         else if (/azul|sum\b/.test(t) && /escrib|guarda|ahi|allí|donde/.test(t)) rec.chkOn = "CHK";
         if (/complemento|\bcomp\b/.test(t)) rec.chkOn = rec.chkOn || "COMP";
@@ -136,7 +165,8 @@ const MarkBook = {
             localStorage.setItem(this.STORAGE, JSON.stringify({
                 lessons: this.lessons,
                 guideStep: this.guideStep,
-                recipe: this.recipeText()
+                recipe: this.recipeText(),
+                user: this.user
             }));
         } catch (error) { /* ignore */ }
     },
@@ -147,11 +177,64 @@ const MarkBook = {
             if (!raw) return;
             const data = JSON.parse(raw);
             if (data.lessons) this.lessons = Object.assign(this.emptyLessons(), data.lessons);
+            if (data.user && typeof data.user === "object") this.user = data.user;
             if (data.guideStep) this.guideStep = data.guideStep;
+            if (!this.hasLessons() && !Object.keys(this.user).length) this.guideStep = "KM";
             if (data.recipe && document.getElementById("helpRecipe")) {
                 document.getElementById("helpRecipe").value = data.recipe;
             }
         } catch (error) { /* ignore */ }
+    },
+
+    compact(ranges) {
+        const items = [];
+        (ranges || []).forEach((range) => {
+            for (let addr = range.start; addr <= range.end; addr++) {
+                items.push({ addr, kind: range.kind });
+            }
+        });
+        items.sort((a, b) => a.addr - b.addr);
+        const out = [];
+        items.forEach((item) => {
+            const last = out[out.length - 1];
+            if (last && item.addr === last.end + 1 && last.kind === item.kind) last.end = item.addr;
+            else out.push({ start: item.addr, end: item.addr, kind: item.kind });
+        });
+        out.forEach((r) => { r.size = r.end - r.start + 1; });
+        return out;
+    },
+
+    harvest() {
+        ["KM", "CHK", "CRC", "COMP", "COPY", "HINT"].forEach((kind) => {
+            const live = this.snapshot(kind);
+            if (!live.length) return;
+            this.lessons[kind] = this.compact((this.lessons[kind] || []).concat(live));
+        });
+        this.persist();
+        return this.hasHelp();
+    },
+
+    hasHelp() {
+        return this.hasLessons() || !!this.recipeText() || Object.keys(this.user).length > 0;
+    },
+
+    savedRanges(kind) {
+        return this.lessons[kind] || [];
+    },
+
+    allSaved() {
+        return ["KM", "CHK", "CRC", "COMP", "COPY", "HINT"].reduce((acc, kind) => acc.concat(this.savedRanges(kind)), []);
+    },
+
+    countBytes(kind) {
+        return this.savedRanges(kind).reduce((n, r) => n + (r.size || 0), 0);
+    },
+
+    nextBrush() {
+        if (!this.lessons.KM.length) return "KM";
+        if (!this.lessons.CHK.length && !this.lessons.CRC.length) return "CHK";
+        if (!this.lessons.COMP.length) return "COMP";
+        return "KM";
     },
 
     restoreAccepted() {
@@ -181,8 +264,7 @@ const MarkBook = {
     },
 
     lessonRanges(kind) {
-        const accepted = this.lessons[kind] || [];
-        return accepted.length ? accepted : this.ranges(kind);
+        return this.compact((this.lessons[kind] || []).concat(this.ranges(kind)));
     },
 
     allRanges() {
@@ -194,48 +276,38 @@ const MarkBook = {
     },
 
     accept() {
-        const step = this.guideStep;
-        if (step === "LISTO") {
-            this.renderGuide();
-            return { ok: true, step, analyze: true, message: "Uso tu ayuda. Recoloreo y analizo." };
+        const kinds = ["KM", "CHK", "CRC", "COMP", "COPY", "HINT"].filter((kind) => this.snapshot(kind).length);
+        if (!kinds.length) {
+            if (this.guideStep === "LISTO" && this.hasLessons()) {
+                this.renderGuide();
+                return { ok: true, step: "LISTO", analyze: true, message: "Uso lo que ya aceptaste. Recoloreo y analizo." };
+            }
+            return { ok: false, step: this.guideStep, message: "Pinta el color y luego ACEPTO. Arrastra por todos los bytes." };
         }
-        if (step === "KM") {
-            const ranges = this.snapshot("KM");
-            if (!ranges.length) return { ok: false, step, message: "Pinta primero el KM en rojo." };
-            this.lessons.KM = ranges;
-            this.eraseKind("KM");
-            this.guideStep = "CHK";
-            this.revealed = false;
-            this.persist();
-            this.setBrush("CHK");
-            return { ok: true, step: "KM", message: "KM guardado y quitado. Ahora pinta SUM." };
-        }
-        if (step === "CHK") {
-            const sum = this.snapshot("CHK");
-            const crc = this.snapshot("CRC");
-            if (!sum.length && !crc.length) return { ok: false, step, message: "Pinta SUM (azul) o CRC (morado)." };
-            this.lessons.CHK = sum;
-            this.lessons.CRC = crc;
-            this.eraseKind("CHK");
-            this.eraseKind("CRC");
-            this.guideStep = "COMP";
-            this.revealed = false;
-            this.persist();
-            this.setBrush("COMP");
-            return { ok: true, step: "CHK", message: "Checksum guardado y quitado. Ahora pinta COMP." };
-        }
-        if (step === "COMP") {
-            const ranges = this.snapshot("COMP");
-            if (!ranges.length) return { ok: false, step, message: "Pinta el complemento (COMP)." };
-            this.lessons.COMP = ranges;
-            this.eraseKind("COMP");
-            this.guideStep = "LISTO";
-            this.revealed = false;
-            this.persist();
-            this.renderGuide();
-            return { ok: true, step: "COMP", analyze: true, message: "Ayuda completa. Recoloreo y analizo." };
-        }
-        return { ok: false, step, message: "Paso no válido." };
+        kinds.forEach((kind) => {
+            this.lessons[kind] = this.compact((this.lessons[kind] || []).concat(this.snapshot(kind)));
+            this.eraseKind(kind);
+        });
+        const next = this.nextBrush();
+        this.guideStep = !this.lessons.KM.length ? "KM"
+            : (!this.lessons.CHK.length && !this.lessons.CRC.length ? "CHK"
+                : (!this.lessons.COMP.length ? "COMP" : "LISTO"));
+        this.revealed = false;
+        this.persist();
+        this.setBrush(next);
+        this.renderGuide();
+        const bits = kinds.map((kind) => {
+            const n = this.countBytes(kind);
+            return (this.kinds[kind] ? this.kinds[kind].label : kind) + " " + n + " B";
+        });
+        const analyze = this.guideStep === "LISTO";
+        return {
+            ok: true,
+            step: this.guideStep,
+            analyze,
+            message: "Guardado: " + bits.join(" · ") + ". " +
+                (analyze ? "Listo. ANALIZAR usa tus colores." : "Ahora pinta " + (this.kinds[next] ? this.kinds[next].label : next) + ".")
+        };
     },
 
     skip() {
@@ -270,10 +342,10 @@ const MarkBook = {
         if (guide) guide.textContent = this.stepHelp();
         if (lessons) {
             const bits = [];
-            if (this.lessons.KM.length) bits.push("KM " + this.lessons.KM.length);
-            if (this.lessons.CHK.length || this.lessons.CRC.length) bits.push("SUM/CRC");
-            if (this.lessons.COMP.length) bits.push("COMP");
-            lessons.textContent = bits.length ? "Aceptado: " + bits.join(" · ") : "Nada aceptado aún.";
+            if (this.lessons.KM.length) bits.push("KM " + this.countBytes("KM") + " B");
+            if (this.lessons.CHK.length || this.lessons.CRC.length) bits.push("SUM/CRC " + (this.countBytes("CHK") + this.countBytes("CRC")) + " B");
+            if (this.lessons.COMP.length) bits.push("COMP " + this.countBytes("COMP") + " B");
+            lessons.textContent = bits.length ? "Guardado: " + bits.join(" · ") : "Nada aceptado aún.";
         }
         const accept = document.getElementById("markAcceptBtn");
         if (accept) accept.textContent = this.guideStep === "LISTO" ? "LISTO" : "ACEPTO";
@@ -283,27 +355,24 @@ const MarkBook = {
         if (!el || el.getAttribute("data-mark-bound")) return;
         el.setAttribute("data-mark-bound", "1");
         const down = (event) => {
-            const addr = this.addrFrom(event.target);
+            const addr = this.addrFromEvent(event);
             if (addr === null) return;
             event.preventDefault();
             this.painting = true;
+            this.lastPaint = addr;
             if (event.currentTarget && event.currentTarget.setPointerCapture && event.pointerId !== undefined) {
                 try { event.currentTarget.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
             }
             this.paint(addr);
-            this.refresh(addr);
         };
         const move = (event) => {
             if (!this.painting) return;
-            const addr = this.addrFrom(event.target);
+            const addr = this.addrFromEvent(event);
             if (addr === null) return;
-            this.paint(addr);
-            this.refresh(addr);
+            this.stroke(this.lastPaint, addr);
         };
         el.addEventListener("pointerdown", down);
         el.addEventListener("pointermove", move);
-        el.addEventListener("mousedown", down);
-        el.addEventListener("mouseover", move);
     },
 
     refresh(addr) {
@@ -349,5 +418,12 @@ const MarkBook = {
     }
 };
 
-document.addEventListener("pointerup", () => { MarkBook.painting = false; });
-document.addEventListener("mouseup", () => { MarkBook.painting = false; });
+document.addEventListener("pointerup", () => {
+    MarkBook.painting = false;
+    MarkBook.lastPaint = null;
+    MarkBook.persist();
+});
+document.addEventListener("mouseup", () => {
+    MarkBook.painting = false;
+    MarkBook.lastPaint = null;
+});

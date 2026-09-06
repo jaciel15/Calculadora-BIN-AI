@@ -841,9 +841,41 @@ const MindEngine = {
     fromHelpRecipe(bytes, knownKm) {
         if (typeof MarkBook === "undefined") return [];
         const rec = MarkBook.recipe();
-        if (!rec || !rec.formula) return [];
+        if (!rec || (!rec.formula && !rec.width && !rec.chk)) return [];
+        if (!rec.formula) rec.formula = "X";
         const painted = MarkBook.paintedAddrs("KM").concat(MarkBook.paintedAddrs("HINT"));
-        if (!painted.length) return [];
+        if (!painted.length && (knownKm === null || knownKm === undefined)) return [];
+        if (!painted.length) {
+            const width = rec.width || 3;
+            const endian = rec.endian || "LE";
+            let encoded = null;
+            try { encoded = MathEngine.applyFormula(knownKm, rec.formula); } catch (error) { encoded = knownKm; }
+            if (encoded === null || encoded === undefined) return [];
+            const needle = MathEngine.toBytes(encoded, width, endian !== "BE");
+            const copies = MathEngine.findPattern(bytes, needle);
+            if (!copies.length) return [];
+            return [{
+                fromMind: true,
+                fromUser: true,
+                fromLesson: true,
+                fromRecipe: true,
+                label: "KILOMETRAJE",
+                name: "RECETA_" + endian + width,
+                formula: rec.formula,
+                width,
+                endian,
+                copies,
+                address: copies[0],
+                addressText: Hunters.range(copies[0], width),
+                hex: MathEngine.hexBytes(bytes.slice(copies[0], copies[0] + width)),
+                numeric: knownKm,
+                value: knownKm,
+                writeHow: "Receta tuya (sin pintar): " + (rec.note || rec.formula) + ". " + copies.length + " sitios.",
+                confidence: 98.8,
+                representation: rec.note || "receta usuario",
+                recipe: rec
+            }];
+        }
         const width = rec.width || 3;
         const endian = rec.endian || "LE";
         const paintedSet = new Set(painted);

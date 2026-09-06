@@ -518,11 +518,13 @@ const OmegaKernel = {
             }
         }
         if (preferDiff.size) say("DIFF FIRST", preferDiff.size + " bytes cambian; busco el KM ahí primero");
-        if (typeof MarkBook !== "undefined" && MarkBook.hasLessons()) {
-            const kmL = MarkBook.lessons.KM || [];
-            say("AYUDA USUARIO", "Tú me mostraste el camino. Priorizo esas zonas: KM " + kmL.length +
-                " · SUM " + ((MarkBook.lessons.CHK || []).length + (MarkBook.lessons.CRC || []).length) +
-                " · COMP " + ((MarkBook.lessons.COMP || []).length));
+        if (typeof MarkBook !== "undefined" && MarkBook.hasHelp()) {
+            const rec = MarkBook.recipe();
+            const kmL = MarkBook.lessonRanges("KM");
+            say("AYUDA USUARIO", "Tú me mostraste el camino. KM " + kmL.reduce((n, r) => n + (r.size || 0), 0) +
+                " B · SUM " + (MarkBook.countBytes("CHK") + MarkBook.countBytes("CRC")) +
+                " B · COMP " + MarkBook.countBytes("COMP") + " B");
+            if (rec && rec.raw) say("RECETA", rec.note ? rec.note + " · " + rec.raw : rec.raw);
         }
         let mileageHits = Hunters.huntValue(bytes, knownKm, "KILOMETRAJE", preferDiff.size ? preferDiff : null);
         if (world && world.hits) world.hits.forEach((hit) => mileageHits.unshift(hit));
@@ -598,6 +600,14 @@ const OmegaKernel = {
         say("SERIAL HUNTER", serials.length ? serials.length + " candidatos" : "no encontrado");
 
         mileageHits = this.rankKmHits(mileageHits);
+        if (typeof MarkBook !== "undefined" && MarkBook.hasHelp()) {
+            const helped = mileageHits.filter((h) => h && (h.fromRecipe || h.fromUser || h.fromLesson || h.fromDeep));
+            if (helped.length) {
+                const rest = mileageHits.filter((h) => helped.indexOf(h) < 0);
+                mileageHits = this.rankKmHits(helped).concat(rest);
+                say("AYUDA MANDA", helped[0].writeHow || helped[0].formula);
+            }
+        }
         let best = mileageHits[0] || hoursHits[0] || unknown[0] || null;
         const copiesExact = best && best.copies ? Hunters.hiddenCopies([best]) : [];
         const copiesHidden = this.hiddenCopies(bytes, patterns);

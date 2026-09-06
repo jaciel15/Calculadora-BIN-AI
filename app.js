@@ -119,12 +119,10 @@ function collectMarks() {
         lastGhost.diffs.forEach((d) => paint(d.addr, 1, "hex-ghost"));
     }
     if (typeof MarkBook !== "undefined") {
-        if (MarkBook.revealed) {
-            MarkBook.allRanges().forEach((range) => {
-                const info = MarkBook.kinds[range.kind];
-                if (info) paint(range.start, range.size, info.cls);
-            });
-        }
+        MarkBook.allSaved().forEach((range) => {
+            const info = MarkBook.kinds[range.kind];
+            if (info) paint(range.start, range.size, info.cls);
+        });
         Object.keys(MarkBook.user).forEach((key) => {
             const kind = MarkBook.user[key];
             const info = MarkBook.kinds[kind];
@@ -681,8 +679,11 @@ function runAnalysis(extra) {
     const hours = knownHours();
     const stayChk = LabMode.is("CHK");
     if (!stayChk) LabMode.set("KM");
-    const guided = typeof MarkBook !== "undefined" && MarkBook.hasLessons();
-    if (guided) MarkBook.restoreAccepted();
+    if (typeof MarkBook !== "undefined") {
+        MarkBook.harvest();
+        if (MarkBook.hasHelp()) MarkBook.restoreAccepted();
+    }
+    const guided = typeof MarkBook !== "undefined" && MarkBook.hasHelp();
     setStatus(stayChk ? "ANALIZANDO SUM" : (guided ? "ANALIZANDO LO QUE MOSTRASTE" : "ANALIZANDO"), false);
     setTimeout(function () {
         const opts = extra || {};
@@ -1392,9 +1393,9 @@ function wireUI() {
         }
     });
     if ($("helpRecipe")) {
-        $("helpRecipe").addEventListener("change", () => {
-            if (typeof MarkBook !== "undefined") MarkBook.persist();
-        });
+        const saveRecipe = () => { if (typeof MarkBook !== "undefined") MarkBook.persist(); };
+        $("helpRecipe").addEventListener("change", saveRecipe);
+        $("helpRecipe").addEventListener("input", saveRecipe);
     }
     bindClick("closeProjectBtn", closeProject);
     bindClick("machineBtn", () => focusPanel("machinePanel"));
