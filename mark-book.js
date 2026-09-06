@@ -6,6 +6,8 @@ const MarkBook = {
     lessons: { KM: [], CHK: [], CRC: [], COMP: [], COPY: [], HINT: [] },
     guideStep: "KM",
     guideOrder: ["KM", "CHK", "COMP", "LISTO"],
+    revealed: false,
+    STORAGE: "velocimetros-cdmx-marks-v1",
 
     kinds: {
         KM: { cls: "hex-user-km", label: "KM", help: "Kilometraje" },
@@ -18,10 +20,10 @@ const MarkBook = {
 
     stepHelp() {
         return {
-            KM: "1. Pinta el KM en rojo. Luego ACEPTO.",
-            CHK: "2. Pinta SUM o CRC. Luego ACEPTO.",
-            COMP: "3. Pinta el complemento (suma invertida / CRC). Luego ACEPTO.",
-            LISTO: "4. Ya guardé tus marcas. Pulsa ANALIZAR."
+            KM: "1. Pinta el KM en rojo. ACEPTO lo guarda y lo quita.",
+            CHK: "2. KM guardado. Ahora pinta SUM o CRC. ACEPTO.",
+            COMP: "3. SUM guardado. Ahora pinta COMP. ACEPTO.",
+            LISTO: "4. Todo guardado. ANALIZAR vuelve a poner los colores."
         }[this.guideStep] || "Pinta y pulsa ACEPTO.";
     },
 
@@ -47,11 +49,52 @@ const MarkBook = {
         else this.user[addr] = this.brush;
     },
 
+    emptyLessons() {
+        return { KM: [], CHK: [], CRC: [], COMP: [], COPY: [], HINT: [] };
+    },
+
     clear() {
         this.user = {};
-        this.lessons = { KM: [], CHK: [], CRC: [], COMP: [], COPY: [], HINT: [] };
+        this.lessons = this.emptyLessons();
         this.guideStep = "KM";
+        this.revealed = false;
+        this.persist();
         this.setBrush("KM");
+        this.renderGuide();
+    },
+
+    eraseKind(kind) {
+        Object.keys(this.user).forEach((key) => {
+            if (this.user[key] === kind) delete this.user[key];
+        });
+    },
+
+    persist() {
+        try {
+            localStorage.setItem(this.STORAGE, JSON.stringify({
+                lessons: this.lessons,
+                guideStep: this.guideStep
+            }));
+        } catch (error) { /* ignore */ }
+    },
+
+    loadPersisted() {
+        try {
+            const raw = localStorage.getItem(this.STORAGE);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (data.lessons) this.lessons = Object.assign(this.emptyLessons(), data.lessons);
+            if (data.guideStep) this.guideStep = data.guideStep;
+        } catch (error) { /* ignore */ }
+    },
+
+    restoreAccepted() {
+        Object.keys(this.lessons).forEach((kind) => {
+            (this.lessons[kind] || []).forEach((range) => {
+                for (let addr = range.start; addr <= range.end; addr++) this.user[addr] = kind;
+            });
+        });
+        this.revealed = true;
         this.renderGuide();
     },
 
@@ -94,9 +137,12 @@ const MarkBook = {
             const ranges = this.snapshot("KM");
             if (!ranges.length) return { ok: false, step, message: "Pinta primero el KM en rojo." };
             this.lessons.KM = ranges;
+            this.eraseKind("KM");
             this.guideStep = "CHK";
+            this.revealed = false;
+            this.persist();
             this.setBrush("CHK");
-            return { ok: true, step: "KM", message: "KM aceptado: " + ranges.length + " zona(s)." };
+            return { ok: true, step: "KM", message: "KM guardado y quitado. Ahora pinta SUM." };
         }
         if (step === "CHK") {
             const sum = this.snapshot("CHK");
@@ -104,34 +150,48 @@ const MarkBook = {
             if (!sum.length && !crc.length) return { ok: false, step, message: "Pinta SUM (azul) o CRC (morado)." };
             this.lessons.CHK = sum;
             this.lessons.CRC = crc;
+            this.eraseKind("CHK");
+            this.eraseKind("CRC");
             this.guideStep = "COMP";
+            this.revealed = false;
+            this.persist();
             this.setBrush("COMP");
-            return { ok: true, step: "CHK", message: "Checksum aceptado." };
+            return { ok: true, step: "CHK", message: "Checksum guardado y quitado. Ahora pinta COMP." };
         }
         if (step === "COMP") {
             const ranges = this.snapshot("COMP");
             if (!ranges.length) return { ok: false, step, message: "Pinta el complemento (COMP)." };
             this.lessons.COMP = ranges;
+            this.eraseKind("COMP");
             this.guideStep = "LISTO";
+            this.revealed = false;
+            this.persist();
             this.renderGuide();
-            return { ok: true, step: "COMP", message: "Complemento aceptado. Pulsa ANALIZAR." };
+            return { ok: true, step: "COMP", message: "Complemento guardado. Pulsa ANALIZAR para recolorear." };
         }
         return { ok: false, step, message: "Paso no válido." };
     },
 
     skip() {
         if (this.guideStep === "KM") {
+            this.eraseKind("KM");
             this.guideStep = "CHK";
+            this.persist();
             this.setBrush("CHK");
-            return { ok: true, message: "Sin KM marcado. Sigue SUM o pulsa ANALIZAR." };
+            return { ok: true, message: "Sin KM. Hex limpio. Ahora SUM." };
         }
         if (this.guideStep === "CHK") {
+            this.eraseKind("CHK");
+            this.eraseKind("CRC");
             this.guideStep = "COMP";
+            this.persist();
             this.setBrush("COMP");
-            return { ok: true, message: "Sin checksum. Puedes marcar COMP o ANALIZAR." };
+            return { ok: true, message: "Sin checksum. Hex limpio. Ahora COMP." };
         }
         if (this.guideStep === "COMP") {
+            this.eraseKind("COMP");
             this.guideStep = "LISTO";
+            this.persist();
             this.renderGuide();
             return { ok: true, message: "Sin complemento. Pulsa ANALIZAR." };
         }
@@ -203,6 +263,7 @@ const MarkBook = {
             return;
         }
         this._ready = true;
+        this.loadPersisted();
         document.addEventListener("pointerdown", (event) => { this.pickSwatch(event); }, true);
         document.addEventListener("click", (event) => { this.pickSwatch(event); }, true);
         this.setBrush(this.brush);

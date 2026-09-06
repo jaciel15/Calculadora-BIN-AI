@@ -534,6 +534,7 @@ function runAnalysis(extra) {
     const stayChk = LabMode.is("CHK");
     if (!stayChk) LabMode.set("KM");
     const guided = typeof MarkBook !== "undefined" && MarkBook.hasLessons();
+    if (guided) MarkBook.restoreAccepted();
     setStatus(stayChk ? "ANALIZANDO SUM" : (guided ? "ANALIZANDO LO QUE MOSTRASTE" : "ANALIZANDO"), false);
     setTimeout(function () {
         const opts = extra || {};
@@ -745,6 +746,7 @@ function acceptMarkLesson() {
 function skipMarkLesson() {
     if (typeof MarkBook === "undefined") return;
     const result = MarkBook.skip();
+    if (currentBIN) showHEX(currentBIN.working || currentBIN.original);
     setStatus(result.message, true);
 }
 
