@@ -34,8 +34,8 @@ const FamilyLibrary = {
             size: 8192,
             status: "DEMOSTRADO",
             writable: true,
-            writeHow: "Última página de 32 B: lo mid hi = (KM×10−5) little-endian. Byte 31 = SUM8 de esos 3 bytes. Bajar KM exige borrar el anillo.",
-            binsProven: 5
+            writeHow: "Última página de 32 B: lo mid hi = (KM×10−5) little-endian. Bytes 30–31 = SUM16 big-endian de esos 3 bytes. Bajar KM exige borrar el anillo.",
+            binsProven: 7
         }
     ],
 
@@ -193,20 +193,20 @@ const FamilyLibrary = {
         const pages = [];
         for (let p = 0; p + 32 <= bytes.length; p += 0x20) {
             let pad = 0;
-            for (let i = 3; i < 31; i++) {
+            for (let i = 3; i < 30; i++) {
                 if (bytes[p + i] === 0) pad++;
             }
-            if (pad < 26) continue;
+            if (pad < 25) continue;
             const value = this.le24(bytes, p);
             if (value < 50 || value > 2500000) continue;
-            const sum = (bytes[p] + bytes[p + 1] + bytes[p + 2]) & 0xFF;
-            const tail = bytes[p + 31];
+            const sum16 = bytes[p] + bytes[p + 1] + bytes[p + 2];
+            const stored = (bytes[p + 30] << 8) | bytes[p + 31];
             pages.push({
                 addr: p,
                 value,
-                sum,
-                tail,
-                ok: tail === sum
+                sum16,
+                stored,
+                ok: stored === sum16
             });
         }
         return pages;
@@ -236,12 +236,12 @@ const FamilyLibrary = {
             numeric: km,
             value: km,
             writeHow: "LE24 (KM×10−5) en la última página 0x" + last.addr.toString(16).toUpperCase() +
-                ". Byte +31 = SUM8. Anillo de " + valid.length + " páginas.",
+                ". Bytes +30/+31 = SUM16 BE. Anillo de " + valid.length + " páginas.",
             confidence: 99.1,
-            representation: "lo mid hi de (KM×10−5) + SUM8 @ +31",
+            representation: "lo mid hi de (KM×10−5) + SUM16 BE @ +30",
             writable: true,
-            checksumAt: last.addr + 31,
-            checksumName: "SUM8"
+            checksumAt: last.addr + 30,
+            checksumName: "SUM16"
         };
         return {
             family: this.families[2],

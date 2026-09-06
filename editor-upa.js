@@ -41,7 +41,9 @@ const EditorEngine = {
         (hit.copies || [hit.address]).forEach((addr) => {
             working.set(encoded, addr);
             if (hit.familyId === "YAMAHA_R5F10" && encoded.length >= 3) {
-                working[addr + 31] = (encoded[0] + encoded[1] + encoded[2]) & 0xFF;
+                const sum16 = encoded[0] + encoded[1] + encoded[2];
+                working[addr + 30] = (sum16 >> 8) & 0xFF;
+                working[addr + 31] = sum16 & 0xFF;
             }
         });
         return {

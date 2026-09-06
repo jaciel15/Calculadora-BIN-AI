@@ -166,7 +166,7 @@ const ChecksumEngine = {
             layout = "AF + word fino + FF · 3 copias seguidas. Orden interno aún no demostrado";
         }
         if (hit.familyId === "YAMAHA_R5F10") {
-            layout = "página 32 B: lo mid hi = (KM×10−5) LE24 · byte 31 = SUM8(lo+mid+hi)";
+            layout = "página 32 B: lo mid hi = (KM×10−5) LE24 · bytes 30–31 = SUM16 BE (hi lo del total)";
         }
         return {
             layout,
@@ -182,17 +182,18 @@ const ChecksumEngine = {
         if (!hit || hit.address === undefined) return [];
         if (hit.familyId === "YAMAHA_R5F10") {
             const start = hit.address;
-            const calc = this.sum8(bytes, start, start + 3);
+            const calc = bytes[start] + bytes[start + 1] + bytes[start + 2];
+            const stored = (bytes[start + 30] << 8) | bytes[start + 31];
             return [{
-                name: "SUM8",
+                name: "SUM16",
                 start,
                 end: start + 3,
-                storedAt: start + 31,
+                storedAt: start + 30,
                 valueBin: calc,
                 calculated: calc,
-                endian: "LE",
-                size: 1,
-                status: bytes[start + 31] === calc ? "VALIDO" : "ROTO",
+                endian: "BE",
+                size: 2,
+                status: stored === calc ? "VALIDO" : "ROTO",
                 confidence: 99,
                 window: "payload-LE24",
                 linkedTo: "KM"
