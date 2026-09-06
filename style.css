@@ -1,35 +1,34 @@
 :root {
-    --bg: #100e0c;
-    --bg-2: #17130f;
-    --panel: #1f1914;
-    --panel-2: #2a221b;
-    --line: #3d3228;
-    --line-soft: #2f271f;
-    --text: #f4eadb;
-    --muted: #b5a48d;
-    --gold: #e0b56a;
-    --gold-dim: #3a2d16;
-    --copper: #d4844a;
-    --cream: #f7efe2;
-    --sage: #8fce8a;
-    --rose: #e0a0b0;
-    --sky: #8ec8d4;
-    --red: #e57373;
-    --shadow: 0 12px 36px rgba(0, 0, 0, 0.38);
+    --bg: #f3efe6;
+    --bg-2: #e8e1d4;
+    --panel: #fffdf8;
+    --panel-2: #f7f1e6;
+    --line: #cfc3ae;
+    --line-soft: #e4d9c8;
+    --text: #1c1712;
+    --muted: #5c5144;
+    --gold: #8a5a12;
+    --gold-dim: #fff1cc;
+    --copper: #a34a12;
+    --cream: #1c1712;
+    --sage: #1b6b32;
+    --rose: #9b3354;
+    --sky: #155e78;
+    --red: #b71c1c;
+    --shadow: 0 8px 22px rgba(40, 28, 12, 0.08);
 }
 
 body {
     margin: 0;
     background:
-        radial-gradient(900px 380px at 80% -8%, rgba(224, 181, 106, 0.08), transparent 50%),
-        radial-gradient(700px 420px at 0% 100%, rgba(212, 132, 74, 0.06), transparent 46%),
+        radial-gradient(900px 380px at 80% -8%, rgba(138, 90, 18, 0.06), transparent 50%),
         var(--bg);
     color: var(--text);
-    font-family: "Segoe UI", Georgia, "Times New Roman", serif;
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
 }
 
 .top-header {
-    background: linear-gradient(180deg, #241c15 0%, #17130f 100%);
+    background: linear-gradient(180deg, #fffdf8 0%, #f7f1e6 100%);
     border-bottom: 1px solid var(--line);
     padding: 18px 24px 16px;
     box-shadow: var(--shadow);
@@ -49,7 +48,7 @@ body {
 .top-header h1 {
     margin: 0;
     font-size: 34px;
-    color: var(--cream);
+    color: var(--text);
     font-weight: 700;
     letter-spacing: 1px;
 }
@@ -88,7 +87,7 @@ body {
     height: 40px;
     margin-bottom: 7px;
     padding: 0 12px;
-    background: transparent;
+    background: var(--panel);
     color: var(--text);
     border: 1px solid var(--line);
     border-radius: 20px;
@@ -123,7 +122,7 @@ body {
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 20px;
-    color: var(--cream);
+    color: var(--text);
     cursor: pointer;
     font-size: 11px;
     font-weight: 700;
@@ -164,8 +163,8 @@ body {
 .known-bar input {
     height: 36px;
     width: 140px;
-    background: var(--bg);
-    color: var(--cream);
+    background: #fff;
+    color: var(--text);
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 0 10px;
@@ -189,7 +188,7 @@ body {
     border: 1px solid var(--line);
     border-radius: 14px;
     padding: 16px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow);
 }
 
 .card h3, .panel h3 {
@@ -221,13 +220,12 @@ body {
     color: var(--text);
     font-weight: bold;
     font-size: 12px;
-    background: var(--bg);
+    background: #fff;
 }
 
 .status-circle.ok {
     border-color: var(--sage);
     color: var(--sage);
-    box-shadow: 0 0 18px rgba(143, 206, 138, 0.16);
 }
 
 .ok-text { color: var(--sage); }
@@ -263,7 +261,7 @@ body {
 
 .hex-toolbar select {
     height: 32px;
-    background: var(--bg);
+    background: #fff;
     color: var(--text);
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -289,31 +287,31 @@ body {
 #hexViewer,
 #hexViewer2 {
     border: 1px solid var(--line);
-    background: #0c0a08;
+    background: #fff;
     padding: 12px;
     height: 380px;
     overflow: auto;
     white-space: pre;
     font-family: Consolas, "Courier New", monospace;
-    font-size: 12px;
-    line-height: 1.5;
-    color: #e6d8c4;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #1c1712;
     border-radius: 0 0 14px 14px;
 }
 
-.hex-addr { color: var(--gold); }
+.hex-addr { color: var(--gold); font-weight: 700; }
 
 .hex-byte {
     padding: 0 1px;
     border-radius: 3px;
 }
 
-.hex-byte.hex-diff { background: #3a2412; color: var(--copper); }
-.hex-byte.hex-vin { background: var(--gold-dim); color: var(--gold); }
-.hex-byte.hex-km { background: #1c2a1a; color: var(--sage); }
-.hex-byte.hex-chk { background: #2d1d24; color: var(--rose); }
+.hex-byte.hex-diff { background: #ffe2c2; color: #7a3508; font-weight: 700; }
+.hex-byte.hex-vin { background: #fff1c2; color: #6b4308; font-weight: 700; }
+.hex-byte.hex-km { background: #d7f5de; color: #145528; font-weight: 700; }
+.hex-byte.hex-chk { background: #f8d5e2; color: #7a2040; font-weight: 700; }
 .hex-byte.hex-km.hex-diff,
-.hex-byte.hex-vin.hex-diff { outline: 1px solid var(--red); }
+.hex-byte.hex-vin.hex-diff { outline: 2px solid var(--red); }
 
 .hex-legend {
     display: flex;
@@ -344,7 +342,7 @@ body {
 }
 
 .vin-box {
-    background: linear-gradient(180deg, #261e16 0%, var(--panel) 100%);
+    background: #fff;
     border: 1px solid var(--line);
     border-radius: 14px;
     padding: 14px 16px;
@@ -352,11 +350,12 @@ body {
 
 .vin-box.live {
     border-color: var(--gold);
-    box-shadow: 0 0 0 1px rgba(224, 181, 106, 0.22);
+    background: var(--gold-dim);
 }
 
 .vin-box.diff {
     border-color: var(--copper);
+    background: #ffe8d4;
 }
 
 .vin-box h3 {
@@ -371,7 +370,7 @@ body {
     font-size: 22px;
     font-weight: 700;
     letter-spacing: 1.4px;
-    color: var(--cream);
+    color: var(--text);
     word-break: break-all;
 }
 
@@ -386,7 +385,7 @@ body {
     padding: 14px;
     border: 1px solid var(--line);
     border-radius: 12px;
-    background: var(--bg);
+    background: #fff;
 }
 
 .algo-detail h4 {
@@ -408,7 +407,7 @@ body {
 }
 
 .algo-row:hover {
-    background: var(--panel-2);
+    background: var(--gold-dim);
 }
 
 @media (max-width: 1100px) {
@@ -433,6 +432,7 @@ body {
     padding: 7px 8px;
     border-bottom: 1px solid var(--line-soft);
     white-space: nowrap;
+    color: var(--text);
 }
 
 .data-table td:first-child {
@@ -487,7 +487,7 @@ body {
 .editor-row select,
 .editor-row input {
     height: 38px;
-    background: var(--bg);
+    background: #fff;
     color: var(--text);
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -521,7 +521,7 @@ body {
 .editor-buttons button {
     height: 40px;
     min-width: 140px;
-    background: var(--bg);
+    background: #fff;
     padding: 0 16px;
     font-size: 13px;
     font-weight: bold;
@@ -567,7 +567,7 @@ body {
     right: 0;
     bottom: 0;
     height: 36px;
-    background: #0c0a08;
+    background: #fffdf8;
     border-top: 1px solid var(--line);
     display: flex;
     align-items: center;
@@ -582,7 +582,7 @@ body {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(10, 8, 6, 0.74);
+    background: rgba(40, 32, 20, 0.35);
     z-index: 30;
     padding: 40px;
 }
