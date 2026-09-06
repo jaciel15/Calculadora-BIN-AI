@@ -22,53 +22,27 @@
         <h3>ARCHIVO</h3>
         <button id="openBtn">Abrir BIN</button>
         <button id="saveBinBtn">Guardar BIN</button>
-        <button id="saveProjectBtn">Guardar Proyecto</button>
-        <button id="exportReportBtn">Exportar Reporte</button>
-        <button id="compareBinBtn">Comparar BIN</button>
-        <button id="closeProjectBtn">Cerrar Proyecto</button>
+        <button id="saveAlgoBtn">Guardar algoritmo</button>
+        <button id="algoLibraryBtn">Algoritmos guardados</button>
+        <button id="exportReportBtn">Exportar reporte</button>
+        <button id="closeProjectBtn">Cerrar</button>
 
         <h3>ANÁLISIS</h3>
         <button id="memoryMapBtn">Memory Map</button>
         <button id="countersBtn">Counters</button>
-        <button id="checksumBtn">Checksum Hunter</button>
-        <button id="vinHunterBtn">VIN Hunter</button>
-        <button id="serialHunterBtn">Serial Hunter</button>
-        <button id="hoursHunterBtn">Hours Hunter</button>
-        <button id="universalCounterBtn">Universal Counter</button>
+        <button id="checksumBtn">Checksums</button>
+        <button id="vinHunterBtn">VIN</button>
+        <button id="diffBtn">Zonas distintas</button>
 
-        <h3>INTELIGENCIA ARTIFICIAL</h3>
+        <h3>MENTE</h3>
         <button id="dnaBtn">DNA BIN</button>
-        <button id="discoveryBtn">Algorithm Discovery</button>
-        <button id="hypothesisBtn">Hypothesis Factory</button>
-        <button id="correlationBtn">Correlation Engine</button>
-        <button id="predictorBtn">Predictor Engine</button>
-        <button id="truthBtn">Truth Engine</button>
-        <button id="reasoningBtn">Reasoning Engine</button>
+        <button id="discoveryBtn">AI Discovery</button>
+        <button id="reasoningBtn">Razonar</button>
+        <button id="autopilotBtn">Autopilot</button>
 
-        <h3>SIMULACIÓN</h3>
-        <button id="digitalTwinBtn">Digital Twin</button>
-        <button id="virtualEepromBtn">Virtual EEPROM</button>
-        <button id="binEvolutionBtn">BIN Evolution Simulator</button>
-        <button id="stressTestBtn">Stress Test Engine</button>
-
-        <h3>GENERACIÓN</h3>
-        <button id="autoKmBtn">Auto KM Generator</button>
-        <button id="autoChecksumBtn">Auto Checksum</button>
-        <button id="binGenBtn">BIN Generator</button>
-        <button id="upaBtn">UPA Script Generator</button>
-
-        <h3>APRENDIZAJE</h3>
-        <button id="knowledgeBtn">Knowledge Graph</button>
-        <button id="patternBtn">Master Pattern Library</button>
-        <button id="selfLearnBtn">Self Learning DB</button>
-        <button id="algoLibraryBtn">Algoritmos Guardados</button>
-
-        <h3>OMEGA</h3>
-        <button id="omegaBtn">BIN Hunter Omega</button>
-        <button id="forensicBtn">Forensic Mode</button>
-        <button id="unknownBtn">Unknown Decoder</button>
-        <button id="impossibleBtn">Impossible Case</button>
-        <button id="autopilotBtn">RE Autopilot</button>
+        <h3>GENERAR</h3>
+        <button id="binGenBtn">Generar BIN</button>
+        <button id="upaBtn">Script UPA</button>
     </aside>
 
     <main class="content">
@@ -78,17 +52,12 @@
 
         <div class="top-actions">
             <button id="openBtnTop" class="action-btn">ABRIR BIN</button>
-            <button id="analyzeBtnTop" class="action-btn green">ANALIZAR BIN</button>
-            <button id="memoryMapBtnTop" class="action-btn">MEMORY MAP</button>
-            <button id="countersBtnTop" class="action-btn">COUNTERS</button>
-            <button id="checksumBtnTop" class="action-btn">CHECKSUMS</button>
-            <button id="dnaBtnTop" class="action-btn purple">DNA BIN</button>
+            <button id="analyzeBtnTop" class="action-btn green">ANALIZAR</button>
             <button id="discoveryBtnTop" class="action-btn purple">AI DISCOVERY</button>
-            <button id="digitalTwinBtnTop" class="action-btn blue">DIGITAL TWIN</button>
+            <button id="saveAlgoBtnTop" class="action-btn yellow">GUARDAR ALGORITMO</button>
+            <button id="algoLibraryBtnTop" class="action-btn">ALGORITMOS</button>
             <button id="binGenBtnTop" class="action-btn yellow">GENERAR BIN</button>
-            <button id="validateBtnTop" class="action-btn green">VALIDAR</button>
             <button id="reportBtnTop" class="action-btn red">REPORTE</button>
-            <button id="omegaBtnTop" class="action-btn purple">OMEGA</button>
         </div>
 
         <div class="known-bar">
@@ -114,6 +83,21 @@
             <button id="analyzePairBtn" class="action-btn green">ANALIZAR PAR</button>
         </div>
         <input type="file" id="fileInput2" accept=".bin,.eep,.hex" hidden>
+
+        <div id="vinStrip" class="vin-strip">
+            <div id="vinBox1" class="vin-box">
+                <h3>VIN 1</h3>
+                <p id="vinValue1" class="vin-value">Carga el BIN 1</p>
+                <p id="vinMaker1" class="vin-maker">—</p>
+                <p id="vinAddr1" class="vin-addr">—</p>
+            </div>
+            <div id="vinBox2" class="vin-box">
+                <h3>VIN 2</h3>
+                <p id="vinValue2" class="vin-value">Carga el BIN 2</p>
+                <p id="vinMaker2" class="vin-maker">—</p>
+                <p id="vinAddr2" class="vin-addr">—</p>
+            </div>
+        </div>
 
         <div class="info-cards">
             <div class="card">
@@ -151,19 +135,49 @@
 
         <div class="workspace">
 
-            <div class="hex-container">
+            <div class="hex-container hex-compare-wrap">
                 <div class="hex-toolbar">
-                    <span class="hex-title">HEX VIEWER</span>
+                    <span class="hex-title">HEX · BIN 1 y BIN 2</span>
                     <select id="hexMode">
                         <option>16-BIT</option>
                         <option>8-BIT</option>
                     </select>
-                    <select>
-                        <option>ANSI</option>
-                        <option>ASCII</option>
-                    </select>
+                    <span class="hex-legend">
+                        <i class="lg km"></i>KM
+                        <i class="lg vin"></i>VIN
+                        <i class="lg diff"></i>DISTINTO
+                        <i class="lg chk"></i>CHECKSUM
+                    </span>
                 </div>
-                <div id="hexViewer"></div>
+                <div class="hex-compare">
+                    <div>
+                        <div class="hex-label" id="hexLabel1">BIN 1</div>
+                        <div id="hexViewer" class="hex-view"></div>
+                    </div>
+                    <div>
+                        <div class="hex-label" id="hexLabel2">BIN 2</div>
+                        <div id="hexViewer2" class="hex-view"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="diffPanel" class="panel checksum-wide">
+                <h3>ZONAS DISTINTAS</h3>
+                <p id="diffSummary">Carga BIN 1 y BIN 2. La mente marca VIN, KM, checksum y todo lo demás que cambia.</p>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>TIPO</th>
+                            <th>INICIO</th>
+                            <th>FIN</th>
+                            <th>BYTES</th>
+                            <th>BIN 1</th>
+                            <th>BIN 2</th>
+                            <th>POR QUÉ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="diffBody"></tbody>
+                </table>
             </div>
 
             <div id="counterPanel" class="panel">
@@ -342,7 +356,7 @@
             <h3>ALGORITMOS GUARDADOS</h3>
             <button id="closeAlgo" class="action-btn">CERRAR</button>
         </div>
-        <p class="modal-help">Memoria del núcleo: nombre, fórmula, cómo se escribe y en qué archivos se vio.</p>
+        <p class="modal-help">Pulsa un algoritmo para ver cómo se encontró y cómo hacerlo a mano, paso a paso.</p>
         <table class="data-table">
             <thead>
                 <tr>
@@ -351,11 +365,14 @@
                     <th>ESTRUCTURA</th>
                     <th>CÓMO ESCRIBIR</th>
                     <th>VISTOS</th>
-                    <th>ÚLTIMO BIN</th>
+                    <th>ORIGEN</th>
                 </tr>
             </thead>
             <tbody id="algoBody"></tbody>
         </table>
+        <div id="algoDetail" class="algo-detail">
+            <p>Elige una fila.</p>
+        </div>
     </div>
 </div>
 

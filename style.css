@@ -209,16 +209,142 @@ body {
     padding: 0 8px;
 }
 
-#hexViewer {
+.hex-compare-wrap { grid-column: 1 / -1; }
+
+.hex-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.hex-label {
+    color: #5FB8B8;
+    font-size: 12px;
+    font-weight: 700;
+    margin: 4px 0;
+}
+
+.hex-view,
+#hexViewer,
+#hexViewer2 {
     border: 1px solid #5FB8B8;
     background: #111;
     padding: 10px;
-    height: 420px;
+    height: 380px;
     overflow: auto;
     white-space: pre;
     font-family: Consolas, "Courier New", monospace;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.45;
+}
+
+.hex-addr { color: #5FB8B8; }
+
+.hex-byte {
+    padding: 0 1px;
+    border-radius: 2px;
+}
+
+.hex-byte.hex-diff { background: #5a3a00; color: #FFB74D; }
+.hex-byte.hex-vin { background: #004d5a; color: #00E5FF; }
+.hex-byte.hex-km { background: #143d1b; color: #69F0AE; }
+.hex-byte.hex-chk { background: #3a1b4a; color: #E1BEE7; }
+.hex-byte.hex-km.hex-diff,
+.hex-byte.hex-vin.hex-diff { outline: 1px solid #FF5252; }
+
+.hex-legend {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: #9A9A9A;
+}
+
+.hex-legend .lg {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+.lg.km { background: #69F0AE; }
+.lg.vin { background: #00E5FF; }
+.lg.diff { background: #FFB74D; }
+.lg.chk { background: #E1BEE7; }
+
+.vin-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.vin-box {
+    background: #1A1A1A;
+    border: 1px solid #4A4A4A;
+    padding: 12px 14px;
+}
+
+.vin-box.live {
+    border-color: #00E5FF;
+}
+
+.vin-box.diff {
+    border-color: #FFB74D;
+}
+
+.vin-box h3 {
+    margin: 0 0 6px;
+    color: #5FB8B8;
+    font-size: 13px;
+}
+
+.vin-value {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #00E5FF;
+    word-break: break-all;
+}
+
+.vin-maker, .vin-addr {
+    margin: 4px 0 0;
+    color: #9A9A9A;
+    font-size: 12px;
+}
+
+.algo-detail {
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px solid #4A4A4A;
+    background: #1A1A1A;
+}
+
+.algo-detail h4 {
+    color: #B388FF;
+    margin: 0 0 8px;
+}
+
+.algo-detail ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.algo-detail li {
+    margin-bottom: 8px;
+}
+
+.algo-row {
+    cursor: pointer;
+}
+
+.algo-row:hover {
+    background: #333;
+}
+
+@media (max-width: 1100px) {
+    .hex-compare, .vin-strip { grid-template-columns: 1fr; }
 }
 
 .data-table {

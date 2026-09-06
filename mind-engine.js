@@ -260,18 +260,32 @@ const MindEngine = {
     think(ctx) {
         const parts = [];
         if (ctx.vinId && ctx.vinId.maker) {
-            parts.push("VIN " + ctx.vinId.vin + " → " + ctx.vinId.maker + " (WMI " + ctx.vinId.wmi + ").");
+            parts.push("VIN 1 " + ctx.vinId.vin + " → " + ctx.vinId.maker + ".");
         } else {
-            parts.push("Sin VIN en el dump. No uso el nombre del archivo.");
+            parts.push("BIN 1 sin VIN. No uso el nombre del archivo.");
         }
-        if (ctx.familyMatch) {
-            parts.push("Estructura = " + ctx.familyMatch.family.id + ".");
+        if (ctx.vinId2) {
+            parts.push(ctx.vinId2.maker
+                ? "VIN 2 " + ctx.vinId2.vin + " → " + ctx.vinId2.maker + "."
+                : "VIN 2 " + ctx.vinId2.vin + ".");
+            if (ctx.vinId && ctx.vinId.vin !== ctx.vinId2.vin) {
+                parts.push("Los VIN son distintos: comparo todo el dump, no solo el KM.");
+            } else if (ctx.vinId && ctx.vinId.vin === ctx.vinId2.vin) {
+                parts.push("Mismo VIN. Lo que cambia es odómetro u otros contadores.");
+            }
         }
+        if (ctx.diffWorld && ctx.diffWorld.ranges.length) {
+            const kinds = {};
+            ctx.diffWorld.ranges.forEach((r) => { kinds[r.kind] = (kinds[r.kind] || 0) + 1; });
+            parts.push("Cambian " + ctx.diffWorld.totalBytes + " bytes en " + ctx.diffWorld.ranges.length +
+                " zonas (" + Object.keys(kinds).map((k) => kinds[k] + " " + k).join(", ") + ").");
+        }
+        if (ctx.familyMatch) parts.push("Estructura = " + ctx.familyMatch.family.id + ".");
         if (ctx.recalled && ctx.recalled.length) {
             parts.push("Memoria: " + ctx.recalled[0].formula + " @ " + ctx.recalled[0].addressText + ".");
         }
         if (ctx.pairHits && ctx.pairHits.length) {
-            parts.push("El par demuestra " + ctx.pairHits[0].formula + " en " + ctx.pairHits[0].addressText + ".");
+            parts.push("El par demuestra KM = " + ctx.pairHits[0].formula + " en " + ctx.pairHits[0].addressText + ".");
         }
         if (ctx.best) {
             parts.push("Prioridad: " + ctx.best.formula + " · " + (ctx.best.writeHow || "validar copias y checksum") + ".");
@@ -279,5 +293,71 @@ const MindEngine = {
             parts.push("Siguiente: otro BIN de la misma estructura o un KM conocido.");
         }
         return parts.join(" ");
+    },
+
+    spansFrom(list, widthDefault) {
+        const spans = [];
+        (list || []).forEach((item) => {
+            const start = item.address !== undefined ? item.address : item.storedAt;
+            const width = item.width || item.size || widthDefault || 1;
+            if (start === undefined || start === null) return;
+            spans.push({ start, end: start + width - 1, label: item.name || item.label || "" });
+        });
+        return spans;
+    },
+
+    overlap(range, spans) {
+        return (spans || []).find((s) => range.start <= s.end && range.end >= s.start) || null;
+    },
+
+    diffRanges(bytesA, bytesB) {
+        const ranges = [];
+        if (!bytesA || !bytesB) return ranges;
+        const n = Math.min(bytesA.length, bytesB.length);
+        let run = null;
+        for (let i = 0; i < n; i++) {
+            if (bytesA[i] !== bytesB[i]) {
+                if (!run) run = { start: i, end: i, samples: [] };
+                run.end = i;
+                if (run.samples.length < 8) run.samples.push({ addr: i, a: bytesA[i], b: bytesB[i] });
+            } else if (run) {
+                ranges.push(run);
+                run = null;
+            }
+        }
+        if (run) ranges.push(run);
+        return ranges;
+    },
+
+    classifyDiffs(bytesA, bytesB, ctx) {
+        ctx = ctx || {};
+        const ranges = this.diffRanges(bytesA, bytesB);
+        const vinSpans = this.spansFrom(ctx.vins, 17).concat(this.spansFrom(ctx.vins2, 17));
+        const kmSpans = this.spansFrom(ctx.kmCopies, ctx.kmWidth || 3);
+        const chkSpans = this.spansFrom(ctx.checksums, 2);
+        let totalBytes = 0;
+        ranges.forEach((range) => {
+            range.size = range.end - range.start + 1;
+            totalBytes += range.size;
+            const vinHit = this.overlap(range, vinSpans);
+            const kmHit = this.overlap(range, kmSpans);
+            const chkHit = this.overlap(range, chkSpans);
+            if (vinHit) {
+                range.kind = "VIN";
+                range.why = "Zona VIN " + (vinHit.label || "");
+            } else if (kmHit) {
+                range.kind = "KM";
+                range.why = "Kilometraje / copias";
+            } else if (chkHit) {
+                range.kind = "CHECKSUM";
+                range.why = "Checksum " + (chkHit.label || "");
+            } else {
+                range.kind = "OTRO";
+                range.why = "Cambia y no es KM ni VIN";
+            }
+            range.hexA = MathEngine.hexBytes(bytesA.slice(range.start, Math.min(range.end + 1, range.start + 8)));
+            range.hexB = MathEngine.hexBytes(bytesB.slice(range.start, Math.min(range.end + 1, range.start + 8)));
+        });
+        return { ranges, totalBytes, sizeA: bytesA ? bytesA.length : 0, sizeB: bytesB ? bytesB.length : 0 };
     }
 };

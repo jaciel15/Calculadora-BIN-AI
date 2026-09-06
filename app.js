@@ -24,25 +24,142 @@ function downloadBlob(filename, parts, type) {
     URL.revokeObjectURL(url);
 }
 
-function showHEX(bytes) {
+function collectMarks() {
+    const marks = {};
+    const paint = (addr, width, cls) => {
+        if (addr === undefined || addr === null) return;
+        for (let i = 0; i < width; i++) {
+            const at = addr + i;
+            marks[at] = marks[at] ? marks[at] + " " + cls : cls;
+        }
+    };
+    if (!currentBIN) return marks;
+    Hunters.huntVIN(currentBIN.original).forEach((v) => paint(v.address, 17, "hex-vin"));
+    if (currentBIN.analysis && currentBIN.analysis.best) {
+        const hit = currentBIN.analysis.best;
+        (hit.copies || [hit.address]).forEach((addr) => paint(addr, hit.width || 2, "hex-km"));
+    }
+    const omega = currentBIN.analysis && currentBIN.analysis.omega;
+    if (omega && omega.kmChecksums) {
+        omega.kmChecksums.forEach((c) => {
+            if (c.storedAt !== null && c.storedAt !== undefined) paint(c.storedAt, c.size || 2, "hex-chk");
+        });
+    }
+    if (OmegaKernel.compareBins[0]) {
+        const a = currentBIN.working || currentBIN.original;
+        const b = OmegaKernel.compareBins[0].bytes;
+        const n = Math.min(a.length, b.length);
+        for (let i = 0; i < n; i++) {
+            if (a[i] !== b[i]) paint(i, 1, "hex-diff");
+        }
+        Hunters.huntVIN(b).forEach((v) => paint(v.address, 17, "hex-vin"));
+    }
+    return marks;
+}
+
+function paintHex(targetId, bytes, marks) {
+    const el = $(targetId);
+    if (!el || !bytes) return;
     const mode = $("hexMode") ? $("hexMode").value : "16-BIT";
     const step = 16;
-    let output = "";
+    let html = "";
     for (let i = 0; i < bytes.length; i += step) {
-        output += padHex(i, 4) + " : ";
+        html += "<span class=\"hex-addr\">" + padHex(i, 4) + "</span> : ";
         let ascii = "";
         for (let j = 0; j < step; j++) {
             if (i + j < bytes.length) {
                 const b = bytes[i + j];
-                output += padHex(b, 2) + (mode === "16-BIT" && j % 2 === 1 ? "  " : " ");
+                const cls = marks[i + j] ? "hex-byte " + marks[i + j] : "hex-byte";
+                html += "<span class=\"" + cls + "\" data-addr=\"" + (i + j) + "\">" + padHex(b, 2) + "</span>";
+                html += (mode === "16-BIT" && j % 2 === 1 ? "  " : " ");
                 ascii += b >= 32 && b <= 126 ? String.fromCharCode(b) : ".";
             } else {
-                output += "   ";
+                html += "   ";
             }
         }
-        output += " | " + ascii + "\n";
+        html += " | " + ascii + "\n";
     }
-    $("hexViewer").textContent = output;
+    el.innerHTML = html;
+}
+
+function showHEX(bytes) {
+    const marks = collectMarks();
+    const view = bytes || (currentBIN ? currentBIN.working : null);
+    if (view) {
+        paintHex("hexViewer", view, marks);
+        if ($("hexLabel1") && currentBIN) $("hexLabel1").textContent = "BIN 1 · " + currentBIN.fileName;
+    }
+    if (OmegaKernel.compareBins[0]) {
+        paintHex("hexViewer2", OmegaKernel.compareBins[0].bytes, marks);
+        if ($("hexLabel2")) $("hexLabel2").textContent = "BIN 2 · " + OmegaKernel.compareBins[0].fileName;
+    } else if ($("hexViewer2")) {
+        $("hexViewer2").innerHTML = "Carga el BIN 2. Aquí se pinta el otro archivo y en naranja todo lo que cambia (VIN, KM y el resto).";
+        if ($("hexLabel2")) $("hexLabel2").textContent = "BIN 2";
+    }
+}
+
+function showVinCard(which, bytes) {
+    const val = $("vinValue" + which);
+    const maker = $("vinMaker" + which);
+    const addr = $("vinAddr" + which);
+    const box = $("vinBox" + which);
+    if (!val || !box) return null;
+    box.classList.remove("live", "diff");
+    if (!bytes) {
+        val.textContent = "Carga el BIN " + which;
+        maker.textContent = "—";
+        addr.textContent = "—";
+        return null;
+    }
+    const found = Hunters.huntVIN(bytes);
+    if (!found.length) {
+        val.textContent = "SIN VIN EN EL DUMP";
+        maker.textContent = "El nombre del archivo no cuenta";
+        addr.textContent = "—";
+        return null;
+    }
+    const id = MindEngine.decodeVin(found[0].value);
+    val.textContent = found[0].value;
+    maker.textContent = id && id.maker ? id.maker + " · WMI " + id.wmi : "WMI " + (id ? id.wmi : "?");
+    addr.textContent = "Dir " + found[0].addressText;
+    box.classList.add("live");
+    return found[0].value;
+}
+
+function refreshIdentity() {
+    const v1 = currentBIN ? showVinCard(1, currentBIN.original) : showVinCard(1, null);
+    const v2 = OmegaKernel.compareBins[0] ? showVinCard(2, OmegaKernel.compareBins[0].bytes) : showVinCard(2, null);
+    if (v1 && v2 && v1 !== v2) {
+        if ($("vinBox1")) $("vinBox1").classList.add("diff");
+        if ($("vinBox2")) $("vinBox2").classList.add("diff");
+    }
+}
+
+function renderDiffTable(diffWorld) {
+    const body = $("diffBody");
+    const summary = $("diffSummary");
+    if (!body) return;
+    if (!diffWorld || !diffWorld.ranges || !diffWorld.ranges.length) {
+        body.innerHTML = "";
+        if (summary) summary.textContent = OmegaKernel.compareBins.length
+            ? "Los dos BIN son idénticos."
+            : "Carga BIN 1 y BIN 2. Se marcan VIN, KM, checksum y todo lo demás que cambia.";
+        return;
+    }
+    if (summary) {
+        summary.textContent = diffWorld.totalBytes + " bytes distintos en " + diffWorld.ranges.length + " zonas.";
+    }
+    body.innerHTML = diffWorld.ranges.map((r) => {
+        return "<tr class=\"algo-row\" data-addr=\"" + r.start + "\">" +
+            "<td>" + r.kind + "</td>" +
+            "<td>" + padHex(r.start) + "</td>" +
+            "<td>" + padHex(r.end) + "</td>" +
+            "<td>" + r.size + "</td>" +
+            "<td>" + r.hexA + "</td>" +
+            "<td>" + r.hexB + "</td>" +
+            "<td>" + r.why + "</td>" +
+            "</tr>";
+    }).join("");
 }
 
 function addLogRows() {
@@ -194,6 +311,9 @@ function renderAnalysis(analysis) {
     $("footerFile").textContent = currentBIN.fileName;
     $("footerChip").textContent = currentBIN.chip;
     setStatus(analysis.omega && analysis.omega.truth ? analysis.omega.truth.status : "ANALIZADO", true);
+    refreshIdentity();
+    renderDiffTable(analysis.omega ? analysis.omega.diffWorld : null);
+    showHEX(currentBIN.working);
     addLogRows();
 }
 
@@ -235,6 +355,7 @@ async function loadBIN(event) {
     $("footerFile").textContent = currentBIN.fileName;
     $("footerSize").textContent = currentBIN.fileSize + " bytes";
     $("footerChip").textContent = currentBIN.chip;
+    refreshIdentity();
     showHEX(currentBIN.working);
     if (currentBIN.family) {
         $("chipName").textContent = currentBIN.chip;
@@ -361,26 +482,76 @@ function runUPA() {
     addLogRows();
 }
 
+function saveAlgorithm() {
+    if (!needAnalysis()) return;
+    const best = currentBIN.analysis.best;
+    if (!best) {
+        alert("No hay operación demostrada para guardar.");
+        return;
+    }
+    const item = KnowledgeBase.rememberAlgorithm(best, currentBIN.fileName, currentBIN.fileSize);
+    KnowledgeBase.markUserSaved(item.name);
+    binCore.addLog("MEMORIA", "Algoritmo guardado a mano: " + item.name);
+    addLogRows();
+    showAlgorithms();
+    showAlgoDetail(item);
+}
+
+function showAlgoDetail(item) {
+    const box = $("algoDetail");
+    if (!box || !item) return;
+    const steps = item.steps && item.steps.length ? item.steps : KnowledgeBase.recipe(item);
+    box.innerHTML = "<h4>" + item.name + "</h4>" +
+        "<p><strong>Fórmula:</strong> " + (item.formula || "—") + " · " + (item.width || "?") + "B " + (item.endian || "") + "</p>" +
+        "<p><strong>Cómo se hace</strong></p><ol>" +
+        steps.map((s) => "<li><strong>" + s.title + ".</strong> " + s.text + "</li>").join("") +
+        "</ol>";
+}
+
 function showAlgorithms() {
     const db = KnowledgeBase.load();
     const body = $("algoBody");
-    const families = FamilyLibrary.list().map((f) => {
-        return "<tr><td>" + f.id + "</td><td>" + f.status + "</td><td>" + f.chip + "</td><td>" + f.writeHow + "</td><td>" + f.binsProven + "</td><td>KERNEL</td></tr>";
-    }).join("");
-    if (!db.algorithms.length && !families) {
-        body.innerHTML = "<tr><td colspan=\"6\">Aún no hay algoritmos en memoria. Analiza un BIN con KM conocido.</td></tr>";
+    const catalog = [];
+    FamilyLibrary.list().forEach((f, index) => {
+        catalog.push({
+            key: "k" + index,
+            name: f.id,
+            formula: f.status,
+            width: f.size,
+            endian: f.chip,
+            writeHow: f.writeHow,
+            hits: f.binsProven,
+            lastFile: "KERNEL",
+            steps: KnowledgeBase.recipe({
+                formula: f.writable ? "X" : "FINO",
+                width: 2,
+                endian: "LE",
+                writeHow: f.writeHow,
+                addressText: f.chip,
+                fromFamily: true,
+                value: "familia"
+            })
+        });
+    });
+    db.algorithms.forEach((item, index) => {
+        catalog.push(Object.assign({ key: "a" + index }, item));
+    });
+    window._algoCatalog = catalog;
+    if (!catalog.length) {
+        body.innerHTML = "<tr><td colspan=\"6\">Aún no hay algoritmos. Analiza y pulsa Guardar algoritmo.</td></tr>";
     } else {
-        body.innerHTML = families + db.algorithms.map((item) => {
-            return "<tr>" +
+        body.innerHTML = catalog.map((item) => {
+            return "<tr class=\"algo-row\" data-key=\"" + item.key + "\">" +
                 "<td>" + item.name + "</td>" +
-                "<td>" + item.formula + "</td>" +
-                "<td>" + item.width + " / " + item.endian + "</td>" +
-                "<td>" + item.writeHow + "</td>" +
-                "<td>" + item.hits + "</td>" +
-                "<td>" + (item.lastFile || "—") + "</td>" +
+                "<td>" + (item.formula || "") + "</td>" +
+                "<td>" + (item.width || "") + " / " + (item.endian || "") + "</td>" +
+                "<td>" + (item.writeHow || "") + "</td>" +
+                "<td>" + (item.hits || 0) + "</td>" +
+                "<td>" + (item.savedByUser ? "GUARDADO" : (item.lastFile || "visto")) + "</td>" +
                 "</tr>";
         }).join("");
     }
+    if ($("algoDetail")) $("algoDetail").innerHTML = "<p>Pulsa una fila para ver el paso a paso a mano.</p>";
     $("algoModal").classList.add("open");
 }
 
@@ -472,6 +643,15 @@ async function loadBIN2(event) {
     if ($("bin2Name")) $("bin2Name").textContent = file.name;
     $("familyCount").textContent = "Familia: " + (1 + OmegaKernel.compareBins.length) + " BIN";
     if (binCore.currentBIN) binCore.addLog("COMPARADOR", "BIN 2 cargado: " + file.name);
+    refreshIdentity();
+    if (currentBIN) {
+        const preview = MindEngine.classifyDiffs(currentBIN.original, OmegaKernel.compareBins[0].bytes, {
+            vins: Hunters.huntVIN(currentBIN.original),
+            vins2: Hunters.huntVIN(OmegaKernel.compareBins[0].bytes)
+        });
+        renderDiffTable(preview);
+        showHEX(currentBIN.working);
+    }
     addLogRows();
 }
 
@@ -490,33 +670,17 @@ function runPairAnalysis() {
 
 function showPairReport() {
     if (!currentBIN || !OmegaKernel.compareBins.length) return;
-    const a = currentBIN.original;
-    const b = OmegaKernel.compareBins[0].bytes;
-    const diffs = [];
-    const n = Math.min(a.length, b.length);
-    for (let i = 0; i < n; i++) {
-        if (a[i] !== b[i]) diffs.push(i);
-    }
-    const km1 = $("knownKm1") ? $("knownKm1").value : "";
-    const km2 = $("knownKm2") ? $("knownKm2").value : "";
-    const html = "<p><strong>BIN 1:</strong> " + currentBIN.fileName + " · KM " + (km1 || knownKm() || "?") + "</p>" +
-        "<p><strong>BIN 2:</strong> " + OmegaKernel.compareBins[0].fileName + " · KM " + (km2 || "?") + "</p>" +
-        "<p><strong>Bytes distintos:</strong> " + diffs.length + "</p>" +
-        "<p>" + diffs.slice(0, 40).map((i) => padHex(i) + ": " + padHex(a[i], 2) + " → " + padHex(b[i], 2)).join("<br>") + "</p>" +
-        (currentBIN.analysis && currentBIN.analysis.best ? "<p><strong>Operación:</strong> " + describeOperation(currentBIN.analysis.best) + "</p>" : "") +
-        (currentBIN.analysis && currentBIN.analysis.omega && currentBIN.analysis.omega.kmOrder
-            ? "<p><strong>Orden KM:</strong> " + currentBIN.analysis.omega.kmOrder.layout + " · " + currentBIN.analysis.omega.kmOrder.hex + "</p>"
-            : "") +
-        (currentBIN.analysis && currentBIN.analysis.omega && currentBIN.analysis.omega.kmChecksums && currentBIN.analysis.omega.kmChecksums[0]
-            ? "<p><strong>Checksum KM:</strong> " + currentBIN.analysis.omega.kmChecksums[0].name + " @ " + padHex(currentBIN.analysis.omega.kmChecksums[0].storedAt) + "</p>"
-            : "<p><strong>Checksum KM:</strong> no ligado; revisar copias espejo</p>") +
-        (currentBIN.analysis && currentBIN.analysis.omega
-            ? "<p><strong>Mente:</strong> " + currentBIN.analysis.omega.thinking + "</p>"
-            : "");
-    openLab("COMPARADOR 2 BIN", html);
-    if (currentBIN.analysis && currentBIN.analysis.omega) {
-        $("omegaThink").textContent = "Par analizado: " + diffs.length + " bytes cambian entre los dos archivos.";
-    }
+    const omega = currentBIN.analysis && currentBIN.analysis.omega;
+    const world = omega && omega.diffWorld ? omega.diffWorld : MindEngine.classifyDiffs(
+        currentBIN.original,
+        OmegaKernel.compareBins[0].bytes,
+        { vins: Hunters.huntVIN(currentBIN.original), vins2: Hunters.huntVIN(OmegaKernel.compareBins[0].bytes) }
+    );
+    renderDiffTable(world);
+    refreshIdentity();
+    showHEX(currentBIN.working);
+    focusPanel("diffPanel");
+    if (omega) $("omegaThink").textContent = omega.thinking;
 }
 
 function needAnalysis() {
@@ -612,9 +776,15 @@ function exportReport() {
 function closeProject() {
     currentBIN = null;
     lastSimulation = null;
+    OmegaKernel.compareBins = [];
     $("fileName").textContent = "Ninguno";
     $("fileSize").textContent = "0";
-    $("hexViewer").textContent = "";
+    if ($("bin1Name")) $("bin1Name").textContent = "Ninguno";
+    if ($("bin2Name")) $("bin2Name").textContent = "Ninguno";
+    refreshIdentity();
+    renderDiffTable(null);
+    if ($("hexViewer")) $("hexViewer").innerHTML = "";
+    if ($("hexViewer2")) $("hexViewer2").innerHTML = "";
     setStatus("LISTO", true);
 }
 
@@ -622,87 +792,33 @@ function wireUI() {
     bindClick("openBtn", () => $("fileInput").click());
     bindClick("openBtnTop", () => $("fileInput").click());
     $("fileInput").addEventListener("change", loadBIN);
-    $("compareInput").addEventListener("change", loadCompare);
+    if ($("compareInput")) $("compareInput").addEventListener("change", loadCompare);
     if ($("fileInput2")) $("fileInput2").addEventListener("change", loadBIN2);
 
     bindClick("analyzeBtn", runAnalysis);
     bindClick("analyzeBtnTop", runAnalysis);
     bindClick("saveBinBtn", runGenerateBIN);
+    bindClick("saveAlgoBtn", saveAlgorithm);
+    bindClick("saveAlgoBtnTop", saveAlgorithm);
     bindClick("exportReportBtn", exportReport);
     bindClick("closeProjectBtn", closeProject);
     bindClick("memoryMapBtn", () => focusPanel("memoryPanel"));
-    bindClick("memoryMapBtnTop", () => focusPanel("memoryPanel"));
     bindClick("countersBtn", () => focusPanel("counterPanel"));
-    bindClick("countersBtnTop", () => focusPanel("counterPanel"));
     bindClick("checksumBtn", () => focusPanel("checksumPanel"));
-    bindClick("checksumBtnTop", () => focusPanel("checksumPanel"));
-    bindClick("vinHunterBtn", () => {
-        if (!needBIN()) return;
-        const found = (currentBIN.analysis && currentBIN.analysis.vins) || Hunters.huntVIN(currentBIN.original);
-        if (!found.length) {
-            alert("VIN no encontrado en el dump. El nombre del archivo no cuenta.");
-            return;
-        }
-        alert(found.map((v) => {
-            const id = MindEngine.decodeVin(v.value);
-            return v.value + " @ " + v.addressText + (id && id.maker ? " → " + id.maker : "");
-        }).join("\n"));
-    });
-    bindClick("serialHunterBtn", () => {
-        if (!needBIN()) return;
-        const found = (currentBIN.analysis && currentBIN.analysis.serials) || Hunters.huntSerial(currentBIN.original);
-        alert(found.length ? found.map((v) => v.value + " @ " + v.addressText).join("\n") : "Serial no encontrado");
-    });
-    bindClick("hoursHunterBtn", () => {
-        if (!needBIN()) return;
-        focusPanel("counterPanel");
-        const hours = currentBIN.analysis ? currentBIN.analysis.hoursHits : [];
-        openLab("HOURS HUNTER", hours.length
-            ? hours.map((h) => h.formula + " · " + h.addressText + " · " + h.value).join("<br>")
-            : "<p>Sin horas conocidas. Escríbelas arriba y analiza.</p>");
-    });
-    bindClick("universalCounterBtn", () => {
-        if (!needAnalysis()) return;
-        focusPanel("counterPanel");
-        openLab("UNIVERSAL COUNTER", "<pre>" + (currentBIN.analysis.omega ? currentBIN.analysis.omega.omegaCard : "") + "</pre>");
-    });
+    bindClick("vinHunterBtn", () => focusPanel("vinStrip"));
+    bindClick("diffBtn", () => focusPanel("diffPanel"));
     bindClick("dnaBtn", () => { if (!needAnalysis()) return; focusPanel("dnaPanel"); });
-    bindClick("dnaBtnTop", () => { if (!needAnalysis()) return; focusPanel("dnaPanel"); });
     bindClick("discoveryBtn", showDiscoveryBrain);
     bindClick("discoveryBtnTop", showDiscoveryBrain);
-    bindClick("hypothesisBtn", showHypotheses);
-    bindClick("correlationBtn", showCorrelation);
-    bindClick("predictorBtn", runSimulate);
-    bindClick("truthBtn", runValidate);
     bindClick("reasoningBtn", showReasoning);
-    bindClick("digitalTwinBtn", showTwin);
-    bindClick("digitalTwinBtnTop", showTwin);
-    bindClick("virtualEepromBtn", showTwin);
-    bindClick("binEvolutionBtn", showEvolution);
-    bindClick("stressTestBtn", showStress);
     bindClick("pickBin1", () => $("fileInput").click());
     bindClick("pickBin2", () => $("fileInput2").click());
     bindClick("analyzePairBtn", runPairAnalysis);
-    bindClick("autoKmBtn", runApply);
-    bindClick("autoChecksumBtn", runApply);
     bindClick("binGenBtn", runGenerateBIN);
     bindClick("binGenBtnTop", runGenerateBIN);
     bindClick("generateBinBtn", runGenerateBIN);
     bindClick("upaBtn", runUPA);
-    bindClick("validateBtnTop", runValidate);
     bindClick("reportBtnTop", exportReport);
-    bindClick("knowledgeBtn", showGraph);
-    bindClick("patternBtn", showAlgorithms);
-    bindClick("selfLearnBtn", showAlgorithms);
-    bindClick("omegaBtn", showOmega);
-    bindClick("omegaBtnTop", showOmega);
-    bindClick("forensicBtn", showForensic);
-    bindClick("unknownBtn", () => {
-        if (!needBIN()) return;
-        runAnalysis();
-        focusPanel("counterPanel");
-    });
-    bindClick("impossibleBtn", () => runAnalysis({ impossible: true }));
     bindClick("autopilotBtn", () => {
         if (OmegaKernel.compareBins.length) runPairAnalysis();
         else runAnalysis();
@@ -710,14 +826,41 @@ function wireUI() {
     bindClick("menuBtn", () => document.querySelector(".sidebar").classList.toggle("open"));
     bindClick("closeLab", () => $("labModal").classList.remove("open"));
     bindClick("algoLibraryBtn", showAlgorithms);
+    bindClick("algoLibraryBtnTop", showAlgorithms);
     bindClick("closeAlgo", () => $("algoModal").classList.remove("open"));
     bindClick("simBtn", runSimulate);
     bindClick("valBtn", runValidate);
     bindClick("applyBtn", runApply);
     bindClick("restoreBtn", runRestore);
-    bindClick("saveProjectBtn", showAlgorithms);
-    bindClick("compareBinBtn", () => $("compareInput").click());
 
+    if ($("algoBody")) {
+        $("algoBody").addEventListener("click", (event) => {
+            const row = event.target.closest("tr");
+            if (!row || !row.getAttribute("data-key")) return;
+            const item = (window._algoCatalog || []).find((a) => a.key === row.getAttribute("data-key"));
+            if (item) showAlgoDetail(item);
+        });
+    }
+    if ($("diffBody")) {
+        $("diffBody").addEventListener("click", (event) => {
+            const row = event.target.closest("tr");
+            if (!row || !row.getAttribute("data-addr") || !currentBIN) return;
+            const addr = Number(row.getAttribute("data-addr"));
+            const el = document.querySelector("#hexViewer [data-addr=\"" + addr + "\"]");
+            if (el) {
+                el.scrollIntoView({ block: "center" });
+                focusPanel("hexViewer");
+            }
+        });
+    }
+    if ($("hexViewer") && $("hexViewer2")) {
+        $("hexViewer").addEventListener("scroll", () => {
+            $("hexViewer2").scrollTop = $("hexViewer").scrollTop;
+        });
+        $("hexViewer2").addEventListener("scroll", () => {
+            $("hexViewer").scrollTop = $("hexViewer2").scrollTop;
+        });
+    }
     if ($("hexMode")) $("hexMode").onchange = () => {
         if (currentBIN) showHEX(currentBIN.working);
     };

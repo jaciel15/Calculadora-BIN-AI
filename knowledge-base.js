@@ -64,6 +64,33 @@ const KnowledgeBase = {
         if (hit.familyId) item.familyId = hit.familyId;
         if (hit.vinWmi) item.vinWmi = hit.vinWmi;
         if (fileName && item.files.indexOf(fileName) === -1) item.files.push(fileName);
+        item.steps = this.recipe(hit);
+        item.howManual = item.steps.map((s) => s.n + ". " + s.title + ": " + s.text).join(" ");
+        this.save(db);
+        return item;
+    },
+
+    recipe(hit) {
+        const hex = hit.hex || "—";
+        const addr = hit.addressText || (hit.address !== undefined ? "0x" + Number(hit.address).toString(16).toUpperCase() : "—");
+        const copies = (hit.copies && hit.copies.length) ? hit.copies.length : 1;
+        const endian = hit.endian === "BE" ? "big-endian (primero el byte alto)" : hit.endian === "BCD" ? "BCD" : "little-endian (primero el byte bajo)";
+        return [
+            { n: 1, title: "Identidad", text: "Busca un VIN de 17 caracteres dentro del dump. El nombre del archivo no cuenta. WMI: " + (hit.vinWmi || "si no hay VIN, usa solo la estructura.") },
+            { n: 2, title: "Dónde está", text: "El dato vive en " + addr + ", " + (hit.width || "?") + " bytes, " + endian + ". Copias: " + copies + "." },
+            { n: 3, title: "Fórmula", text: "Operación: " + (hit.formula || "X") + ". Ejemplo: valor " + (hit.value !== undefined ? hit.value : "?") + " se guarda como " + hex + "." },
+            { n: 4, title: "A mano", text: "1) Toma el KM. 2) Aplica " + (hit.formula || "X") + ". 3) Parte el resultado en bytes " + endian + ". 4) Escríbelos en las " + copies + " copias. 5) Si hay checksum pegado, recálculalo (SUM8/SUM16/CRC) y escríbelo al lado." },
+            { n: 5, title: "Cómo se encontró", text: hit.fromPair ? "Comparando dos BIN: la misma dirección cambia con los dos KM." : (hit.fromFamily ? "Familia de kernel reconocida por estructura." : (hit.fromMemory ? "La memoria ya había visto esta regla." : "Búsqueda matemática + copias + checksum.")) },
+            { n: 6, title: "Escritura", text: hit.writeHow || MathEngine.encodeWriteup(hit.formula || "X", hit.endian || "LE", hit.width || 2) }
+        ];
+    },
+
+    markUserSaved(name) {
+        const db = this.load();
+        const item = db.algorithms.find((a) => a.name === name);
+        if (!item) return null;
+        item.savedByUser = true;
+        item.userSaved = new Date().toISOString();
         this.save(db);
         return item;
     },

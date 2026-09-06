@@ -521,6 +521,21 @@ const OmegaKernel = {
         }
 
         const diffs = this.familyDiffs(bytes);
+        const vins2 = this.compareBins[0] ? MindEngine.extractVins(this.compareBins[0].bytes) : [];
+        const vinId2 = vins2[0] ? MindEngine.decodeVin(vins2[0].value) : null;
+        const kmCopies = best ? (best.copies || [best.address]).map((addr) => ({ address: addr, width: best.width, name: "KM" })) : [];
+        const diffWorld = this.compareBins[0]
+            ? MindEngine.classifyDiffs(bytes, this.compareBins[0].bytes, {
+                vins,
+                vins2,
+                kmCopies,
+                kmWidth: best ? best.width : 3,
+                checksums: kmChecksums.concat(checksums.filter((c) => c.status === "VALIDO" && c.storedAt !== null))
+            })
+            : { ranges: [], totalBytes: 0 };
+        if (diffWorld.ranges.length) {
+            say("DIFF MIND", diffWorld.totalBytes + " bytes cambian en " + diffWorld.ranges.length + " zonas");
+        }
         const links = this.correlate(best, checksums, copiesHidden, diffs);
         this.add(evidence, "CORRELATION", "links", { count: links.length }, links[0] ? links[0].confidence : 20, "regiones que cambian juntas");
         say("CORRELATION ENGINE", links.length + " vínculos");
@@ -569,11 +584,13 @@ const OmegaKernel = {
         }
         const thought = MindEngine.think({
             vinId,
+            vinId2,
             familyMatch,
             recalled,
             pairHits,
             best,
             diffs,
+            diffWorld,
             knownKm
         });
         say("TRUTH ENGINE", truth.status + " · " + truth.confidence + "%");
@@ -652,8 +669,11 @@ const OmegaKernel = {
             omegaCard,
             thinking: thought,
             vinId,
+            vinId2,
+            vins2,
             recalled,
             pairHits,
+            diffWorld,
             binsChecked,
             validChecksums: valid,
             errorChecksums: checksums.length - valid,
