@@ -155,6 +155,27 @@ class BINCore {
             this.addLog("TRUTH ENGINE", "Esta familia no se escribe: " + (bin.analysis.best.familyId || "desconocida"));
             return null;
         }
+        const machine = bin.analysis.omega && bin.analysis.omega.machine;
+        if (machine && typeof WriteMachine !== "undefined") {
+            const ghost = WriteMachine.ghost(machine, bin.original, newValue, bin.analysis.best);
+            if (ghost && ghost.blocked) {
+                this.addLog("MAQUINA SELLADA", ghost.reason);
+                return null;
+            }
+            if (ghost) {
+                const extra = ChecksumEngine.recalculate(ghost.bytes, bin.analysis.checksums || []);
+                this.addLog("MAQUINA SELLADA", ghost.proved.ok
+                    ? "Fantasma " + newValue + " KM · " + ghost.diffs.length + " bytes · el sello sigue cerrado"
+                    : "Fantasma " + newValue + " KM · el sello se rompe: " + ghost.proved.broken.join(", "));
+                return {
+                    applied: { bytes: ghost.bytes, copies: ghost.slots, hex: "" },
+                    repaired: extra.concat(ghost.repaired),
+                    copies: ghost.slots,
+                    checksums: extra.length + ghost.repaired.length,
+                    ghost
+                };
+            }
+        }
         const applied = EditorEngine.apply(bin.original, bin.analysis.best, newValue);
         const repaired = ChecksumEngine.recalculate(applied.bytes, bin.analysis.checksums);
         return {

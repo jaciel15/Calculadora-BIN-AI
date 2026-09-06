@@ -45,7 +45,7 @@ const EditorEngine = {
     },
 
     apply(bytes, hit, newValue) {
-        if (hit.fromStair && hit.familyId !== "YAMAHA_R5F10") {
+        if ((hit.fromStair || hit.fromWorld) && hit.familyId !== "YAMAHA_R5F10") {
             const written = FamilyLibrary.writeStair(new Uint8Array(bytes), hit, Number(newValue));
             return {
                 bytes: written.bytes,

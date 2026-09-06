@@ -620,6 +620,115 @@ const MindEngine = {
         return uniq.slice(0, 12);
     },
 
+    scanClosedCells(bytes, knownKm) {
+        const hits = [];
+        const scales = [
+            { formula: "X", enc: (k) => k, inv: (v) => v },
+            { formula: "X * 10", enc: (k) => k * 10, inv: (v) => v / 10 },
+            { formula: "X * 10 - 1", enc: (k) => k * 10 - 1, inv: (v) => (v + 1) / 10 },
+            { formula: "X * 10 - 5", enc: (k) => k * 10 - 5, inv: (v) => (v + 5) / 10 },
+            { formula: "X * 100", enc: (k) => k * 100, inv: (v) => v / 100 },
+            { formula: "X * 1000", enc: (k) => k * 1000, inv: (v) => v / 1000 }
+        ];
+        const chks = [
+            { name: "SUM8", size: 1, fn: (s, e) => ChecksumEngine.sum8(bytes, s, e) },
+            { name: "XOR8", size: 1, fn: (s, e) => ChecksumEngine.xor8(bytes, s, e) },
+            { name: "LRC", size: 1, fn: (s, e) => ChecksumEngine.lrc(bytes, s, e) },
+            { name: "SUM16", size: 2, fn: (s, e) => ChecksumEngine.sum16(bytes, s, e) }
+        ];
+        [2, 3, 4].forEach((width) => {
+            [true, false].forEach((little) => {
+                for (let i = 0; i + width + 1 <= bytes.length; i++) {
+                    const raw = MathEngine.fromBytes(bytes, i, width, little);
+                    if (raw === null) continue;
+                    const matched = [];
+                    if (knownKm !== null && knownKm !== undefined) {
+                        scales.forEach((scale) => {
+                            if (Math.abs(raw - scale.enc(knownKm)) <= 1) matched.push({ scale, km: knownKm });
+                        });
+                    } else {
+                        scales.forEach((scale) => {
+                            const km = scale.inv(raw);
+                            if (this.looksLikeKm(km)) matched.push({ scale, km: Math.round(km) });
+                        });
+                    }
+                    if (!matched.length) continue;
+                    chks.forEach((chk) => {
+                        if (i + width + chk.size > bytes.length) return;
+                        const calc = chk.fn(i, i + width);
+                        const storedLE = MathEngine.fromBytes(bytes, i + width, chk.size, true);
+                        const storedBE = MathEngine.fromBytes(bytes, i + width, chk.size, false);
+                        let endian = null;
+                        if (storedLE === calc) endian = "LE";
+                        else if (storedBE === calc) endian = "BE";
+                        if (!endian) return;
+                        const pick = matched[0];
+                        hits.push({
+                            fromMind: true,
+                            fromClosed: true,
+                            label: "KILOMETRAJE",
+                            name: "CELDA_" + pick.scale.formula.replace(/\s+/g, "") + "_" + (little ? "LE" : "BE") + width + "_" + chk.name,
+                            formula: pick.scale.formula,
+                            width,
+                            endian: little ? "LE" : "BE",
+                            copies: [i],
+                            address: i,
+                            addressText: Hunters.range(i, width),
+                            hex: MathEngine.hexBytes(bytes.slice(i, i + width)),
+                            numeric: pick.km,
+                            value: pick.km,
+                            writeHow: "Celda cerrada (no existe en calculadoras normales): el KM y su " +
+                                chk.name + " se demuestran solos. Payload " + width + "B " +
+                                (little ? "LE" : "BE") + " = " + pick.scale.formula +
+                                ". Checksum " + chk.name + " " + endian + " pegado en " +
+                                Hunters.range(i + width, chk.size) + ".",
+                            confidence: knownKm !== null && knownKm !== undefined ? 99.4 : 94.8,
+                            representation: "celda KM+" + chk.name,
+                            checksumAt: i + width,
+                            checksumName: chk.name,
+                            writable: true
+                        });
+                    });
+                }
+            });
+        });
+        const uniq = [];
+        const seen = new Set();
+        hits.sort((a, b) => b.confidence - a.confidence).forEach((hit) => {
+            const key = hit.address + "|" + hit.formula + "|" + hit.checksumName;
+            if (seen.has(key)) return;
+            seen.add(key);
+            uniq.push(hit);
+        });
+        return uniq.slice(0, 16);
+    },
+
+    decodeOracle(bytes, addr) {
+        if (!bytes || addr === undefined || addr < 0 || addr >= bytes.length) return "";
+        const padHexSafe = (n) => n.toString(16).toUpperCase().padStart(2, "0");
+        const lines = ["@" + Hunters.hexAddr(addr) + " = " + padHexSafe(bytes[addr])];
+        const add = (label, raw, extra) => {
+            if (raw === null || raw === undefined) return;
+            lines.push(label + " " + raw + extra);
+        };
+        add("byte", bytes[addr], "");
+        const le16 = MathEngine.fromBytes(bytes, addr, 2, true);
+        const be16 = MathEngine.fromBytes(bytes, addr, 2, false);
+        const le24 = MathEngine.fromBytes(bytes, addr, 3, true);
+        const be24 = MathEngine.fromBytes(bytes, addr, 3, false);
+        if (le16 !== null) add("LE16", le16, this.looksLikeKm(le16) ? " → KM" : (this.looksLikeKm(Math.round(le16 / 10)) ? " → ×10 = " + Math.round(le16 / 10) + " km" : ""));
+        if (be16 !== null) add("BE16", be16, this.looksLikeKm(be16) ? " → KM" : (this.looksLikeKm(Math.round(be16 / 10)) ? " → ×10 = " + Math.round(be16 / 10) + " km" : ""));
+        if (le24 !== null) add("LE24", le24, this.looksLikeKm(Math.round(le24 / 10)) ? " → ×10 = " + Math.round(le24 / 10) + " km" : "");
+        if (be24 !== null) add("BE24", be24, this.looksLikeKm(Math.round(be24 / 10)) ? " → ×10 = " + Math.round(be24 / 10) + " km" : "");
+        const bcd = MathEngine.fromBCD(bytes, addr, 3);
+        if (bcd !== null && this.looksLikeKm(bcd)) add("BCD3", bcd, " → KM");
+        if (typeof BinWorld !== "undefined" && typeof currentBIN !== "undefined" && currentBIN && currentBIN.analysis && currentBIN.analysis.omega && currentBIN.analysis.omega.world) {
+            const hint = BinWorld.hintAt(currentBIN.analysis.omega.world, addr);
+            if (hint) lines.push(hint);
+        }
+        return lines.join("  ·  ");
+    },
+
     scanRings(bytes) {
         const out = [];
         [0x10, 0x20].forEach((stride) => {
@@ -668,6 +777,9 @@ const MindEngine = {
     think(ctx) {
         const parts = [];
         parts.push("Recorro el archivo binario completo" + (ctx.size ? " (" + ctx.size + " bytes)" : "") + ". El nombre no cuenta.");
+        if (ctx.world && ctx.world.worlds && ctx.world.worlds[0]) {
+            parts.push("Mundo del chip: " + ctx.world.worlds[0].addrs.length + " huecos · " + ctx.world.worlds[0].formula + " · KM " + ctx.world.worlds[0].km + ".");
+        }
         if (ctx.best && ctx.best.fromStair) {
             parts.push("Rampa ±1 en " + (ctx.best.copies || []).length + " huecos. El KM actual es el más alto; las copias no son iguales.");
         }

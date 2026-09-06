@@ -1,3 +1,266 @@
+const CodeBook = {
+
+    list() {
+        return [
+            {
+                id: "YAMAHA_MT09_93C86",
+                name: "Yamaha MT-09 93C86",
+                origin: "DEMOSTRADO aquí · 4 BIN",
+                formula: "X",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "Rojo es KM tal cual (X) en 2 bytes little-endian. Seis ranuras de 4 bytes: 00 00 lo hi. Si el dump está swapeado, usa big-endian en el word.",
+                writeHow: "Escribe 00 00 lo hi en 0000–0017."
+            },
+            {
+                id: "YAMAHA_R5F10",
+                name: "Yamaha R5F10 anillo 32B",
+                origin: "DEMOSTRADO aquí · 8 BIN",
+                formula: "X * 10",
+                width: 3,
+                endian: "LE",
+                chk: "SUM16",
+                recipe: "Rojo es KM multiplicado x10 en 3 bytes little-endian (décimas). Morado es SUM16 big-endian de esos 3 bytes y se escribe en los 2 últimos de la página (offset +30). Rampa +1 en páginas de 32 bytes. No toques páginas FF.",
+                writeHow: "Reescribe todo el anillo del banco. Última página = KM×10."
+            },
+            {
+                id: "ODYSSEY_DENSO_93C86",
+                name: "Odyssey Denso 93C86 fino",
+                origin: "LUGAR DEMOSTRADO · no escribir",
+                formula: "FINO",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "Rojo marca el fino AF xx yy FF × 3 en 0062. Aún no hay fórmula de escritura. No generar BIN.",
+                writeHow: "NO escribir. Falta un tercer BIN."
+            },
+            {
+                id: "GEN_X10_LE24_SUM16",
+                name: "Genérico KM×10 LE24 + SUM16",
+                origin: "Patrón público EEPROM",
+                formula: "X * 10",
+                width: 3,
+                endian: "LE",
+                chk: "SUM16",
+                recipe: "Rojo es KM multiplicado x10 en 3 bytes little-endian. Morado es la suma de esos 3 bytes (SUM16) y ahí se escribe el checksum.",
+                writeHow: "Codifica KM×10 en 3 bytes LE y recalcula SUM16."
+            },
+            {
+                id: "GEN_X_LE16",
+                name: "Genérico KM uint16 LE",
+                origin: "Patrón público EEPROM",
+                formula: "X",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "Rojo es KM tal cual en 2 bytes little-endian (lo hi).",
+                writeHow: "Escribe el KM en lo + hi."
+            },
+            {
+                id: "GEN_X_BE16",
+                name: "Genérico KM uint16 BE",
+                origin: "Patrón público EEPROM",
+                formula: "X",
+                width: 2,
+                endian: "BE",
+                chk: "",
+                recipe: "Rojo es KM tal cual en 2 bytes big-endian (hi lo).",
+                writeHow: "Escribe el KM en hi + lo."
+            },
+            {
+                id: "GEN_X10_LE24",
+                name: "Genérico KM×10 LE24",
+                origin: "Patrón público EEPROM",
+                formula: "X * 10",
+                width: 3,
+                endian: "LE",
+                chk: "",
+                recipe: "Rojo es KM multiplicado x10 en 3 bytes little-endian. Sin checksum dicho.",
+                writeHow: "KM×10 en lo mid hi."
+            },
+            {
+                id: "GEN_BCD",
+                name: "Genérico KM BCD",
+                origin: "Patrón público EEPROM",
+                formula: "BCD",
+                width: 3,
+                endian: "BCD",
+                chk: "",
+                recipe: "Rojo es KM en BCD: cada nibble es un dígito decimal.",
+                writeHow: "Escribe el KM en BCD."
+            },
+            {
+                id: "GEN_X10_SUM8",
+                name: "Genérico KM×10 + SUM8",
+                origin: "Patrón público EEPROM",
+                formula: "X * 10",
+                width: 3,
+                endian: "LE",
+                chk: "SUM8",
+                recipe: "Rojo es KM multiplicado x10 en 3 bytes. Azul o morado es la suma de esos 3 bytes (SUM8) y ahí se escribe.",
+                writeHow: "KM×10 LE24 y SUM8 al lado."
+            },
+            {
+                id: "GEN_X10_M1_LE24_SUM16",
+                name: "Genérico KM×10-1 LE24 + SUM16",
+                origin: "Patrón público EEPROM",
+                formula: "X * 10 - 1",
+                width: 3,
+                endian: "LE",
+                chk: "SUM16",
+                recipe: "Rojo es KM×10-1 en 3 bytes LE. Morado es SUM16 de esos 3 bytes.",
+                writeHow: "KM×10-1 LE24 y SUM16."
+            },
+            {
+                id: "GEN_X_LE16_SUM8",
+                name: "Genérico KM uint16 LE + SUM8",
+                origin: "Patrón público EEPROM",
+                formula: "X",
+                width: 2,
+                endian: "LE",
+                chk: "SUM8",
+                recipe: "Rojo es KM en 2 bytes LE. Azul es SUM8 de esos 2 bytes.",
+                writeHow: "uint16 LE y SUM8 al lado."
+            },
+            {
+                id: "GEN_X10_BE24",
+                name: "Genérico KM×10 BE24",
+                origin: "Patrón público EEPROM",
+                formula: "X * 10",
+                width: 3,
+                endian: "BE",
+                chk: "",
+                recipe: "Rojo es KM×10 en 3 bytes big-endian.",
+                writeHow: "KM×10 hi mid lo."
+            }
+        ];
+    },
+
+    find(id) {
+        return this.list().find((item) => item.id === id) || null;
+    },
+
+    encode(code, km) {
+        if (code.formula === "BCD") return MathEngine.toBCD(Number(km), code.width);
+        const value = MathEngine.applyFormula(Number(km), code.formula);
+        return MathEngine.toBytes(value, code.width, code.endian !== "BE" && code.endian !== "BCD");
+    },
+
+    checksumAt(bytes, addr, code) {
+        const width = code.width || 3;
+        if (addr + width > bytes.length) return null;
+        if (code.chk === "SUM8") {
+            const calc = ChecksumEngine.sum8(bytes, addr, addr + width);
+            const spots = [addr + width];
+            if (spots[0] < bytes.length && bytes[spots[0]] === calc) {
+                return { name: "SUM8", storedAt: spots[0], calc, size: 1, endian: "LE" };
+            }
+            return null;
+        }
+        if (code.chk === "SUM16") {
+            const calc = ChecksumEngine.sum16(bytes, addr, addr + width);
+            const hi = (calc >> 8) & 0xFF;
+            const lo = calc & 0xFF;
+            const trials = [
+                { at: addr + width, a: lo, b: hi, endian: "LE" },
+                { at: addr + width, a: hi, b: lo, endian: "BE" },
+                { at: addr + 30, a: hi, b: lo, endian: "BE" }
+            ];
+            for (let i = 0; i < trials.length; i++) {
+                const t = trials[i];
+                if (t.at + 1 >= bytes.length) continue;
+                if (bytes[t.at] === t.a && bytes[t.at + 1] === t.b) {
+                    return { name: "SUM16", storedAt: t.at, calc, size: 2, endian: t.endian };
+                }
+            }
+            return null;
+        }
+        return null;
+    },
+
+    hunt(bytes, knownKm, bytes2, km2) {
+        if (knownKm === null || knownKm === undefined || !bytes) return [];
+        const index = MathEngine.indexFile(bytes);
+        const hits = [];
+        const codes = this.list().filter((c) => c.formula && c.formula !== "FINO");
+        if (typeof KnowledgeBase !== "undefined") {
+            KnowledgeBase.learnedFamilies().forEach((fam) => {
+                if (!fam.formula) return;
+                codes.push({
+                    id: fam.key,
+                    name: "Aprendida " + fam.formula,
+                    formula: fam.formula,
+                    width: fam.width || 3,
+                    endian: fam.endian || "LE",
+                    chk: (fam.checksums && fam.checksums[0] && fam.checksums[0].name) || "",
+                    writeHow: fam.writeHow || "",
+                    recipe: "Familia aprendida: " + fam.formula
+                });
+            });
+        }
+        codes.forEach((code) => {
+            let pattern;
+            try {
+                pattern = this.encode(code, knownKm);
+            } catch (error) {
+                return;
+            }
+            let locs = MathEngine.lookupIndex(index, pattern);
+            if (!locs.length) locs = MathEngine.findPattern(bytes, pattern);
+            if (!locs.length || locs.length > 40) return;
+            if (bytes2 && km2 !== null && km2 !== undefined) {
+                const pat2 = this.encode(code, km2);
+                locs = locs.filter((addr) => {
+                    if (addr + pat2.length > bytes2.length) return false;
+                    for (let i = 0; i < pat2.length; i++) {
+                        if (bytes2[addr + i] !== pat2[i]) return false;
+                    }
+                    return true;
+                });
+                if (!locs.length) return;
+            }
+            let chkHits = 0;
+            let chk = null;
+            if (code.chk) {
+                locs.forEach((addr) => {
+                    const found = this.checksumAt(bytes, addr, code);
+                    if (found) {
+                        chkHits++;
+                        if (!chk) chk = found;
+                    }
+                });
+            }
+            const pair = !!(bytes2 && km2 !== null && km2 !== undefined);
+            hits.push({
+                fromMind: true,
+                fromCodeBook: true,
+                fromPair: pair,
+                label: "KILOMETRAJE",
+                name: code.id,
+                familyId: code.id,
+                formula: code.formula,
+                width: code.width,
+                endian: code.endian,
+                copies: locs,
+                address: locs[0],
+                addressText: Hunters.range(locs[0], code.width),
+                hex: MathEngine.hexBytes(bytes.slice(locs[0], locs[0] + code.width)),
+                numeric: knownKm,
+                value: knownKm,
+                writeHow: (code.writeHow || code.recipe || code.formula) +
+                    (chk ? " Checksum " + chk.name + " @ " + Hunters.hexAddr(chk.storedAt) : ""),
+                confidence: Math.min(99.5, 86 + Math.min(locs.length, 6) * 1.4 + (chkHits ? 8 : 0) + (pair ? 6 : 0)),
+                representation: "libro " + code.id,
+                checksumAt: chk ? chk.storedAt : null,
+                checksumName: chk ? chk.name : "",
+                writable: code.formula !== "FINO"
+            });
+        });
+        return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 12);
+    }
+};
+
 const KnowledgeBase = {
 
     KEY: "velocimetros-cdmx-kb-v1",

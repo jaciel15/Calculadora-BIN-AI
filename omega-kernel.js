@@ -282,6 +282,11 @@ const OmegaKernel = {
         if (hit.fromLesson) score += 18;
         if (hit.fromDeep) score += 12;
         if (hit.fromRecipe) score += 24;
+        if (hit.fromCodeBook) score += 20;
+        if (hit.fromCodeBook && hit.checksumName) score += 8;
+        if (hit.fromWorld) score += 32;
+        if (hit.fromWorld && hit.checksumName) score += 8;
+        if (hit.fromClosed) score += 26;
         if (hit.fromFamily && hit.writable === false) score += 8;
         if (hit.scatter) score -= 10;
         return score;
@@ -419,8 +424,11 @@ const OmegaKernel = {
                 "Siguiente: cargar KM conocido o más BINs de la misma familia"
             ].join("\n");
         }
-        const familyLine = best.familyId ? "Familia kernel: " + best.familyId : null;
+        const familyLine = best.familyId ? "Familia kernel: " + best.familyId : (best.fromWorld ? "MUNDO BIN" : null);
         const chk = checksums.find((c) => c.status === "VALIDO");
+        const worldLine = best.fromWorld
+            ? "Mundo: " + (best.copies || []).length + " huecos · " + (best.representation || "rejilla")
+            : null;
         const stairLine = best.fromStair
             ? "Lectura: TODO el BIN · rampa " + ((best.copies || []).length) + " huecos ±1"
             : null;
@@ -431,6 +439,7 @@ const OmegaKernel = {
             "Tamaño: " + best.width + " bytes",
             "Representación: " + (best.representation || best.endian || "desconocida"),
             "Transformación candidata: " + best.formula,
+            worldLine,
             stairLine,
             "Correlación: " + (links[0] ? links[0].confidence + "%" : "0%"),
             "BINs comprobados: " + binsChecked,
@@ -478,6 +487,20 @@ const OmegaKernel = {
             }
         }
 
+        const world = typeof BinWorld !== "undefined"
+            ? BinWorld.map(bytes, {
+                knownKm,
+                pairBytes: this.compareBins[0] ? this.compareBins[0].bytes : null,
+                knownKm2: options.knownKm2
+            })
+            : null;
+        if (world) {
+            this.add(evidence, "MUNDO BIN", "passport", { worlds: world.worlds.length, page: world.page.size }, world.hits.length ? 97 : 80, "anatomía completa del chip");
+            say("MUNDO BIN", world.headline + " · vivos " + world.living + " · página " + (world.page.size || "—"));
+            if (world.worlds[0]) say("MUNDO BIN", world.worlds[0].writeHow);
+            if (world.mirrors[0]) say("MUNDO BIN", world.mirrors[0].label);
+        }
+
         const map = this.memoryMapAI(bytes);
         this.add(evidence, "MEMORY MAP AI", "regions", { count: map.length }, 80, "entropía + constantes + ASCII");
         say("MEMORY MAP AI", map.length + " regiones estructurales");
@@ -502,10 +525,17 @@ const OmegaKernel = {
                 " · COMP " + ((MarkBook.lessons.COMP || []).length));
         }
         let mileageHits = Hunters.huntValue(bytes, knownKm, "KILOMETRAJE", preferDiff.size ? preferDiff : null);
+        if (world && world.hits) world.hits.forEach((hit) => mileageHits.unshift(hit));
         if (familyMatch && familyMatch.hits) {
             familyMatch.hits.forEach((hit) => mileageHits.unshift(hit));
         }
         const km2 = options.knownKm2;
+        const bookHits = CodeBook.hunt(bytes, knownKm, this.compareBins[0] ? this.compareBins[0].bytes : null, km2);
+        bookHits.forEach((hit) => mileageHits.unshift(hit));
+        if (bookHits.length) {
+            say("LIBRO CAZADOR", bookHits[0].name + " · " + bookHits[0].formula + " · " +
+                bookHits[0].copies.length + " sitios" + (bookHits[0].checksumName ? " · " + bookHits[0].checksumName : ""));
+        }
         const recipeHits = MindEngine.fromHelpRecipe(bytes, knownKm);
         recipeHits.forEach((hit) => mileageHits.unshift(hit));
         if (recipeHits.length) {
@@ -527,6 +557,12 @@ const OmegaKernel = {
             : [];
         pairHits.forEach((hit) => mileageHits.unshift(hit));
         if (pairHits.length) say("PAIR MIND", pairHits[0].formula + " demostrado por los dos BIN");
+        const closed = MindEngine.scanClosedCells(bytes, knownKm);
+        closed.forEach((hit) => mileageHits.unshift(hit));
+        if (closed.length) {
+            say("CELDA CERRADA", closed[0].writeHow);
+            say("CELDA CERRADA", closed.length + " bucles KM+checksum en un solo BIN (sin necesidad de par)");
+        }
 
         let hoursHits = Hunters.huntValue(bytes, knownHours, "HORAS MOTOR");
         say("MOTOR MATEMATICO", MathEngine.lastComboCount + " combinaciones de todo tipo (tope " + MathEngine.COMBO_CAP + ")");
@@ -676,6 +712,18 @@ const OmegaKernel = {
                 confidence: 98.4,
                 note: "El par demuestra la misma fórmula en la misma dirección. No usé el nombre del archivo."
             };
+        } else if (best && best.fromWorld && (best.copies || []).length >= 4) {
+            truth = {
+                status: "DEMOSTRADO",
+                confidence: Math.max(truth.confidence, 98.8),
+                note: "Mundo del chip: rejilla + KM más alto" + (best.checksumName ? " + suma de bytes que cambian." : ".")
+            };
+        } else if (best && best.fromClosed) {
+            truth = {
+                status: "DEMOSTRADO",
+                confidence: 99.1,
+                note: "Celda cerrada: el KM y su checksum se prueban solos en un solo BIN."
+            };
         } else if (best && best.fromStair && !best.scatter && (best.copies || []).length >= 6) {
             truth = {
                 status: "DEMOSTRADO",
@@ -689,6 +737,7 @@ const OmegaKernel = {
             familyMatch,
             recalled,
             pairHits,
+            world,
             best,
             diffs,
             diffWorld,
@@ -745,6 +794,14 @@ const OmegaKernel = {
             confidence: truth.confidence
         });
 
+        const machine = typeof WriteMachine !== "undefined"
+            ? WriteMachine.seal(bytes, { best, truth, world, kmChecksums, closed })
+            : null;
+        if (machine) {
+            say("MAQUINA SELLADA", machine.headline);
+            if (machine.locked) say("MAQUINA SELLADA", "Contrato listo. El KM fantasma muestra cada byte antes de escribir.");
+        }
+
         const omegaCard = this.buildOmegaCard(best, truth, stress, links, binsChecked, checksums);
         const twin = {
             physical: bin.fileName,
@@ -792,6 +849,9 @@ const OmegaKernel = {
             vins2,
             recalled,
             pairHits,
+            closedCells: closed,
+            world,
+            machine,
             diffWorld,
             binsChecked,
             validChecksums: valid,

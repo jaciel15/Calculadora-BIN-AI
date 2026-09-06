@@ -1,5 +1,6 @@
 let currentBIN = null;
 let lastSimulation = null;
+let lastGhost = null;
 
 const LabMode = {
     current: "KM",
@@ -75,6 +76,20 @@ function collectMarks() {
         });
     }
     const guiding = typeof MarkBook !== "undefined" && MarkBook.guiding();
+    const closed = omega && omega.closedCells ? omega.closedCells : [];
+    const worldHits = omega && omega.world && omega.world.hits ? omega.world.hits : [];
+    if (!guiding && worldHits.length) {
+        worldHits.slice(0, 2).forEach((hit) => {
+            (hit.copies || [hit.address]).forEach((addr) => paint(addr, hit.width || 2, "hex-km"));
+            if (hit.checksumAt !== undefined) paint(hit.checksumAt, hit.checksumName && /16/.test(hit.checksumName) ? 2 : 1, "hex-chk");
+        });
+    }
+    if (!guiding && closed.length) {
+        closed.forEach((cell) => {
+            paint(cell.address, cell.width || 3, "hex-km");
+            if (cell.checksumAt !== undefined) paint(cell.checksumAt, cell.checksumName === "SUM8" || cell.checksumName === "XOR8" || cell.checksumName === "LRC" ? 1 : 2, "hex-chk");
+        });
+    }
     if (!guiding && LabMode.is("KM") && currentBIN.analysis && currentBIN.analysis.best) {
         const hit = currentBIN.analysis.best;
         (hit.copies || [hit.address]).forEach((addr) => paint(addr, hit.width || 2, "hex-km"));
@@ -99,6 +114,9 @@ function collectMarks() {
         Hunters.huntVIN(b).forEach((v) => {
             (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
         });
+    }
+    if (lastGhost && lastGhost.diffs) {
+        lastGhost.diffs.forEach((d) => paint(d.addr, 1, "hex-ghost"));
     }
     if (typeof MarkBook !== "undefined") {
         if (MarkBook.revealed) {
@@ -143,6 +161,20 @@ function paintHex(targetId, bytes, marks) {
     el.innerHTML = html;
 }
 
+function bindHexOracle() {
+    const view = $("hexViewer");
+    if (!view || view.getAttribute("data-oracle")) return;
+    view.setAttribute("data-oracle", "1");
+    view.addEventListener("mouseover", (event) => {
+        const el = event.target && event.target.closest ? event.target.closest("[data-addr]") : null;
+        if (!el || !currentBIN) return;
+        const addr = Number(el.getAttribute("data-addr"));
+        if (!Number.isFinite(addr)) return;
+        const box = $("hexOracle");
+        if (box) box.textContent = MindEngine.decodeOracle(currentBIN.working || currentBIN.original, addr);
+    });
+}
+
 function showHEX(bytes) {
     const marks = collectMarks();
     const view = bytes || (currentBIN ? currentBIN.working : null);
@@ -157,6 +189,7 @@ function showHEX(bytes) {
         $("hexViewer2").innerHTML = "Carga el BIN 2. Aquí se pinta el otro archivo y en naranja todo lo que cambia (VIN, KM y el resto).";
         if ($("hexLabel2")) $("hexLabel2").textContent = "BIN 2";
     }
+    bindHexOracle();
 }
 
 function showVinCard(which, bytes) {
@@ -396,6 +429,112 @@ function fillEditorFromBest(analysis) {
     if (!LabMode.is("VIN")) $("dataType").value = "KILOMETRAJE (KM)";
 }
 
+function renderWorld(world) {
+    const pass = $("worldPassport");
+    const body = $("worldBody");
+    const strip = $("worldStrip");
+    if (!pass) return;
+    if (!world) {
+        pass.textContent = "Abre un BIN y pulsa ANALIZAR. El mundo recorre el archivo entero.";
+        if (body) body.innerHTML = "";
+        if (strip) strip.innerHTML = "";
+        return;
+    }
+    pass.textContent = world.passport;
+    if (strip) {
+        strip.innerHTML = (world.strip || []).map((cell) =>
+            "<span class=\"world-cell " + cell.tag + "\" data-addr=\"" + cell.start + "\" title=\"0x" + padHex(cell.start, 4) + "\"></span>"
+        ).join("");
+        if (!strip.getAttribute("data-bound")) {
+            strip.setAttribute("data-bound", "1");
+            strip.addEventListener("click", (event) => {
+                const el = event.target && event.target.closest ? event.target.closest("[data-addr]") : null;
+                if (!el) return;
+                const addr = Number(el.getAttribute("data-addr"));
+                if (Number.isFinite(addr)) scrollHexTo(addr);
+            });
+        }
+    }
+    if (body) {
+        body.innerHTML = (world.worlds || []).map((w) =>
+            "<tr data-addr=\"" + w.high + "\">" +
+            "<td>" + w.kind + "</td>" +
+            "<td>" + w.km + "</td>" +
+            "<td>" + w.formula + " " + w.endian + w.width + "</td>" +
+            "<td>" + w.addrs.length + "</td>" +
+            "<td>0x" + padHex(w.high, 4) + "</td>" +
+            "<td>" + (w.checksum ? w.checksum.name : "—") + "</td>" +
+            "<td>" + Number(w.confidence).toFixed(1) + "</td>" +
+            "</tr>"
+        ).join("");
+        if (!body.getAttribute("data-bound")) {
+            body.setAttribute("data-bound", "1");
+            body.addEventListener("click", (event) => {
+                const row = event.target && event.target.closest ? event.target.closest("tr[data-addr]") : null;
+                if (!row) return;
+                const addr = Number(row.getAttribute("data-addr"));
+                if (Number.isFinite(addr)) scrollHexTo(addr);
+            });
+        }
+    }
+}
+
+function renderMachine(machine) {
+    const card = $("machineCard");
+    const proof = $("machineProof");
+    const body = $("ghostBody");
+    if (!card) return;
+    if (!machine) {
+        card.textContent = "Analiza. Si el KM y sus sumas se demuestran, se sella el contrato.";
+        if (proof) proof.textContent = "Sin sello.";
+        if (body) body.innerHTML = "";
+        lastGhost = null;
+        return;
+    }
+    card.textContent = machine.card;
+    if (proof) proof.textContent = machine.locked ? machine.headline : "ABIERTA · aún no se escribe.";
+    if (body) body.innerHTML = "";
+    if ($("ghostKm") && !$("ghostKm").value && machine.kmNow !== null) $("ghostKm").value = String(machine.kmNow);
+}
+
+function showGhostTable(ghost) {
+    const body = $("ghostBody");
+    const proof = $("machineProof");
+    lastGhost = ghost;
+    if (body) {
+        body.innerHTML = !ghost || !ghost.diffs
+            ? ""
+            : ghost.diffs.slice(0, 48).map((d) =>
+                "<tr data-addr=\"" + d.addr + "\"><td>0x" + padHex(d.addr, 4) + "</td><td>" +
+                padHex(d.from, 2) + "</td><td>" + padHex(d.to, 2) + "</td></tr>"
+            ).join("");
+    }
+    if (proof && ghost) {
+        if (ghost.blocked) proof.textContent = ghost.reason;
+        else if (ghost.proved && ghost.proved.ok) {
+            proof.textContent = "FANTASMA CIERRA · " + ghost.km + " KM · " + ghost.diffs.length + " bytes · el sello sigue intacto";
+        } else if (ghost.proved) {
+            proof.textContent = "FANTASMA ROMPE · " + (ghost.proved.broken || []).join(" · ");
+        }
+    }
+}
+
+function runGhost() {
+    if (!needBIN() || !currentBIN.analysis) return;
+    const machine = currentBIN.analysis.omega && currentBIN.analysis.omega.machine;
+    if (!machine || typeof WriteMachine === "undefined") return;
+    const raw = ($("ghostKm") && $("ghostKm").value) || ($("newValue") && $("newValue").value) || "";
+    const km = raw.replace(/[^\d]/g, "");
+    if (!km) {
+        alert("Escribe el KM fantasma.");
+        return;
+    }
+    const ghost = WriteMachine.ghost(machine, currentBIN.original, Number(km), currentBIN.analysis.best);
+    showGhostTable(ghost);
+    if (ghost && !ghost.blocked) showHEX(ghost.bytes);
+    addLogRows();
+}
+
 function renderOmega(analysis) {
     const omega = analysis.omega;
     if (!omega) return;
@@ -411,6 +550,8 @@ function renderAnalysis(analysis) {
     renderDNA(analysis.dna, analysis.discovery);
     fillEditorFromBest(analysis);
     renderOmega(analysis);
+    renderWorld(analysis.omega ? analysis.omega.world : null);
+    renderMachine(analysis.omega ? analysis.omega.machine : null);
     $("checkOk").textContent = "✔ " + analysis.validChecksums + " Válidos";
     $("checkBad").textContent = "✖ " + analysis.errorChecksums + " Errores";
     $("chipName").textContent = currentBIN.chip;
@@ -570,6 +711,7 @@ function runSimulate() {
         : $("newValue").value.replace(/[^\d]/g, "");
     lastSimulation = binCore.simulate(value, kind);
     if (!lastSimulation) return;
+    if (lastSimulation.ghost) showGhostTable(lastSimulation.ghost);
     if ($("aiEdited") && currentBIN.analysis) {
         $("aiEdited").textContent = kind === "VIN"
             ? "VIN " + value + " · " + lastSimulation.copies + " copias · layout propio"
@@ -635,6 +777,7 @@ function runRestore() {
     if (!needBIN()) return;
     binCore.restore();
     lastSimulation = null;
+    lastGhost = null;
     showHEX(currentBIN.working);
     $("resumeReady").textContent = "RESTAURADO";
     addLogRows();
@@ -872,10 +1015,70 @@ function saveAlgoForm() {
     showAlgoDetail(item);
 }
 
+function associateSelectedCode() {
+    const item = window._selectedAlgo;
+    if (!item) {
+        alert("Elige un código de la lista.");
+        return;
+    }
+    const book = (item.codeId && CodeBook.find(item.codeId)) || CodeBook.find(item.name);
+    const recipe = (book && book.recipe) || item.recipe || item.writeHow || "";
+    const formula = book ? book.formula : item.formula;
+    const width = book ? book.width : (item.width > 16 ? 3 : item.width);
+    const endian = book ? book.endian : item.endian;
+    const chk = book ? book.chk : item.chk;
+    if ($("helpRecipe")) $("helpRecipe").value = recipe;
+    if (typeof MarkBook !== "undefined") MarkBook.persist();
+    if (formula && formula !== "FINO" && formula !== "DEMOSTRADO" && formula !== "LUGAR DEMOSTRADO") {
+        KnowledgeBase.upsertManual({
+            name: (book && book.name) || item.name,
+            formula,
+            width: width || 3,
+            endian: endian || "LE",
+            checksums: []
+        });
+    }
+    $("algoModal").classList.remove("open");
+    setStatus("CÓDIGO ASOCIADO: " + ((book && book.name) || item.name), true);
+    alert("Código asociado.\n\n" + recipe + "\n\nPinta los colores (rojo KM, morado SUM) y pulsa ANALIZAR. La receta ya está en CÓMO LO HAGO.");
+}
+
+function showCodeBook() {
+    showAlgorithms();
+    if ($("algoDetail")) {
+        $("algoDetail").innerHTML = "<p><strong>LIBRO DE CÓDIGOS.</strong> Los 3 primeros son de este laboratorio (Yamaha / Odyssey). El resto son patrones públicos de EEPROM. Elige uno y pulsa ASOCIAR AL BIN. No son códigos robados de otros programas.</p>";
+    }
+}
+
 function showAlgorithms() {
     const db = KnowledgeBase.load();
     const body = $("algoBody");
     const catalog = [];
+    CodeBook.list().forEach((c, index) => {
+        catalog.push({
+            key: "c" + index,
+            name: c.name,
+            formula: c.formula,
+            width: c.width,
+            endian: c.endian,
+            writeHow: c.recipe,
+            hits: 1,
+            lastFile: "LIBRO",
+            codeId: c.id,
+            recipe: c.recipe,
+            chk: c.chk,
+            origin: c.origin,
+            steps: KnowledgeBase.recipe({
+                formula: c.formula,
+                width: c.width,
+                endian: c.endian,
+                writeHow: c.writeHow,
+                addressText: c.origin,
+                fromMemory: true,
+                value: c.name
+            })
+        });
+    });
     FamilyLibrary.list().forEach((f, index) => {
         catalog.push({
             key: "k" + index,
@@ -1134,7 +1337,9 @@ function exportReport() {
         analysis && analysis.best ? "Algoritmo: " + analysis.best.formula : "Sin análisis",
         analysis && analysis.best ? "Dirección: " + analysis.best.addressText : "",
         analysis && analysis.dna ? "DNA: " + analysis.dna.score + "%" : "",
-        omega ? "Truth: " + omega.truth.status + " " + omega.truth.confidence + "%" : ""
+        omega ? "Truth: " + omega.truth.status + " " + omega.truth.confidence + "%" : "",
+        omega && omega.world ? omega.world.passport : "",
+        omega && omega.machine ? omega.machine.card : ""
     ];
     downloadBlob(currentBIN.fileName + "_reporte.txt", [lines.join("\r\n")], "text/plain");
 }
@@ -1149,6 +1354,9 @@ function closeProject() {
     if ($("bin2Name")) $("bin2Name").textContent = "Ninguno";
     refreshIdentity();
     renderDiffTable(null);
+    renderWorld(null);
+    renderMachine(null);
+    lastGhost = null;
     if ($("hexViewer")) $("hexViewer").innerHTML = "";
     if ($("hexViewer2")) $("hexViewer2").innerHTML = "";
     if (typeof MarkBook !== "undefined") MarkBook.clear();
@@ -1189,6 +1397,10 @@ function wireUI() {
         });
     }
     bindClick("closeProjectBtn", closeProject);
+    bindClick("machineBtn", () => focusPanel("machinePanel"));
+    bindClick("worldBtn", () => focusPanel("worldPanel"));
+    bindClick("ghostBtn", runGhost);
+    if ($("ghostKm")) $("ghostKm").addEventListener("change", runGhost);
     bindClick("memoryMapBtn", () => focusPanel("memoryPanel"));
     bindClick("countersBtn", () => focusPanel("counterPanel"));
     bindClick("checksumBtn", () => focusPanel("checksumPanel"));
@@ -1223,6 +1435,9 @@ function wireUI() {
     bindClick("closeLab", () => $("labModal").classList.remove("open"));
     bindClick("algoLibraryBtn", showAlgorithms);
     bindClick("algoLibraryBtnTop", showAlgorithms);
+    bindClick("codeBookBtn", showCodeBook);
+    bindClick("codeBookBtn2", showCodeBook);
+    bindClick("algoAssociateBtn", associateSelectedCode);
     bindClick("closeAlgo", () => $("algoModal").classList.remove("open"));
     bindClick("closeUpa", () => $("upaModal").classList.remove("open"));
     bindClick("algoAddBtn", () => fillAlgoForm(null));

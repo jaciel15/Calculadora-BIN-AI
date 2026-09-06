@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=receta1">
+    <link rel="stylesheet" href="style.css?v=maquina1">
 </head>
 
 <body>
@@ -26,6 +26,7 @@
         <button id="saveBinBtn">Guardar BIN</button>
         <button id="saveAlgoBtn">Guardar algoritmo</button>
         <button id="algoLibraryBtn">Algoritmos guardados</button>
+        <button id="codeBookBtn">Códigos listos</button>
         <button id="exportReportBtn">Exportar reporte</button>
         <button id="exportBrainBtn">Exportar cerebro</button>
         <button id="importBrainBtn">Importar cerebro</button>
@@ -33,6 +34,8 @@
         <input type="file" id="brainInput" accept=".json" hidden>
 
         <h3>ANÁLISIS</h3>
+        <button id="machineBtn">Máquina</button>
+        <button id="worldBtn">Mundo BIN</button>
         <button id="memoryMapBtn">Memory Map</button>
         <button id="countersBtn">Counters</button>
         <button id="checksumBtn">Checksums</button>
@@ -152,8 +155,36 @@
 
         <div id="omegaPanel" class="panel omega-panel">
             <h3>BIN HUNTER OMEGA</h3>
-            <pre id="omegaCard">Carga un BIN. Omega encadena Memory Map → Pattern → Counter → Math → Checksum → DNA → Correlation → Hypothesis → Validation → Truth.</pre>
+            <pre id="omegaCard">Carga un BIN. Omega encadena Mundo → Memory Map → Pattern → Counter → Math → Checksum → DNA → Correlation → Hypothesis → Validation → Truth.</pre>
             <p id="omegaThink" class="omega-think">Thinking Engine en espera.</p>
+        </div>
+
+        <div id="worldPanel" class="panel world-panel">
+            <h3>MUNDO BIN · PASAPORTE DEL CHIP</h3>
+            <pre id="worldPassport">Abre un BIN y pulsa ANALIZAR. El mundo recorre el archivo entero: páginas, espejos, bytes vivos y el universo del KM. No usa el nombre del archivo.</pre>
+            <div id="worldStrip" class="world-strip" title="Mapa del chip. Pulsa un bloque para ir al hex."></div>
+            <p class="world-legend">
+                <i class="lg km"></i>MUNDO KM
+                <i class="lg chk"></i>SUMA
+                <i class="lg live"></i>VIVO
+                <i class="lg dead"></i>FIJO
+                <i class="lg empty"></i>VACÍO
+                <i class="lg mirror"></i>ESPEJO
+            </p>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>MUNDO</th>
+                        <th>KM</th>
+                        <th>FÓRMULA</th>
+                        <th>HUECOS</th>
+                        <th>DIRECCIÓN</th>
+                        <th>CHECKSUM</th>
+                        <th>%</th>
+                    </tr>
+                </thead>
+                <tbody id="worldBody"></tbody>
+            </table>
         </div>
 
         <div class="workspace">
@@ -172,6 +203,7 @@
                         <i class="lg chk"></i>CHECKSUM
                     </span>
                 </div>
+                <p id="hexOracle" class="hex-oracle">Pasa el mouse sobre un byte. El oráculo dice qué KM sería (LE16, ×10, BCD…).</p>
                 <div class="hex-work">
                     <div class="hex-compare">
                         <div>
@@ -306,6 +338,27 @@
                 </table>
             </div>
 
+            <div id="machinePanel" class="panel machine-panel">
+                <h3>MÁQUINA SELLADA</h3>
+                <pre id="machineCard">Analiza. Si el KM y sus sumas se demuestran, se sella un contrato: cada hueco, cada suma, cada espejo. Luego escribes un KM fantasma y ves los bytes antes de tocar el archivo. Nadie más hace eso.</pre>
+                <p id="machineProof" class="machine-proof">Sin sello.</p>
+                <div class="editor-row">
+                    <label>KM FANTASMA</label>
+                    <input id="ghostKm" type="text" placeholder="Ej. 12000">
+                    <button type="button" id="ghostBtn" class="action-btn yellow">FANTASMA</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>DIR</th>
+                            <th>ERA</th>
+                            <th>SERÁ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ghostBody"></tbody>
+                </table>
+            </div>
+
             <div id="editorPanel" class="panel">
                 <h3>EDITOR DE VALORES</h3>
                 <div class="editor-row">
@@ -403,6 +456,8 @@
         </div>
         <p class="modal-help">Pulsa una fila. Puedes ponerle nombre, editarla, quitarla o usarla en el script UPA. La mente crece cada vez que guardas de verdad.</p>
         <div class="algo-toolbar">
+            <button id="codeBookBtn2" class="action-btn">CÓDIGOS LISTOS</button>
+            <button id="algoAssociateBtn" class="action-btn yellow">ASOCIAR AL BIN</button>
             <button id="algoAddBtn" class="action-btn">AÑADIR</button>
             <button id="algoEditBtn" class="action-btn yellow">EDITAR</button>
             <button id="algoDelBtn" class="action-btn red">QUITAR</button>
@@ -497,19 +552,21 @@
     </div>
 </div>
 
-<script src="mark-book.js?v=receta1"></script>
-<script src="math-engine.js?v=receta1"></script>
-<script src="checksum-engine.js?v=receta1"></script>
-<script src="knowledge-base.js?v=receta1"></script>
-<script src="mind-engine.js?v=receta1"></script>
-<script src="hunters.js?v=receta1"></script>
-<script src="dna-discovery.js?v=receta1"></script>
-<script src="editor-upa.js?v=receta1"></script>
-<script src="bin-object.js?v=receta1"></script>
-<script src="family-library.js?v=receta1"></script>
-<script src="omega-kernel.js?v=receta1"></script>
-<script src="bin-core.js?v=receta1"></script>
-<script src="app.js?v=receta1"></script>
+<script src="mark-book.js?v=maquina1"></script>
+<script src="math-engine.js?v=maquina1"></script>
+<script src="checksum-engine.js?v=maquina1"></script>
+<script src="knowledge-base.js?v=maquina1"></script>
+<script src="bin-world.js?v=maquina1"></script>
+<script src="mind-engine.js?v=maquina1"></script>
+<script src="hunters.js?v=maquina1"></script>
+<script src="dna-discovery.js?v=maquina1"></script>
+<script src="editor-upa.js?v=maquina1"></script>
+<script src="write-machine.js?v=maquina1"></script>
+<script src="bin-object.js?v=maquina1"></script>
+<script src="family-library.js?v=maquina1"></script>
+<script src="omega-kernel.js?v=maquina1"></script>
+<script src="bin-core.js?v=maquina1"></script>
+<script src="app.js?v=maquina1"></script>
 
 </body>
 </html>
