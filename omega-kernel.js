@@ -495,7 +495,7 @@ const OmegaKernel = {
         if (preferDiff.size) say("DIFF FIRST", preferDiff.size + " bytes cambian; busco el KM ahí primero");
         if (typeof MarkBook !== "undefined" && MarkBook.hasLessons()) {
             const kmL = MarkBook.lessons.KM || [];
-            say("LECCIÓN", "Analizo lo que me mostraste: KM " + kmL.length +
+            say("AYUDA USUARIO", "Tú me mostraste el camino. Priorizo esas zonas: KM " + kmL.length +
                 " · SUM " + ((MarkBook.lessons.CHK || []).length + (MarkBook.lessons.CRC || []).length) +
                 " · COMP " + ((MarkBook.lessons.COMP || []).length));
         }

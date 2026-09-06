@@ -741,6 +741,7 @@ function acceptMarkLesson() {
     }
     if (currentBIN) showHEX(currentBIN.working || currentBIN.original);
     setStatus(result.message, true);
+    if (result.analyze && currentBIN) runAnalysis();
 }
 
 function skipMarkLesson() {
@@ -748,6 +749,7 @@ function skipMarkLesson() {
     const result = MarkBook.skip();
     if (currentBIN) showHEX(currentBIN.working || currentBIN.original);
     setStatus(result.message, true);
+    if (result.analyze && currentBIN) runAnalysis();
 }
 
 function exportBrain() {

@@ -20,10 +20,10 @@ const MarkBook = {
 
     stepHelp() {
         return {
-            KM: "1. Pinta el KM en rojo. ACEPTO lo guarda y lo quita.",
+            KM: "Si me ayudas: pinta KM en rojo y ACEPTO. Si no, solo ANALIZAR.",
             CHK: "2. KM guardado. Ahora pinta SUM o CRC. ACEPTO.",
             COMP: "3. SUM guardado. Ahora pinta COMP. ACEPTO.",
-            LISTO: "4. Todo guardado. ANALIZAR vuelve a poner los colores."
+            LISTO: "4. Me ayudaste. ACEPTO otra vez o ANALIZAR: recoloreo y analizo."
         }[this.guideStep] || "Pinta y pulsa ACEPTO.";
     },
 
@@ -131,7 +131,7 @@ const MarkBook = {
         const step = this.guideStep;
         if (step === "LISTO") {
             this.renderGuide();
-            return { ok: true, step, message: "Ya está listo. Pulsa ANALIZAR." };
+            return { ok: true, step, analyze: true, message: "Uso tu ayuda. Recoloreo y analizo." };
         }
         if (step === "KM") {
             const ranges = this.snapshot("KM");
@@ -167,7 +167,7 @@ const MarkBook = {
             this.revealed = false;
             this.persist();
             this.renderGuide();
-            return { ok: true, step: "COMP", message: "Complemento guardado. Pulsa ANALIZAR para recolorear." };
+            return { ok: true, step: "COMP", analyze: true, message: "Ayuda completa. Recoloreo y analizo." };
         }
         return { ok: false, step, message: "Paso no válido." };
     },
@@ -193,7 +193,7 @@ const MarkBook = {
             this.guideStep = "LISTO";
             this.persist();
             this.renderGuide();
-            return { ok: true, message: "Sin complemento. Pulsa ANALIZAR." };
+            return { ok: true, analyze: this.hasLessons(), message: this.hasLessons() ? "Con tu ayuda (sin COMP). Analizo." : "Sin complemento. Pulsa ANALIZAR." };
         }
         return { ok: true, message: "Listo." };
     },
