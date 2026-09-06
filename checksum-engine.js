@@ -245,6 +245,99 @@ const ChecksumEngine = {
         return found.sort((a, b) => b.confidence - a.confidence).slice(0, 8);
     },
 
+    fromUserMarks(bytes, kmHit) {
+        if (typeof MarkBook === "undefined") return [];
+        const found = [];
+        const seen = new Set();
+        const stores = MarkBook.ranges("CHK").concat(MarkBook.ranges("CRC"));
+        if (!stores.length) return found;
+        const windows = [];
+        if (kmHit && kmHit.address !== undefined) {
+            const copies = kmHit.copies && kmHit.copies.length ? kmHit.copies : [kmHit.address];
+            const width = kmHit.width || 3;
+            copies.forEach((addr) => windows.push({ start: addr, end: addr + width, label: "km-" + addr.toString(16) }));
+        }
+        MarkBook.ranges("KM").forEach((range) => {
+            windows.push({ start: range.start, end: range.end + 1, label: "marca-km" });
+        });
+        stores.forEach((store) => {
+            windows.push({ start: Math.max(0, store.start - 64), end: store.start, label: "antes-marca" });
+            windows.push({ start: Math.max(0, store.start - store.size), end: store.start, label: "pegado" });
+        });
+        const algos = this.algorithms();
+        stores.forEach((store) => {
+            const size = Math.min(4, Math.max(1, store.size));
+            const preferCrc = store.kind === "CRC";
+            const storedLE = MathEngine.fromBytes(bytes, store.start, size, true);
+            const storedBE = MathEngine.fromBytes(bytes, store.start, size, false);
+            windows.forEach((win) => {
+                if (win.end <= win.start) return;
+                algos.forEach((algo) => {
+                    if (algo.size !== size) return;
+                    if (preferCrc && algo.name.indexOf("CRC") === -1) return;
+                    if (!preferCrc && algo.name.indexOf("CRC") !== -1 && store.kind === "CHK") return;
+                    const calc = algo.fn(bytes, win.start, win.end);
+                    const endian = calc === storedBE && calc !== storedLE ? "BE" : (calc === storedLE ? "LE" : null);
+                    if (!endian) return;
+                    const key = algo.name + "|" + win.start + "|" + store.start;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    found.push({
+                        name: algo.name,
+                        start: win.start,
+                        end: win.end,
+                        storedAt: store.start,
+                        valueBin: calc,
+                        calculated: calc,
+                        endian,
+                        size: algo.size,
+                        status: "VALIDO",
+                        confidence: preferCrc ? 96 : 95,
+                        window: win.label,
+                        linkedTo: "MARCA " + store.kind,
+                        fromUser: true
+                    });
+                });
+            });
+        });
+        return found.sort((a, b) => b.confidence - a.confidence).slice(0, 10);
+    },
+
+    fromMemory(bytes) {
+        if (typeof KnowledgeBase === "undefined") return [];
+        const found = [];
+        const seen = new Set();
+        KnowledgeBase.load().algorithms.forEach((algo) => {
+            (algo.checksums || []).forEach((item) => {
+                if (item.storedAt === null || item.storedAt === undefined) return;
+                const spec = this.algorithms().find((a) => a.name === item.name);
+                if (!spec || item.end === undefined || item.start === undefined) return;
+                if (item.end > bytes.length || item.storedAt + (item.size || spec.size) > bytes.length) return;
+                const calc = spec.fn(bytes, item.start, item.end);
+                const stored = MathEngine.fromBytes(bytes, item.storedAt, item.size || spec.size, item.endian !== "BE");
+                const key = item.name + "|" + item.storedAt;
+                if (seen.has(key)) return;
+                seen.add(key);
+                found.push({
+                    name: item.name,
+                    start: item.start,
+                    end: item.end,
+                    storedAt: item.storedAt,
+                    valueBin: stored,
+                    calculated: calc,
+                    endian: item.endian || "LE",
+                    size: item.size || spec.size,
+                    status: stored === calc ? "VALIDO" : "MEMORIA",
+                    confidence: stored === calc ? 96 : 78,
+                    window: item.window || "memoria",
+                    linkedTo: algo.name,
+                    fromMemory: true
+                });
+            });
+        });
+        return found;
+    },
+
     hunt(bytes, hotAddresses) {
         const results = [];
         const seen = new Set();

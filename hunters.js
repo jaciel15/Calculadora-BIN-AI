@@ -25,6 +25,7 @@ const Hunters = {
         const known = KnowledgeBase.applyKnown(bytes, value);
         const found = [];
         const seen = new Set();
+        const index = MathEngine.indexFile(bytes);
 
         known.forEach((item) => {
             const key = item.formula + "|" + item.hex;
@@ -35,7 +36,7 @@ const Hunters = {
         MathEngine.variantsForValue(value).forEach((variant) => {
             const key = variant.formula + "|" + variant.hex;
             if (seen.has(key)) return;
-            const hits = MathEngine.findPattern(bytes, variant.bytes);
+            const hits = MathEngine.lookupIndex(index, variant.bytes);
             if (!hits.length) return;
             if (variant.width <= 2 && hits.length > 12) return;
             seen.add(key);

@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=claro1">
+    <link rel="stylesheet" href="style.css?v=sabio1">
 </head>
 
 <body>
@@ -151,15 +151,27 @@
                         <i class="lg chk"></i>CHECKSUM
                     </span>
                 </div>
-                <div class="hex-compare">
-                    <div>
-                        <div class="hex-label" id="hexLabel1">BIN 1</div>
-                        <div id="hexViewer" class="hex-view"></div>
+                <div class="hex-work">
+                    <div class="hex-compare">
+                        <div>
+                            <div class="hex-label" id="hexLabel1">BIN 1</div>
+                            <div id="hexViewer" class="hex-view"></div>
+                        </div>
+                        <div>
+                            <div class="hex-label" id="hexLabel2">BIN 2</div>
+                            <div id="hexViewer2" class="hex-view"></div>
+                        </div>
                     </div>
-                    <div>
-                        <div class="hex-label" id="hexLabel2">BIN 2</div>
-                        <div id="hexViewer2" class="hex-view"></div>
-                    </div>
+                    <aside class="mark-palette" id="markPalette">
+                        <p class="mark-title">MARCAR</p>
+                        <button type="button" class="mark-swatch" data-mark="KM" title="Kilometraje">KM</button>
+                        <button type="button" class="mark-swatch" data-mark="CHK" title="Checksum / suma">SUM</button>
+                        <button type="button" class="mark-swatch" data-mark="CRC" title="CRC">CRC</button>
+                        <button type="button" class="mark-swatch" data-mark="COPY" title="Copia espejo">COPIA</button>
+                        <button type="button" class="mark-swatch" data-mark="HINT" title="Otra pista">PISTA</button>
+                        <button type="button" class="mark-swatch erase" data-mark="ERASE" title="Borrar marca">X</button>
+                        <p class="mark-help">Elige color y pinta hex o ASCII. La IA usa esas zonas.</p>
+                    </aside>
                 </div>
             </div>
 
@@ -358,7 +370,13 @@
             <h3>ALGORITMOS GUARDADOS</h3>
             <button id="closeAlgo" class="action-btn">CERRAR</button>
         </div>
-        <p class="modal-help">Pulsa un algoritmo para ver cómo se encontró y cómo hacerlo a mano, paso a paso.</p>
+        <p class="modal-help">Pulsa una fila. Puedes ponerle nombre, editarla, quitarla o usarla en el script UPA. La mente crece cada vez que guardas de verdad.</p>
+        <div class="algo-toolbar">
+            <button id="algoAddBtn" class="action-btn">AÑADIR</button>
+            <button id="algoEditBtn" class="action-btn yellow">EDITAR</button>
+            <button id="algoDelBtn" class="action-btn red">QUITAR</button>
+            <button id="algoUpaBtn" class="action-btn green">SCRIPT UPA</button>
+        </div>
         <table class="data-table">
             <thead>
                 <tr>
@@ -375,9 +393,80 @@
         <div id="algoDetail" class="algo-detail">
             <p>Elige una fila.</p>
         </div>
+        <div id="algoForm" class="algo-form hidden">
+            <h4>Algoritmo cifrado</h4>
+            <div class="editor-row">
+                <label>NOMBRE</label>
+                <input id="algoName" type="text" placeholder="Ej. YAMAHA_R5F_ANILLO">
+                <label>FÓRMULA</label>
+                <input id="algoFormula" type="text" placeholder="X * 10">
+            </div>
+            <div class="editor-row">
+                <label>BYTES</label>
+                <input id="algoWidth" type="text" value="3">
+                <label>ORDEN</label>
+                <select id="algoEndian">
+                    <option>LE</option>
+                    <option>BE</option>
+                    <option>BCD</option>
+                </select>
+            </div>
+            <div class="editor-row">
+                <label>DIRS HEX</label>
+                <input id="algoAddrs" type="text" placeholder="0000,0020,0040">
+                <label>CHIP</label>
+                <input id="algoChip" type="text" placeholder="93C86">
+            </div>
+            <div class="editor-row">
+                <label>SUM/CRC</label>
+                <input id="algoChkName" type="text" placeholder="SUM16">
+                <label>SUM EN</label>
+                <input id="algoChkAt" type="text" placeholder="001E">
+            </div>
+            <div class="editor-row">
+                <label>VENTANA</label>
+                <input id="algoChkWin" type="text" placeholder="0000-0002">
+                <button id="algoSaveForm" class="action-btn green">GUARDAR ALGORITMO</button>
+            </div>
+        </div>
     </div>
 </div>
 
+<div id="upaModal" class="modal">
+    <div class="modal-card">
+        <div class="modal-head">
+            <h3>SCRIPT UPA · TMS Pascal</h3>
+            <button id="closeUpa" class="action-btn">CERRAR</button>
+        </div>
+        <p class="modal-help">Elige algoritmos guardados. Auto-detect crea un .psc con varias versiones; o genera solo el algoritmo actual. Código al estilo AI Pack de UUPROGS (SetByteHexEdit, CalcCheckSum, AddDeviceEx).</p>
+        <div class="editor-row">
+            <label>MODO</label>
+            <select id="upaMode">
+                <option value="auto">AUTO-DETECT varias versiones</option>
+                <option value="current">Algoritmo del análisis actual</option>
+                <option value="picked">Solo los marcados abajo</option>
+            </select>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>NOMBRE</th>
+                    <th>FÓRMULA</th>
+                    <th>DIRS</th>
+                    <th>CHECKSUM</th>
+                </tr>
+            </thead>
+            <tbody id="upaAlgoBody"></tbody>
+        </table>
+        <div class="editor-buttons">
+            <button id="upaMakePsc" class="btn-green">CREAR .PSC</button>
+            <button id="upaMakeTxt" class="btn-blue">NOTAS .TXT</button>
+        </div>
+    </div>
+</div>
+
+<script src="mark-book.js"></script>
 <script src="math-engine.js"></script>
 <script src="checksum-engine.js"></script>
 <script src="knowledge-base.js"></script>

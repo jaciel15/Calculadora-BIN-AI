@@ -54,6 +54,13 @@ function collectMarks() {
         }
         Hunters.huntVIN(b).forEach((v) => paint(v.address, 17, "hex-vin"));
     }
+    if (typeof MarkBook !== "undefined") {
+        Object.keys(MarkBook.user).forEach((key) => {
+            const kind = MarkBook.user[key];
+            const info = MarkBook.kinds[kind];
+            if (info) paint(Number(key), 1, info.cls);
+        });
+    }
     return marks;
 }
 
@@ -72,7 +79,9 @@ function paintHex(targetId, bytes, marks) {
                 const cls = marks[i + j] ? "hex-byte " + marks[i + j] : "hex-byte";
                 html += "<span class=\"" + cls + "\" data-addr=\"" + (i + j) + "\">" + padHex(b, 2) + "</span>";
                 html += (mode === "16-BIT" && j % 2 === 1 ? "  " : " ");
-                ascii += b >= 32 && b <= 126 ? String.fromCharCode(b) : ".";
+                const ch = b >= 32 && b <= 126 ? String.fromCharCode(b) : ".";
+                const acls = marks[i + j] ? "hex-ascii " + marks[i + j] : "hex-ascii";
+                ascii += "<span class=\"" + acls + "\" data-addr=\"" + (i + j) + "\">" + ch.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</span>";
             } else {
                 html += "   ";
             }
@@ -380,7 +389,7 @@ function runAnalysis(extra) {
     if (!needBIN()) return;
     const km = knownKm();
     const hours = knownHours();
-    setStatus("ANALIZANDO", false);
+    setStatus("ANALIZANDO COMBINACIONES", false);
     setTimeout(function () {
         const opts = extra || {};
         if (opts.knownKm2 === undefined && knownKm2() !== null) opts.knownKm2 = knownKm2();
@@ -463,22 +472,92 @@ function runGenerateBIN() {
     if (!lastSimulation) runApply();
     const bytes = binCore.generateBIN();
     if (!bytes) return;
-    const name = currentBIN.fileName.replace(/(\.[^.]+)?$/, "") + "_EDITADO.bin";
+    const km = $("newValue") ? $("newValue").value.replace(/[^\d]/g, "") : "";
+    const name = km ? km + "_KM_prueba_de_bin.bin" : "prueba_de_bin.bin";
     downloadBlob(name, [bytes], "application/octet-stream");
     addLogRows();
 }
 
 function runUPA() {
-    if (!needBIN()) return;
-    if (currentBIN.analysis && currentBIN.analysis.best && currentBIN.analysis.best.writable === false) {
-        alert("No se genera script UPA: la fórmula de esta familia no está demostrada.");
+    showUpaModal();
+}
+
+function parseHexList(text) {
+    return String(text || "").split(/[\s,;]+/).filter(Boolean).map((part) => {
+        return parseInt(String(part).replace(/^0x/i, ""), 16);
+    }).filter((n) => Number.isFinite(n));
+}
+
+function showUpaModal() {
+    const body = $("upaAlgoBody");
+    const db = KnowledgeBase.load();
+    if (!body) return;
+    if (!db.algorithms.length) {
+        body.innerHTML = "<tr><td colspan=\"5\">Aún no hay algoritmos guardados. Analiza y pulsa Guardar algoritmo.</td></tr>";
+    } else {
+        body.innerHTML = db.algorithms.map((item) => {
+            const dirs = (item.addresses || item.copies || []).map((a) => padHex(a)).join(" ");
+            const chk = item.checksums && item.checksums[0] ? item.checksums[0].name : "—";
+            return "<tr><td><input type=\"checkbox\" value=\"" + item.name.replace(/"/g, "") + "\"></td>" +
+                "<td>" + item.name + "</td><td>" + (item.formula || "") + "</td><td>" + dirs + "</td><td>" + chk + "</td></tr>";
+        }).join("");
+    }
+    $("upaModal").classList.add("open");
+}
+
+function pickedUpaAlgos() {
+    const mode = $("upaMode") ? $("upaMode").value : "auto";
+    const db = KnowledgeBase.load();
+    if (mode === "current") {
+        if (!currentBIN || !currentBIN.analysis || !currentBIN.analysis.best) {
+            alert("Analiza un BIN o elige algoritmos guardados.");
+            return [];
+        }
+        if (currentBIN.analysis.best.writable === false) {
+            alert("Esta familia no se escribe todavía.");
+            return [];
+        }
+        const best = Object.assign({}, currentBIN.analysis.best);
+        best.checksums = currentBIN.analysis.omega ? currentBIN.analysis.omega.kmChecksums : [];
+        best.chip = currentBIN.chip;
+        return [best];
+    }
+    const boxes = document.querySelectorAll("#upaAlgoBody input[type=\"checkbox\"]:checked");
+    const picked = [];
+    boxes.forEach((box) => {
+        const item = db.algorithms.find((a) => a.name === box.value);
+        if (item) picked.push(item);
+    });
+    if (mode === "auto" && !picked.length) return db.algorithms.slice(0, 10);
+    return picked;
+}
+
+function downloadUpaPsc() {
+    const algos = pickedUpaAlgos();
+    if (!algos.length) {
+        alert("Elige o guarda al menos un algoritmo.");
         return;
     }
+    const script = EditorEngine.generatePSC({
+        algorithms: algos,
+        mode: $("upaMode") ? $("upaMode").value : "auto",
+        chip: currentBIN ? currentBIN.chip : (algos[0].chip || "25C080"),
+        fileName: currentBIN ? currentBIN.fileName : "dump.bin"
+    });
+    downloadBlob("CDMX_AutoKM.psc", [script], "text/plain");
+    binCore.addLog("UPA SCRIPT", "PSC TMS Pascal · " + algos.length + " versiones");
+    addLogRows();
+}
+
+function downloadUpaTxt() {
+    if (!needBIN()) return;
     if (!currentBIN.analysis) runAnalysis();
-    if (!lastSimulation) runApply();
     const script = binCore.generateUPA();
-    const name = currentBIN.fileName.replace(/(\.[^.]+)?$/, "") + "_UPA.txt";
-    downloadBlob(name, [script], "text/plain");
+    if (!script) {
+        alert("Analiza y aplica un valor para las notas TXT.");
+        return;
+    }
+    downloadBlob("CDMX_AutoKM_notas.txt", [script], "text/plain");
     addLogRows();
 }
 
@@ -489,9 +568,16 @@ function saveAlgorithm() {
         alert("No hay operación demostrada para guardar.");
         return;
     }
-    const item = KnowledgeBase.rememberAlgorithm(best, currentBIN.fileName, currentBIN.fileSize);
+    const custom = prompt("Nombre de este algoritmo", best.name || "ALGORITMO");
+    if (custom === null) return;
+    best.displayName = custom.trim() || best.name;
+    best.chip = currentBIN.chip;
+    const checksums = currentBIN.analysis.omega
+        ? (currentBIN.analysis.omega.kmChecksums || []).concat(currentBIN.analysis.checksums || [])
+        : currentBIN.analysis.checksums;
+    const item = KnowledgeBase.rememberAlgorithm(best, currentBIN.fileName, currentBIN.fileSize, checksums);
     KnowledgeBase.markUserSaved(item.name);
-    binCore.addLog("MEMORIA", "Algoritmo guardado a mano: " + item.name);
+    binCore.addLog("MEMORIA", "Algoritmo guardado: " + item.name + " · complemento " + ((item.checksums || []).length));
     addLogRows();
     showAlgorithms();
     showAlgoDetail(item);
@@ -500,12 +586,73 @@ function saveAlgorithm() {
 function showAlgoDetail(item) {
     const box = $("algoDetail");
     if (!box || !item) return;
+    window._selectedAlgo = item;
     const steps = item.steps && item.steps.length ? item.steps : KnowledgeBase.recipe(item);
+    const dirs = (item.addresses || item.copies || []).map((a) => padHex(Number(a))).join(" ");
+    const chk = (item.checksums || []).map((c) => c.name + " @ " + padHex(c.storedAt)).join(", ") || "sin complemento";
     box.innerHTML = "<h4>" + item.name + "</h4>" +
         "<p><strong>Fórmula:</strong> " + (item.formula || "—") + " · " + (item.width || "?") + "B " + (item.endian || "") + "</p>" +
+        "<p><strong>Direcciones:</strong> " + (dirs || "—") + "</p>" +
+        "<p><strong>Complemento:</strong> " + chk + "</p>" +
         "<p><strong>Cómo se hace</strong></p><ol>" +
         steps.map((s) => "<li><strong>" + s.title + ".</strong> " + s.text + "</li>").join("") +
         "</ol>";
+}
+
+function fillAlgoForm(item) {
+    if (!$("algoForm")) return;
+    $("algoForm").classList.remove("hidden");
+    window._editingAlgoName = item ? item.name : "";
+    $("algoName").value = item ? item.name : "";
+    $("algoFormula").value = item ? (item.formula || "X") : "X * 10";
+    $("algoWidth").value = item ? String(item.width || 3) : "3";
+    $("algoEndian").value = item && item.endian ? item.endian : "LE";
+    $("algoAddrs").value = item ? (item.addresses || item.copies || []).map((a) => padHex(Number(a))).join(",") : "";
+    $("algoChip").value = item ? (item.chip || "") : "";
+    const chk = item && item.checksums && item.checksums[0];
+    $("algoChkName").value = chk ? chk.name : "";
+    $("algoChkAt").value = chk ? padHex(chk.storedAt) : "";
+    $("algoChkWin").value = chk ? padHex(chk.start) + "-" + padHex((chk.end || 1) - 1) : "";
+}
+
+function saveAlgoForm() {
+    const name = $("algoName").value.trim();
+    if (!name) {
+        alert("Ponle un nombre al algoritmo.");
+        return;
+    }
+    const win = $("algoChkWin").value;
+    const parts = String(win || "").split(/[-–]/);
+    const checksums = [];
+    const at = parseInt(String($("algoChkAt").value || "").replace(/^0x/i, ""), 16);
+    if (Number.isFinite(at)) {
+        const start = parseInt(String(parts[0] || "0").replace(/^0x/i, ""), 16) || 0;
+        const endRaw = parseInt(String(parts[1] || parts[0] || "0").replace(/^0x/i, ""), 16);
+        checksums.push({
+            name: $("algoChkName").value.trim() || "SUM16",
+            storedAt: at,
+            start,
+            end: (Number.isFinite(endRaw) ? endRaw : start) + 1,
+            size: 2,
+            endian: "BE",
+            status: "VALIDO"
+        });
+    }
+    const item = KnowledgeBase.upsertManual({
+        oldName: window._editingAlgoName,
+        name,
+        formula: $("algoFormula").value.trim() || "X",
+        width: Number($("algoWidth").value) || 2,
+        endian: $("algoEndian").value,
+        addresses: parseHexList($("algoAddrs").value),
+        chip: $("algoChip").value.trim(),
+        checksums
+    });
+    $("algoForm").classList.add("hidden");
+    binCore.addLog("MEMORIA", "Algoritmo cifrado: " + item.name);
+    addLogRows();
+    showAlgorithms();
+    showAlgoDetail(item);
 }
 
 function showAlgorithms() {
@@ -552,6 +699,8 @@ function showAlgorithms() {
         }).join("");
     }
     if ($("algoDetail")) $("algoDetail").innerHTML = "<p>Pulsa una fila para ver el paso a paso a mano.</p>";
+    if ($("algoForm")) $("algoForm").classList.add("hidden");
+    window._selectedAlgo = null;
     $("algoModal").classList.add("open");
 }
 
@@ -785,6 +934,7 @@ function closeProject() {
     renderDiffTable(null);
     if ($("hexViewer")) $("hexViewer").innerHTML = "";
     if ($("hexViewer2")) $("hexViewer2").innerHTML = "";
+    if (typeof MarkBook !== "undefined") MarkBook.clear();
     setStatus("LISTO", true);
 }
 
@@ -828,6 +978,31 @@ function wireUI() {
     bindClick("algoLibraryBtn", showAlgorithms);
     bindClick("algoLibraryBtnTop", showAlgorithms);
     bindClick("closeAlgo", () => $("algoModal").classList.remove("open"));
+    bindClick("closeUpa", () => $("upaModal").classList.remove("open"));
+    bindClick("algoAddBtn", () => fillAlgoForm(null));
+    bindClick("algoEditBtn", () => {
+        if (!window._selectedAlgo || window._selectedAlgo.lastFile === "KERNEL") {
+            alert("Elige un algoritmo guardado (no una familia de kernel).");
+            return;
+        }
+        fillAlgoForm(window._selectedAlgo);
+    });
+    bindClick("algoDelBtn", () => {
+        if (!window._selectedAlgo || !window._selectedAlgo.formula || window._selectedAlgo.lastFile === "KERNEL") {
+            alert("Elige un algoritmo guardado para quitarlo.");
+            return;
+        }
+        if (!confirm("¿Quitar " + window._selectedAlgo.name + "?")) return;
+        KnowledgeBase.removeAlgorithm(window._selectedAlgo.name);
+        showAlgorithms();
+    });
+    bindClick("algoUpaBtn", () => {
+        $("algoModal").classList.remove("open");
+        showUpaModal();
+    });
+    bindClick("algoSaveForm", saveAlgoForm);
+    bindClick("upaMakePsc", downloadUpaPsc);
+    bindClick("upaMakeTxt", downloadUpaTxt);
     bindClick("simBtn", runSimulate);
     bindClick("valBtn", runValidate);
     bindClick("applyBtn", runApply);
@@ -838,7 +1013,10 @@ function wireUI() {
             const row = event.target.closest("tr");
             if (!row || !row.getAttribute("data-key")) return;
             const item = (window._algoCatalog || []).find((a) => a.key === row.getAttribute("data-key"));
-            if (item) showAlgoDetail(item);
+            if (!item) return;
+            document.querySelectorAll("#algoBody tr").forEach((tr) => tr.classList.remove("selected"));
+            row.classList.add("selected");
+            showAlgoDetail(item);
         });
     }
     if ($("diffBody")) {
@@ -864,6 +1042,7 @@ function wireUI() {
     if ($("hexMode")) $("hexMode").onchange = () => {
         if (currentBIN) showHEX(currentBIN.working);
     };
+    if (typeof MarkBook !== "undefined") MarkBook.init();
 }
 
 wireUI();

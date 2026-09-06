@@ -100,6 +100,28 @@ const MathEngine = {
         return Array.from(bytes).map((b) => b.toString(16).toUpperCase().padStart(2, "0")).join(" ");
     },
 
+    indexFile(bytes) {
+        const idx = { 2: new Map(), 3: new Map(), 4: new Map() };
+        [2, 3, 4].forEach((width) => {
+            for (let i = 0; i <= bytes.length - width; i++) {
+                const key = this.hexBytes(bytes.subarray(i, i + width));
+                let list = idx[width].get(key);
+                if (!list) {
+                    list = [];
+                    idx[width].set(key, list);
+                }
+                if (list.length < 24) list.push(i);
+            }
+        });
+        return idx;
+    },
+
+    lookupIndex(index, pattern) {
+        if (!pattern || !pattern.length || !index || !index[pattern.length]) return [];
+        const hits = index[pattern.length].get(this.hexBytes(pattern));
+        return hits ? hits.slice() : [];
+    },
+
     findPattern(bytes, pattern) {
         const hits = [];
         if (!pattern.length || pattern.length > bytes.length) return hits;
@@ -129,7 +151,7 @@ const MathEngine = {
         const push = (name, val) => {
             if (!Number.isFinite(val) || val < 0 || val > 0xFFFFFFFF) return;
             const key = name + "|" + (val >>> 0);
-            if (seen.has(key) || items.length >= 4000) return;
+            if (seen.has(key) || items.length >= 100000) return;
             seen.add(key);
             items.push({ name, value: val >>> 0 });
         };
@@ -140,11 +162,15 @@ const MathEngine = {
         push("SWAP16(X)", this.swap16(value));
         push("SWAP32(X)", this.swap32(value));
         push("NIBBLE_SWAP(X)", this.nibbleSwap(value));
+        push("GRAY(X)", (value ^ (value >>> 1)) >>> 0);
+        push("X*10+1", value * 10 + 1);
+        push("X*10-1", value * 10 - 1);
+        push("(X<<8)|LO", ((value << 8) | (value & 0xFF)) >>> 0);
 
-        const factors = [1, 2, 4, 8, 10, 16, 32, 64, 100, 160, 256, 1000];
-        const xorMasks = [0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF, 0x55, 0xAA, 0x5A, 0xA5, 0xF0, 0x0F];
-        const adds = [0, 1, 3, 5, 7, 8, 16, 32, 64, 100];
-        const mods = [10, 100, 255, 256];
+        const factors = [1, 2, 4, 5, 8, 10, 16, 20, 32, 50, 64, 100, 160, 200, 256, 1000, 10000];
+        const xorMasks = [0xFF, 0x7F, 0x80, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF, 0x55, 0xAA, 0x5A, 0xA5, 0xF0, 0x0F];
+        const adds = [0, 1, 2, 3, 5, 7, 8, 16, 20, 32, 64, 100];
+        const mods = [10, 100, 255, 256, 1000];
         const rolls = [1, 2, 4, 8];
 
         factors.forEach((factor) => {
@@ -169,6 +195,7 @@ const MathEngine = {
                     rolls.forEach((bits) => {
                         push("(" + label + ") ROL8 " + bits, this.rol(core, bits, 8));
                         push("(" + label + ") ROL16 " + bits, this.rol(core, bits, 16));
+                        push("(" + label + ") ROL24 " + bits, this.rol(core, bits, 24));
                     });
                     mods.forEach((mod) => {
                         push("(" + label + ") MOD " + mod, core % mod);
@@ -185,7 +212,7 @@ const MathEngine = {
             });
         });
 
-        [8, 16, 32].forEach((width) => {
+        [8, 16, 24, 32].forEach((width) => {
             rolls.forEach((bits) => {
                 push("ROL" + width + "(" + bits + ")", this.rol(value, bits, width));
                 push("ROR" + width + "(" + bits + ")", this.ror(value, bits, width));
@@ -198,7 +225,80 @@ const MathEngine = {
         return items;
     },
 
+    applyFormula(value, formula) {
+        const f = String(formula || "X");
+        const n = Number(value);
+        if (f === "X") return n >>> 0;
+        if (f === "~X") return (~n) >>> 0;
+        if (f === "NOT8(X)") return (~n) & 0xFF;
+        if (f === "SWAP16(X)") return this.swap16(n);
+        if (f === "SWAP32(X)") return this.swap32(n);
+        if (f === "NIBBLE_SWAP(X)") return this.nibbleSwap(n);
+        if (f === "GRAY(X)") return (n ^ (n >>> 1)) >>> 0;
+        if (f === "BCD") return n >>> 0;
+        let m = f.match(/^X\s*\*\s*(\d+)\s*\+\s*(\d+)$/);
+        if (m) return (n * Number(m[1]) + Number(m[2])) >>> 0;
+        m = f.match(/^X\s*\*\s*(\d+)\s*-\s*(\d+)$/);
+        if (m) return (n * Number(m[1]) - Number(m[2])) >>> 0;
+        m = f.match(/^X\s*\*\s*(\d+)$/);
+        if (m) return (n * Number(m[1])) >>> 0;
+        m = f.match(/^X\s*\/\s*(\d+)$/);
+        if (m) return Number(m[1]) ? (n / Number(m[1])) >>> 0 : n;
+        m = f.match(/^X\s*\+\s*(\d+)$/);
+        if (m) return (n + Number(m[1])) >>> 0;
+        m = f.match(/^X\s*-\s*(\d+)$/);
+        if (m) return (n - Number(m[1])) >>> 0;
+        m = f.match(/^X XOR ([0-9A-F]+)$/i);
+        if (m) return (n ^ parseInt(m[1], 16)) >>> 0;
+        m = f.match(/^\(X XOR ([0-9A-F]+)\) \* (\d+) \+ (\d+)$/i);
+        if (m) return (((n ^ parseInt(m[1], 16)) * Number(m[2])) + Number(m[3])) >>> 0;
+        m = f.match(/^\(X XOR ([0-9A-F]+)\) \* (\d+)$/i);
+        if (m) return ((n ^ parseInt(m[1], 16)) * Number(m[2])) >>> 0;
+        m = f.match(/^\(X \+ (\d+)\) \* (\d+)$/);
+        if (m) return ((n + Number(m[1])) * Number(m[2])) >>> 0;
+        m = f.match(/^ROL(\d+)\((\d+)\)$/);
+        if (m) return this.rol(n, Number(m[2]), Number(m[1]));
+        m = f.match(/^ROR(\d+)\((\d+)\)$/);
+        if (m) return this.ror(n, Number(m[2]), Number(m[1]));
+        return n >>> 0;
+    },
+
+    invertFormula(stored, formula) {
+        const f = String(formula || "X");
+        const n = Number(stored);
+        if (f === "X" || f === "BCD") return n;
+        if (f === "~X") return (~n) >>> 0;
+        let m = f.match(/^X\s*\*\s*(\d+)\s*-\s*(\d+)$/);
+        if (m) return (n + Number(m[2])) / Number(m[1]);
+        m = f.match(/^X\s*\*\s*(\d+)\s*\+\s*(\d+)$/);
+        if (m) return (n - Number(m[2])) / Number(m[1]);
+        m = f.match(/^X\s*\*\s*(\d+)$/);
+        if (m) return n / Number(m[1]);
+        m = f.match(/^X\s*\/\s*(\d+)$/);
+        if (m) return n * Number(m[1]);
+        m = f.match(/^X\s*\+\s*(\d+)$/);
+        if (m) return n - Number(m[1]);
+        m = f.match(/^X\s*-\s*(\d+)$/);
+        if (m) return n + Number(m[1]);
+        m = f.match(/^X XOR ([0-9A-F]+)$/i);
+        if (m) return (n ^ parseInt(m[1], 16)) >>> 0;
+        m = f.match(/^\(X XOR ([0-9A-F]+)\) \* (\d+) \+ (\d+)$/i);
+        if (m) {
+            const factor = Number(m[2]);
+            if (!factor) return n;
+            return ((n - Number(m[3])) / factor) ^ parseInt(m[1], 16);
+        }
+        m = f.match(/^\(X XOR ([0-9A-F]+)\) \* (\d+)$/i);
+        if (m) {
+            const factor = Number(m[2]);
+            if (!factor) return n;
+            return (n / factor) ^ parseInt(m[1], 16);
+        }
+        return n;
+    },
+
     variantsForValue(value) {
+        if (this._variantCache && this._variantCache.value === value) return this._variantCache.items;
         const variants = [];
         const seen = new Set();
 
@@ -231,6 +331,7 @@ const MathEngine = {
             }
         });
 
+        this._variantCache = { value, items: variants };
         return variants;
     }
 

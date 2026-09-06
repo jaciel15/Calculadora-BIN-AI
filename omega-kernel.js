@@ -461,11 +461,14 @@ const OmegaKernel = {
         if (familyMatch && familyMatch.hits) {
             familyMatch.hits.forEach((hit) => mileageHits.unshift(hit));
         }
+        const km2 = options.knownKm2;
+        const userHits = MindEngine.fromUserMarks(bytes, knownKm);
+        userHits.forEach((hit) => mileageHits.unshift(hit));
+        if (userHits.length) say("USER MARKS", userHits.length + " zonas KM marcadas a mano");
         const recalled = MindEngine.recall(bytes);
         recalled.forEach((hit) => mileageHits.unshift(hit));
         if (recalled.length) say("SELF LEARNING", "Memoria reutiliza " + recalled[0].formula + " @ " + recalled[0].addressText);
 
-        const km2 = options.knownKm2;
         const pairHits = (this.compareBins[0] && knownKm !== null && km2 !== null)
             ? MindEngine.reasonPair(bytes, this.compareBins[0].bytes, knownKm, km2)
             : [];
@@ -503,8 +506,24 @@ const OmegaKernel = {
         const hot = [];
         if (best) hot.push(best.address);
         map.filter((r) => r.kind === "COUNTER CANDIDATE").forEach((r) => hot.push(r.start));
+        if (typeof MarkBook !== "undefined") {
+            MarkBook.allRanges().forEach((range) => hot.push(range.start));
+        }
         const checksums = ChecksumEngine.hunt(bytes, hot);
         const kmChecksums = ChecksumEngine.linkToKm(bytes, best);
+        ChecksumEngine.fromUserMarks(bytes, best).forEach((item) => {
+            if (!kmChecksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
+                kmChecksums.unshift(item);
+            }
+        });
+        ChecksumEngine.fromMemory(bytes).forEach((item) => {
+            if (!kmChecksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
+                kmChecksums.unshift(item);
+            }
+            if (!checksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
+                checksums.unshift(item);
+            }
+        });
         kmChecksums.forEach((item) => {
             if (!checksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
                 checksums.unshift(item);
@@ -613,7 +632,8 @@ const OmegaKernel = {
 
         if (best && truth.confidence >= 70 && best.writable !== false) {
             if (vinId) best.vinWmi = vinId.wmi;
-            KnowledgeBase.rememberAlgorithm(best, bin.fileName, bin.fileSize);
+            best.chip = bin.chip;
+            KnowledgeBase.rememberAlgorithm(best, bin.fileName, bin.fileSize, kmChecksums.concat(checksums));
             say("SELF LEARNING", "Guardado: " + best.name);
         }
         KnowledgeBase.rememberFile(bin.fileName, Object.assign({}, dna, fingerprint), counters);

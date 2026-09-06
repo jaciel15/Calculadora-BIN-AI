@@ -65,21 +65,7 @@ const MindEngine = {
     },
 
     invert(stored, formula) {
-        if (formula === "X") return stored;
-        if (formula === "BCD") return stored;
-        const mulSub = String(formula).match(/^X \* (\d+) - (\d+)$/);
-        if (mulSub) return (stored + Number(mulSub[2])) / Number(mulSub[1]);
-        const mulAdd = String(formula).match(/^X \* (\d+) \+ (\d+)$/);
-        if (mulAdd) return (stored - Number(mulAdd[2])) / Number(mulAdd[1]);
-        const mul = String(formula).match(/^X \* (\d+)$/);
-        if (mul) return stored / Number(mul[1]);
-        const div = String(formula).match(/^X \/ (\d+)$/);
-        if (div) return stored * Number(div[1]);
-        const add = String(formula).match(/^X \+ (\d+)$/);
-        if (add) return stored - Number(add[1]);
-        const sub = String(formula).match(/^X - (\d+)$/);
-        if (sub) return stored + Number(sub[1]);
-        return stored;
+        return MathEngine.invertFormula(stored, formula);
     },
 
     looksLikeKm(value) {
@@ -90,7 +76,6 @@ const MindEngine = {
         const db = KnowledgeBase.load();
         const hits = [];
         (db.algorithms || []).forEach((algo) => {
-            if (algo.fileSize && algo.fileSize !== bytes.length) return;
             const addrs = algo.addresses && algo.addresses.length ? algo.addresses : (algo.copies || []);
             addrs.forEach((addr) => {
                 if (addr + (algo.width || 2) > bytes.length) return;
@@ -117,11 +102,58 @@ const MindEngine = {
                     numeric: rounded,
                     value: rounded,
                     writeHow: algo.writeHow || MathEngine.encodeWriteup(algo.formula, algo.endian, algo.width),
-                    confidence: Math.min(97.5, 84 + Math.min(algo.hits || 1, 5) * 2)
+                    confidence: Math.min(98.8, (algo.savedByUser ? 90 : 84) + Math.min(algo.hits || 1, 5) * 2 + (algo.checksums && algo.checksums.length ? 2 : 0)),
+                    familyId: algo.familyId,
+                    checksums: algo.checksums || []
                 });
             });
         });
         return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 8);
+    },
+
+    pairScales() {
+        return [
+            { formula: "X", fn: (k) => k, widths: [2, 3, 4] },
+            { formula: "X * 10", fn: (k) => k * 10, widths: [2, 3, 4] },
+            { formula: "X * 10 - 1", fn: (k) => k * 10 - 1, widths: [3, 4] },
+            { formula: "X * 10 - 5", fn: (k) => k * 10 - 5, widths: [3, 4] },
+            { formula: "X * 100", fn: (k) => k * 100, widths: [3, 4] },
+            { formula: "X * 16", fn: (k) => k * 16, widths: [2, 3, 4] }
+        ];
+    },
+
+    pairStarts(bytesA, bytesB) {
+        const starts = new Set();
+        const n = Math.min(bytesA.length, bytesB.length);
+        for (let i = 0; i < n; i++) {
+            if (bytesA[i] !== bytesB[i]) starts.add(i);
+        }
+        if (typeof MarkBook !== "undefined") {
+            MarkBook.ranges("KM").forEach((range) => starts.add(range.start));
+            MarkBook.ranges("COPY").forEach((range) => starts.add(range.start));
+            MarkBook.ranges("HINT").forEach((range) => starts.add(range.start));
+        }
+        return starts;
+    },
+
+    siblingsSameAlgo(bytesA, bytesB, start, width, littleEndian, fn, kmA, kmB) {
+        const n = Math.min(bytesA.length, bytesB.length);
+        const copies = [start];
+        const wantA = fn(kmA);
+        const wantB = fn(kmB);
+        [4, 8, 16, 32].forEach((stride) => {
+            const base = start % stride;
+            for (let p = base; p + width <= n; p += stride) {
+                if (p === start) continue;
+                const a = MathEngine.fromBytes(bytesA, p, width, littleEndian);
+                const b = MathEngine.fromBytes(bytesB, p, width, littleEndian);
+                if (a === null || b === null || a === b) continue;
+                const near = Math.abs(a - wantA) <= 24 && Math.abs(b - wantB) <= 24;
+                const sameAge = Math.abs((a - wantA) - (b - wantB)) <= 2 && a > 80 && b > 80;
+                if (near || sameAge) copies.push(p);
+            }
+        });
+        return copies.sort((a, b) => a - b);
     },
 
     reasonPair(bytesA, bytesB, kmA, kmB) {
@@ -139,7 +171,7 @@ const MindEngine = {
             const vb = mapB[va.formula + "|" + va.width + "|" + va.endian];
             if (!vb || va.hex === vb.hex) return;
             const locA = MathEngine.findPattern(bytesA, va.bytes);
-            if (!locA.length || locA.length > 16) return;
+            if (!locA.length || locA.length > 24) return;
             const common = locA.filter((addr) => {
                 for (let i = 0; i < va.width; i++) {
                     if (bytesB[addr + i] !== vb.bytes[i]) return false;
@@ -164,52 +196,51 @@ const MindEngine = {
                 hex: va.hex,
                 numeric: kmA,
                 value: kmA,
-                writeHow: MathEngine.encodeWriteup(va.formula, va.endian, va.width),
-                confidence: Math.min(99.3, 92 + Math.min(common.length, 4) * 1.5),
+                writeHow: MathEngine.encodeWriteup(va.formula, va.endian, va.width) + " Misma fórmula en cada copia/página.",
+                confidence: Math.min(99.4, 92 + Math.min(common.length, 5) * 1.4),
                 representation: va.endian + " par demostrado"
             });
         });
 
-        const scales = [
-            { formula: "X", fn: (k) => k, width: 2 },
-            { formula: "X", fn: (k) => k, width: 3 },
-            { formula: "X * 10", fn: (k) => k * 10, width: 3 },
-            { formula: "X * 10 - 5", fn: (k) => k * 10 - 5, width: 3 },
-            { formula: "X * 100", fn: (k) => k * 100, width: 4 }
-        ];
         const n = bytesA.length;
-        for (let i = 0; i < n; i++) {
-            if (bytesA[i] === bytesB[i]) continue;
-            scales.forEach((scale) => {
-                if (i + scale.width > n) return;
-                const a = MathEngine.fromBytes(bytesA, i, scale.width, true);
-                const b = MathEngine.fromBytes(bytesB, i, scale.width, true);
-                if (a === null || b === null || a === b) return;
-                if (Math.abs(a - scale.fn(kmA)) > 8 || Math.abs(b - scale.fn(kmB)) > 8) return;
-                const key = "scale|" + scale.formula + "|" + i;
-                if (seen.has(key)) return;
-                seen.add(key);
-                hits.push({
-                    fromMind: true,
-                    fromPair: true,
-                    label: "KILOMETRAJE",
-                    name: KnowledgeBase.algorithmName(scale.formula, scale.width, "LE"),
-                    formula: scale.formula,
-                    width: scale.width,
-                    endian: "LE",
-                    copies: [i],
-                    address: i,
-                    addressText: Hunters.range(i, scale.width),
-                    hex: MathEngine.hexBytes(bytesA.slice(i, i + scale.width)),
-                    numeric: kmA,
-                    value: kmA,
-                    writeHow: MathEngine.encodeWriteup(scale.formula, "LE", scale.width),
-                    confidence: 95.5,
-                    representation: "LE par · " + scale.formula
+        const starts = this.pairStarts(bytesA, bytesB);
+        this.pairScales().forEach((scale) => {
+            scale.widths.forEach((width) => {
+                ["LE", "BE"].forEach((endian) => {
+                    const little = endian !== "BE";
+                    starts.forEach((i) => {
+                        if (i + width > n) return;
+                        const a = MathEngine.fromBytes(bytesA, i, width, little);
+                        const b = MathEngine.fromBytes(bytesB, i, width, little);
+                        if (a === null || b === null || a === b) return;
+                        if (Math.abs(a - scale.fn(kmA)) > 8 || Math.abs(b - scale.fn(kmB)) > 8) return;
+                        const copies = this.siblingsSameAlgo(bytesA, bytesB, i, width, little, scale.fn, kmA, kmB);
+                        const key = "scale|" + scale.formula + "|" + endian + width + "|" + copies[0];
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        hits.push({
+                            fromMind: true,
+                            fromPair: true,
+                            label: "KILOMETRAJE",
+                            name: KnowledgeBase.algorithmName(scale.formula, width, endian),
+                            formula: scale.formula,
+                            width,
+                            endian,
+                            copies,
+                            address: i,
+                            addressText: Hunters.range(i, width),
+                            hex: MathEngine.hexBytes(bytesA.slice(i, i + width)),
+                            numeric: kmA,
+                            value: kmA,
+                            writeHow: MathEngine.encodeWriteup(scale.formula, endian, width) + " Misma fórmula en cada byte/página que procede.",
+                            confidence: Math.min(99.2, 95 + Math.min(copies.length, 4)),
+                            representation: endian + " par · " + scale.formula
+                        });
+                    });
                 });
             });
-        }
-        return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 10);
+        });
+        return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 14);
     },
 
     scanRings(bytes) {
@@ -329,12 +360,67 @@ const MindEngine = {
         return ranges;
     },
 
+    fromUserMarks(bytes, knownKm) {
+        if (typeof MarkBook === "undefined") return [];
+        const hits = [];
+        const transforms = knownKm !== null && knownKm !== undefined ? MathEngine.transforms(knownKm) : [];
+        const extraCopies = MarkBook.ranges("COPY").map((range) => range.start);
+        MarkBook.ranges("KM").concat(MarkBook.ranges("HINT")).forEach((range) => {
+            const width = Math.min(4, Math.max(1, range.size));
+            const start = range.start;
+            ["LE", "BE"].forEach((endian) => {
+                const raw = MathEngine.fromBytes(bytes, start, width, endian !== "BE");
+                if (raw === null) return;
+                let formula = "X";
+                let km = raw;
+                let confidence = 94;
+                if (knownKm !== null && knownKm !== undefined) {
+                    const match = transforms.find((item) => item.value === raw);
+                    if (match) {
+                        formula = match.name;
+                        km = knownKm;
+                        confidence = 98.4;
+                    } else if (raw === knownKm * 10) { formula = "X * 10"; km = knownKm; confidence = 97.8; }
+                    else if (raw === knownKm * 10 - 5) { formula = "X * 10 - 5"; km = knownKm; confidence = 97.2; }
+                    else if (raw === knownKm * 100) { formula = "X * 100"; km = knownKm; confidence = 97; }
+                    else km = width >= 3 ? Math.round(raw / 10) : raw;
+                } else {
+                    km = width >= 3 ? Math.round(raw / 10) : raw;
+                }
+                hits.push({
+                    fromMind: true,
+                    fromUser: true,
+                    label: "KILOMETRAJE",
+                    name: "USER_KM_" + endian + width,
+                    formula,
+                    width,
+                    endian,
+                    copies: [start].concat(extraCopies.filter((addr) => addr !== start)),
+                    address: start,
+                    addressText: Hunters.range(start, width),
+                    hex: MathEngine.hexBytes(bytes.slice(start, start + width)),
+                    numeric: km,
+                    value: km,
+                    writeHow: "Zona " + (range.kind === "HINT" ? "pista" : "KM") + " marcada por ti. Pruebo la misma fórmula en cada copia y en el BIN 2.",
+                    confidence: range.kind === "HINT" ? Math.max(80, confidence - 8) : confidence,
+                    representation: "marca usuario " + endian
+                });
+            });
+        });
+        return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 10);
+    },
+
     classifyDiffs(bytesA, bytesB, ctx) {
         ctx = ctx || {};
         const ranges = this.diffRanges(bytesA, bytesB);
         const vinSpans = this.spansFrom(ctx.vins, 17).concat(this.spansFrom(ctx.vins2, 17));
         const kmSpans = this.spansFrom(ctx.kmCopies, ctx.kmWidth || 3);
         const chkSpans = this.spansFrom(ctx.checksums, 2);
+        if (typeof MarkBook !== "undefined") {
+            MarkBook.ranges("KM").forEach((r) => kmSpans.push({ start: r.start, end: r.end, label: "marca KM" }));
+            MarkBook.ranges("CHK").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca SUM" }));
+            MarkBook.ranges("CRC").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca CRC" }));
+        }
         let totalBytes = 0;
         ranges.forEach((range) => {
             range.size = range.end - range.start + 1;
