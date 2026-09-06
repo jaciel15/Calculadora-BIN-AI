@@ -316,6 +316,67 @@ const ChecksumEngine = {
         return found.sort((a, b) => b.confidence - a.confidence).slice(0, 8);
     },
 
+    fromRecipe(bytes, kmHit) {
+        if (typeof MarkBook === "undefined") return [];
+        const rec = MarkBook.recipe();
+        if (!rec || !rec.chk) return [];
+        const stores = MarkBook.lessonRanges(rec.chkOn || "CRC")
+            .concat(rec.chkOn ? [] : MarkBook.lessonRanges("CHK").concat(MarkBook.lessonRanges("CRC")).concat(MarkBook.lessonRanges("COMP")));
+        if (!stores.length) return [];
+        const width = rec.width || (kmHit && kmHit.width) || 3;
+        const windows = [];
+        if (kmHit) {
+            (kmHit.copies || [kmHit.address]).forEach((addr) => windows.push({ start: addr, end: addr + width }));
+        }
+        MarkBook.lessonRanges("KM").forEach((range) => {
+            windows.push({ start: range.start, end: range.end + 1 });
+        });
+        if (!windows.length) return [];
+        const found = [];
+        const seen = new Set();
+        const algos = this.algorithms().filter((algo) => {
+            if (rec.chk === "SUM8") return algo.name === "SUM8";
+            if (rec.chk === "SUM16") return algo.name === "SUM16";
+            if (rec.chk === "CRC8") return algo.name === "CRC8";
+            if (rec.chk === "CRC16") return algo.name.indexOf("CRC16") === 0;
+            if (rec.chk === "CRC32") return algo.name === "CRC32";
+            return algo.name === rec.chk;
+        });
+        stores.forEach((store) => {
+            windows.forEach((win) => {
+                algos.forEach((algo) => {
+                    if (win.end <= win.start) return;
+                    const calc = algo.fn(bytes, win.start, win.end);
+                    const size = Math.min(algo.size, store.size || algo.size);
+                    const storedLE = MathEngine.fromBytes(bytes, store.start, size, true);
+                    const storedBE = MathEngine.fromBytes(bytes, store.start, size, false);
+                    const endian = calc === storedBE && calc !== storedLE ? "BE" : (calc === storedLE ? "LE" : null);
+                    if (!endian) return;
+                    const key = algo.name + "|" + win.start + "|" + store.start;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    found.push({
+                        name: algo.name,
+                        start: win.start,
+                        end: win.end,
+                        storedAt: store.start,
+                        valueBin: calc,
+                        calculated: calc,
+                        endian,
+                        size,
+                        status: "VALIDO",
+                        confidence: 98.8,
+                        window: "receta",
+                        linkedTo: "RECETA " + rec.chk,
+                        fromUser: true,
+                        fromRecipe: true
+                    });
+                });
+            });
+        });
+        return found.sort((a, b) => b.confidence - a.confidence).slice(0, 8);
+    },
+
     fromUserMarks(bytes, kmHit) {
         if (typeof MarkBook === "undefined") return [];
         const found = [];

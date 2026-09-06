@@ -281,6 +281,7 @@ const OmegaKernel = {
         if (hit.fromUser) score += 14;
         if (hit.fromLesson) score += 18;
         if (hit.fromDeep) score += 12;
+        if (hit.fromRecipe) score += 24;
         if (hit.fromFamily && hit.writable === false) score += 8;
         if (hit.scatter) score -= 10;
         return score;
@@ -505,6 +506,12 @@ const OmegaKernel = {
             familyMatch.hits.forEach((hit) => mileageHits.unshift(hit));
         }
         const km2 = options.knownKm2;
+        const recipeHits = MindEngine.fromHelpRecipe(bytes, knownKm);
+        recipeHits.forEach((hit) => mileageHits.unshift(hit));
+        if (recipeHits.length) {
+            say("RECETA", recipeHits[0].writeHow);
+            if (recipeHits[0].recipe) say("RECETA", recipeHits[0].recipe.raw);
+        }
         const userHits = MindEngine.fromUserMarks(bytes, knownKm);
         userHits.forEach((hit) => mileageHits.unshift(hit));
         if (userHits.length) say("USER MARKS", userHits.length + " zonas KM marcadas a mano");
@@ -575,6 +582,11 @@ const OmegaKernel = {
                 }
             });
         }
+        ChecksumEngine.fromRecipe(bytes, best).forEach((item) => {
+            if (!kmChecksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
+                kmChecksums.unshift(item);
+            }
+        });
         ChecksumEngine.fromUserMarks(bytes, best).forEach((item) => {
             if (!kmChecksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
                 kmChecksums.unshift(item);

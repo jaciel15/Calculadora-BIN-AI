@@ -1177,6 +1177,17 @@ function wireUI() {
     if ($("brainInput")) $("brainInput").addEventListener("change", importBrain);
     bindClick("markAcceptBtn", acceptMarkLesson);
     bindClick("markSkipBtn", skipMarkLesson);
+    bindClick("helpExampleBtn", () => {
+        if ($("helpRecipe")) {
+            $("helpRecipe").value = "Rojo es KM multiplicado x10 en 3 bytes little-endian. Morado es la suma de esos 3 bytes y ahí se escribe el checksum.";
+            if (typeof MarkBook !== "undefined") MarkBook.persist();
+        }
+    });
+    if ($("helpRecipe")) {
+        $("helpRecipe").addEventListener("change", () => {
+            if (typeof MarkBook !== "undefined") MarkBook.persist();
+        });
+    }
     bindClick("closeProjectBtn", closeProject);
     bindClick("memoryMapBtn", () => focusPanel("memoryPanel"));
     bindClick("countersBtn", () => focusPanel("counterPanel"));

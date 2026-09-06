@@ -726,6 +726,61 @@ const MindEngine = {
         return ranges;
     },
 
+    fromHelpRecipe(bytes, knownKm) {
+        if (typeof MarkBook === "undefined") return [];
+        const rec = MarkBook.recipe();
+        if (!rec || !rec.formula) return [];
+        const painted = MarkBook.paintedAddrs("KM").concat(MarkBook.paintedAddrs("HINT"));
+        if (!painted.length) return [];
+        const width = rec.width || 3;
+        const endian = rec.endian || "LE";
+        const paintedSet = new Set(painted);
+        const copies = [];
+        painted.forEach((start) => {
+            if (start + width > bytes.length) return;
+            let inside = true;
+            for (let i = 0; i < width; i++) {
+                if (!paintedSet.has(start + i)) { inside = false; break; }
+            }
+            if (inside && copies.indexOf(start) === -1 && (copies.length === 0 || start >= copies[copies.length - 1] + width)) {
+                copies.push(start);
+            }
+        });
+        if (!copies.length) copies.push(painted[0]);
+        let km = knownKm;
+        const raw = MathEngine.fromBytes(bytes, copies[0], width, endian !== "BE");
+        if (km === null || km === undefined) {
+            km = rec.formula === "X * 10" && raw !== null ? Math.round(raw / 10) : raw;
+        }
+        const high = copies.reduce((best, addr) => {
+            const v = MathEngine.fromBytes(bytes, addr, width, endian !== "BE");
+            if (v === null) return best;
+            return !best || v >= best.value ? { addr, value: v } : best;
+        }, null);
+        return [{
+            fromMind: true,
+            fromUser: true,
+            fromLesson: true,
+            fromRecipe: true,
+            label: "KILOMETRAJE",
+            name: "RECETA_" + endian + width,
+            formula: rec.formula,
+            width,
+            endian,
+            copies,
+            stair: copies.map((addr) => ({ addr, value: MathEngine.fromBytes(bytes, addr, width, endian !== "BE") })),
+            address: high ? high.addr : copies[0],
+            addressText: Hunters.range(high ? high.addr : copies[0], width),
+            hex: MathEngine.hexBytes(bytes.slice(high ? high.addr : copies[0], (high ? high.addr : copies[0]) + width)),
+            numeric: km,
+            value: km,
+            writeHow: "Receta tuya: " + (rec.note || rec.formula) + ". " + copies.length + " huecos pintados.",
+            confidence: 99.6,
+            representation: rec.note || "receta usuario",
+            recipe: rec
+        }];
+    },
+
     fromUserMarks(bytes, knownKm) {
         if (typeof MarkBook === "undefined") return [];
         const hits = [];

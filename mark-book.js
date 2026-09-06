@@ -74,6 +74,55 @@ const MarkBook = {
         return !this.revealed;
     },
 
+    recipeText() {
+        const el = document.getElementById("helpRecipe");
+        return el ? String(el.value || "").trim() : "";
+    },
+
+    parseRecipe(text) {
+        const raw = String(text || this.recipeText() || "");
+        const t = raw.toLowerCase().replace(/×/g, "x").replace(/,/g, " ");
+        const rec = { formula: null, width: null, endian: null, chk: null, chkOn: null, raw: raw };
+        if (!raw) return rec;
+        if (/x\s*10\s*-\s*1|por 10 menos 1/.test(t)) rec.formula = "X * 10 - 1";
+        else if (/x\s*10\s*-\s*5|por 10 menos 5/.test(t)) rec.formula = "X * 10 - 5";
+        else if (/x\s*10\s*\+\s*5/.test(t)) rec.formula = "X * 10 + 5";
+        else if (/x\s*1000|metros|por 1000/.test(t)) rec.formula = "X * 1000";
+        else if (/x\s*100|por 100/.test(t)) rec.formula = "X * 100";
+        else if (/x\s*16/.test(t)) rec.formula = "X * 16";
+        else if (/x\s*10|por 10|multiplicad/.test(t)) rec.formula = "X * 10";
+        else if (/\bx\b|sin formula|tal cual/.test(t) && /rojo|km/.test(t)) rec.formula = "X";
+        if (/4\s*byte/.test(t)) rec.width = 4;
+        else if (/3\s*byte|tres byte/.test(t)) rec.width = 3;
+        else if (/2\s*byte|dos byte/.test(t)) rec.width = 2;
+        if (/big|be\b|hi\s*lo|primero el alto/.test(t)) rec.endian = "BE";
+        else if (/little|le\b|lo\s*hi|primero el bajo/.test(t)) rec.endian = "LE";
+        if (/sum16|suma 16/.test(t)) rec.chk = "SUM16";
+        else if (/crc32/.test(t)) rec.chk = "CRC32";
+        else if (/crc16/.test(t)) rec.chk = "CRC16";
+        else if (/crc8/.test(t)) rec.chk = "CRC8";
+        else if (/suma|sum8|sumas|checksum/.test(t)) rec.chk = "SUM8";
+        if (/morado|crc/.test(t) && /escrib|guarda|ahi|allí|dónde|donde/.test(t)) rec.chkOn = "CRC";
+        else if (/azul|sum\b/.test(t) && /escrib|guarda|ahi|allí|donde/.test(t)) rec.chkOn = "CHK";
+        if (/complemento|\bcomp\b/.test(t)) rec.chkOn = rec.chkOn || "COMP";
+        if (!rec.chkOn && rec.chk) {
+            if (this.lessonRanges("CRC").length || this.ranges("CRC").length) rec.chkOn = "CRC";
+            else if (this.lessonRanges("CHK").length || this.ranges("CHK").length) rec.chkOn = "CHK";
+            else if (this.lessonRanges("COMP").length || this.ranges("COMP").length) rec.chkOn = "COMP";
+        }
+        rec.note = [
+            rec.formula ? "KM = " + rec.formula : null,
+            rec.width ? rec.width + " bytes" : null,
+            rec.endian || null,
+            rec.chk ? rec.chk + (rec.chkOn ? " en " + rec.chkOn : "") : null
+        ].filter(Boolean).join(" · ");
+        return rec;
+    },
+
+    recipe() {
+        return this.parseRecipe(this.recipeText());
+    },
+
     paintedAddrs(kind) {
         const addrs = [];
         this.lessonRanges(kind).forEach((range) => {
@@ -86,7 +135,8 @@ const MarkBook = {
         try {
             localStorage.setItem(this.STORAGE, JSON.stringify({
                 lessons: this.lessons,
-                guideStep: this.guideStep
+                guideStep: this.guideStep,
+                recipe: this.recipeText()
             }));
         } catch (error) { /* ignore */ }
     },
@@ -98,6 +148,9 @@ const MarkBook = {
             const data = JSON.parse(raw);
             if (data.lessons) this.lessons = Object.assign(this.emptyLessons(), data.lessons);
             if (data.guideStep) this.guideStep = data.guideStep;
+            if (data.recipe && document.getElementById("helpRecipe")) {
+                document.getElementById("helpRecipe").value = data.recipe;
+            }
         } catch (error) { /* ignore */ }
     },
 
