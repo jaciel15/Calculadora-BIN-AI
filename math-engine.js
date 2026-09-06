@@ -144,21 +144,32 @@ const MathEngine = {
     },
 
     lastComboCount: 0,
+    COMBO_CAP: 200000,
 
     transforms(value) {
         const items = [];
         const seen = new Set();
+        const cap = this.COMBO_CAP;
         const push = (name, val) => {
-            if (!Number.isFinite(val) || val < 0 || val > 0xFFFFFFFF) return;
+            if (items.length >= cap) return false;
+            if (!Number.isFinite(val) || val < 0 || val > 0xFFFFFFFF) return false;
             const key = name + "|" + (val >>> 0);
-            if (seen.has(key) || items.length >= 100000) return;
+            if (seen.has(key)) return false;
             seen.add(key);
             items.push({ name, value: val >>> 0 });
+            return true;
         };
+
+        const factors = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 25, 32, 40, 50, 64, 80, 100, 125, 128, 160, 200, 256, 500, 512, 1000, 1024, 10000];
+        const xorMasks = [0x01, 0x0F, 0xF0, 0x7F, 0x80, 0xFF, 0x55, 0xAA, 0x5A, 0xA5, 0x3C, 0xC3, 0x69, 0x96, 0xFF00, 0x00FF, 0xFFFF, 0xFF0000, 0xFFFFFF, 0xFFFFFFFF, 0x0101, 0x1010, 0x1111];
+        const adds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 20, 32, 50, 64, 100, 128, 255, 256];
+        const mods = [10, 16, 100, 128, 255, 256, 1000, 4096, 65536];
+        const rolls = [1, 2, 3, 4, 5, 6, 7, 8];
 
         push("X", value);
         push("~X", (~value) >>> 0);
         push("NOT8(X)", (~value) & 0xFF);
+        push("NOT16(X)", (~value) & 0xFFFF);
         push("SWAP16(X)", this.swap16(value));
         push("SWAP32(X)", this.swap32(value));
         push("NIBBLE_SWAP(X)", this.nibbleSwap(value));
@@ -166,12 +177,6 @@ const MathEngine = {
         push("X*10+1", value * 10 + 1);
         push("X*10-1", value * 10 - 1);
         push("(X<<8)|LO", ((value << 8) | (value & 0xFF)) >>> 0);
-
-        const factors = [1, 2, 4, 5, 8, 10, 16, 20, 32, 50, 64, 100, 160, 200, 256, 1000, 10000];
-        const xorMasks = [0xFF, 0x7F, 0x80, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF, 0x55, 0xAA, 0x5A, 0xA5, 0xF0, 0x0F];
-        const adds = [0, 1, 2, 3, 5, 7, 8, 16, 20, 32, 64, 100];
-        const mods = [10, 100, 255, 256, 1000];
-        const rolls = [1, 2, 4, 8];
 
         factors.forEach((factor) => {
             push("X * " + factor, value * factor);
@@ -182,25 +187,15 @@ const MathEngine = {
         });
 
         xorMasks.forEach((mask) => {
-            const xored = value ^ mask;
-            const m = mask.toString(16).toUpperCase();
-            push("X XOR " + m, xored);
-            factors.forEach((factor) => {
-                adds.forEach((add) => {
-                    const core = xored * factor + add;
-                    const label = add
-                        ? "(X XOR " + m + ") * " + factor + " + " + add
-                        : (factor === 1 ? "X XOR " + m : "(X XOR " + m + ") * " + factor);
-                    push(label, core);
-                    rolls.forEach((bits) => {
-                        push("(" + label + ") ROL8 " + bits, this.rol(core, bits, 8));
-                        push("(" + label + ") ROL16 " + bits, this.rol(core, bits, 16));
-                        push("(" + label + ") ROL24 " + bits, this.rol(core, bits, 24));
-                    });
-                    mods.forEach((mod) => {
-                        push("(" + label + ") MOD " + mod, core % mod);
-                    });
-                });
+            push("X XOR " + mask.toString(16).toUpperCase(), value ^ mask);
+        });
+
+        [8, 16, 24, 32].forEach((width) => {
+            rolls.forEach((bits) => {
+                push("ROL" + width + "(" + bits + ")", this.rol(value, bits, width));
+                push("ROR" + width + "(" + bits + ")", this.ror(value, bits, width));
+                push("SHL" + width + "(" + bits + ")", (value << bits) >>> 0);
+                push("SHR" + width + "(" + bits + ")", value >>> bits);
             });
         });
 
@@ -212,12 +207,29 @@ const MathEngine = {
             });
         });
 
-        [8, 16, 24, 32].forEach((width) => {
-            rolls.forEach((bits) => {
-                push("ROL" + width + "(" + bits + ")", this.rol(value, bits, width));
-                push("ROR" + width + "(" + bits + ")", this.ror(value, bits, width));
-                push("SHL" + width + "(" + bits + ")", (value << bits) >>> 0);
-                push("SHR" + width + "(" + bits + ")", value >>> bits);
+        xorMasks.forEach((mask) => {
+            const xored = value ^ mask;
+            const m = mask.toString(16).toUpperCase();
+            factors.forEach((factor) => {
+                adds.forEach((add) => {
+                    if (items.length >= cap) return;
+                    const core = xored * factor + add;
+                    const label = add
+                        ? "(X XOR " + m + ") * " + factor + " + " + add
+                        : (factor === 1 ? "X XOR " + m : "(X XOR " + m + ") * " + factor);
+                    push(label, core);
+                    rolls.forEach((bits) => {
+                        push("(" + label + ") ROL8 " + bits, this.rol(core, bits, 8));
+                        push("(" + label + ") ROL16 " + bits, this.rol(core, bits, 16));
+                        push("(" + label + ") ROL24 " + bits, this.rol(core, bits, 24));
+                        push("(" + label + ") ROL32 " + bits, this.rol(core, bits, 32));
+                        push("(" + label + ") ROR8 " + bits, this.ror(core, bits, 8));
+                        push("(" + label + ") ROR16 " + bits, this.ror(core, bits, 16));
+                    });
+                    mods.forEach((mod) => {
+                        push("(" + label + ") MOD " + mod, core % mod);
+                    });
+                });
             });
         });
 
@@ -260,6 +272,13 @@ const MathEngine = {
         if (m) return this.rol(n, Number(m[2]), Number(m[1]));
         m = f.match(/^ROR(\d+)\((\d+)\)$/);
         if (m) return this.ror(n, Number(m[2]), Number(m[1]));
+        m = f.match(/^SHL(\d+)\((\d+)\)$/);
+        if (m) return (n << Number(m[2])) >>> 0;
+        m = f.match(/^SHR(\d+)\((\d+)\)$/);
+        if (m) return n >>> Number(m[2]);
+        if (f === "GRAY(X)") return (n ^ (n >>> 1)) >>> 0;
+        if (f === "NIBBLE_SWAP(X)") return this.nibbleSwap(n);
+        if (f === "NOT16(X)") return (~n) & 0xFFFF;
         return n >>> 0;
     },
 
@@ -314,10 +333,11 @@ const MathEngine = {
             }, extra || {}));
         };
 
-        this.transforms(value).forEach((item) => {
+        const transforms = this.transforms(value);
+        transforms.forEach((item) => {
             [2, 3, 4].forEach((width) => {
+                if (variants.length >= this.COMBO_CAP) return;
                 const max = Math.pow(256, width);
-                if (item.value >= max && width < 4) return;
                 if (width < 4 && item.value >= max) return;
                 addBytes(item.name, this.toBytes(item.value, width, true), { endian: "LE", numeric: item.value });
                 addBytes(item.name, this.toBytes(item.value, width, false), { endian: "BE", numeric: item.value });
@@ -331,6 +351,7 @@ const MathEngine = {
             }
         });
 
+        this.lastComboCount = variants.length;
         this._variantCache = { value, items: variants };
         return variants;
     }

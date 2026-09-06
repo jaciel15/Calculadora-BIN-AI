@@ -502,7 +502,7 @@ const OmegaKernel = {
         if (pairHits.length) say("PAIR MIND", pairHits[0].formula + " demostrado por los dos BIN");
 
         let hoursHits = Hunters.huntValue(bytes, knownHours, "HORAS MOTOR");
-        say("MOTOR MATEMATICO", MathEngine.lastComboCount + " combinaciones probadas");
+        say("MOTOR MATEMATICO", MathEngine.lastComboCount + " combinaciones de todo tipo (tope " + MathEngine.COMBO_CAP + ")");
         say("COUNTER HUNTER", mileageHits.length ? "KM: " + mileageHits[0].formula : "sin KM conocido");
         say("HOURS HUNTER", hoursHits.length ? "Horas: " + hoursHits[0].formula : "sin horas conocidas");
 
