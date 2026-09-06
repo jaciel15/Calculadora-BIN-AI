@@ -55,7 +55,124 @@ const MindEngine = {
         return { value, slots, span: Math.max(17, span), layout };
     },
 
-    vinHeart(bytes) {
+    cleanVin(vin) {
+        return String(vin || "").toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
+    },
+
+    encodeVinVariants(vin) {
+        const text = this.cleanVin(vin);
+        if (text.length < 3) return [];
+        const chars = Array.from(text).map((ch) => ch.charCodeAt(0));
+        const out = [];
+        const add = (id, label, arr, extra) => {
+            extra = extra || {};
+            out.push(Object.assign({
+                id,
+                label,
+                bytes: Uint8Array.from(arr),
+                span: arr.length,
+                step: extra.step || 1,
+                xor: extra.xor || 0,
+                pad: extra.pad
+            }, extra));
+        };
+        add("PACKED", "ASCII seguido · " + text.length + " letras", chars, { step: 1 });
+        const pad = (p) => {
+            const arr = [];
+            chars.forEach((c) => { arr.push(c); arr.push(p); });
+            return arr;
+        };
+        add("PAD00", "letra + 00", pad(0), { step: 2, pad: 0 });
+        add("PADFF", "letra + FF", pad(0xFF), { step: 2, pad: 0xFF });
+        const swapped = chars.slice();
+        for (let i = 0; i + 1 < swapped.length; i += 2) {
+            const tmp = swapped[i];
+            swapped[i] = swapped[i + 1];
+            swapped[i + 1] = tmp;
+        }
+        add("SWAP16", "words intercambiados", swapped, { step: 1 });
+        [0xFF, 0x55, 0xAA, 0x7F].forEach((mask) => {
+            add("XOR" + mask.toString(16).toUpperCase(), "ASCII XOR " + mask.toString(16).toUpperCase(), chars.map((c) => c ^ mask), { step: 1, xor: mask });
+        });
+        return out;
+    },
+
+    huntKnownVin(bytes, vin) {
+        const text = this.cleanVin(vin);
+        const hits = [];
+        this.encodeVinVariants(text).forEach((variant) => {
+            const locs = MathEngine.findPattern(bytes, variant.bytes);
+            if (!locs.length) return;
+            hits.push({
+                name: "VIN",
+                value: text,
+                address: locs[0],
+                addressText: Hunters.range(locs[0], variant.span),
+                width: variant.span,
+                span: variant.span,
+                step: variant.step,
+                pad: variant.pad,
+                xor: variant.xor || 0,
+                layout: variant.id,
+                layoutLabel: variant.label,
+                copies: locs.slice(),
+                type: "ASCII",
+                formula: "VIN_" + variant.id,
+                endian: "ASCII",
+                writeHow: "VIN propio: " + variant.label + " en " + locs.length + " copias. No usa el KM.",
+                confidence: Math.min(99.4, 90 + Math.min(locs.length, 4) * 2)
+            });
+        });
+        return hits.sort((a, b) => b.confidence - a.confidence);
+    },
+
+    reasonVinPair(bytesA, bytesB, vinA, vinB) {
+        if (!bytesA || !bytesB || !vinA || !vinB) return [];
+        const a = this.cleanVin(vinA);
+        const b = this.cleanVin(vinB);
+        if (a.length < 3 || b.length < 3 || a === b) return [];
+        const varsA = this.encodeVinVariants(a);
+        const varsB = this.encodeVinVariants(b);
+        const hits = [];
+        varsA.forEach((va) => {
+            const vb = varsB.find((item) => item.id === va.id);
+            if (!vb) return;
+            const locs = MathEngine.findPattern(bytesA, va.bytes).filter((addr) => {
+                for (let i = 0; i < vb.bytes.length; i++) {
+                    if (bytesB[addr + i] !== vb.bytes[i]) return false;
+                }
+                return true;
+            });
+            if (!locs.length) return;
+            hits.push({
+                name: "VIN",
+                value: a,
+                address: locs[0],
+                addressText: Hunters.range(locs[0], va.span),
+                width: va.span,
+                span: va.span,
+                step: va.step,
+                pad: va.pad,
+                xor: va.xor || 0,
+                layout: va.id,
+                layoutLabel: va.label,
+                copies: locs,
+                type: "ASCII",
+                formula: "VIN_" + va.id,
+                endian: "ASCII",
+                fromPair: true,
+                writeHow: "Par demostrado: misma plantilla VIN en ambos BIN, " + va.label + ".",
+                confidence: Math.min(99.6, 94 + Math.min(locs.length, 3) * 1.5)
+            });
+        });
+        return hits.sort((x, y) => y.confidence - x.confidence);
+    },
+
+    vinHeart(bytes, knownVin) {
+        if (knownVin && this.cleanVin(knownVin).length >= 6) {
+            const known = this.huntKnownVin(bytes, knownVin);
+            if (known.length) return known;
+        }
         const layouts = [
             { id: "PACKED", step: 1, pad: null, label: "17 ASCII seguidos" },
             { id: "PAD00", step: 2, pad: 0, label: "letra + 00 · 17 veces" },
@@ -78,6 +195,7 @@ const MindEngine = {
                     span: read.span,
                     step: layout.step,
                     pad: layout.pad,
+                    xor: 0,
                     layout: layout.id,
                     layoutLabel: layout.label,
                     slots: read.slots,
@@ -86,6 +204,7 @@ const MindEngine = {
                     endian: "ASCII",
                     confidence: layout.id === "PACKED" ? 94 : 88
                 });
+                i += Math.max(1, read.span) - 1;
             }
         });
         const grouped = [];
@@ -119,8 +238,8 @@ const MindEngine = {
         return grouped.sort((a, b) => b.confidence - a.confidence);
     },
 
-    extractVins(bytes) {
-        return this.vinHeart(bytes).slice(0, 8);
+    extractVins(bytes, knownVin) {
+        return this.vinHeart(bytes, knownVin).slice(0, 8);
     },
 
     invert(stored, formula) {

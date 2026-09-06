@@ -14,16 +14,20 @@ const EditorEngine = {
 
     applyVin(bytes, heart, vin) {
         const text = String(vin || "").toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
-        if (text.length !== 17 || !heart) return null;
+        if (!heart || text.length < 6) return null;
+        if (text.length !== 17 && !(heart.value && text.length === String(heart.value).length)) return null;
         const working = new Uint8Array(bytes);
         const layout = { id: heart.layout || "PACKED", step: heart.step || 1, pad: heart.pad };
         const copies = heart.copies && heart.copies.length ? heart.copies : [heart.address];
+        const xor = heart.xor || 0;
         copies.forEach((start) => {
-            for (let i = 0; i < 17; i++) {
+            for (let i = 0; i < text.length; i++) {
                 let addr;
-                if (layout.id === "SWAP16") addr = start + (i ^ 1);
-                else addr = start + i * layout.step;
-                if (addr >= 0 && addr < working.length) working[addr] = text.charCodeAt(i);
+                if (layout.id === "SWAP16") {
+                    addr = start + (i % 2 === 0 ? i + 1 : i - 1);
+                    if (i === text.length - 1 && text.length % 2 === 1) addr = start + i;
+                } else addr = start + i * (layout.step || 1);
+                if (addr >= 0 && addr < working.length) working[addr] = text.charCodeAt(i) ^ xor;
             }
             if (heart.checksum && heart.checksum.name === "SUM8") {
                 let sum = 0;

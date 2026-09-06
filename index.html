@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=vin1">
+    <link rel="stylesheet" href="style.css?v=vin2">
 </head>
 
 <body>
@@ -65,9 +65,12 @@
         <div class="known-bar">
             <label>KM CONOCIDO</label>
             <input id="knownKm" type="text" placeholder="Ej. 25340">
+            <label>VIN CONOCIDO</label>
+            <input id="knownVin" type="text" maxlength="17" placeholder="17 letras del VIN">
             <label>HORAS MOTOR</label>
             <input id="knownHours" type="text" placeholder="Opcional">
             <button id="analyzeBtn" class="action-btn green">ANALIZAR</button>
+            <button id="analyzeVinBtn" class="action-btn purple">ANALIZAR VIN</button>
             <span id="familyCount" class="family-count">Familia: 0 BIN</span>
         </div>
 
@@ -77,12 +80,17 @@
             <span id="bin1Name" class="pair-name">Ninguno</span>
             <label>KM 1</label>
             <input id="knownKm1" type="text" placeholder="KM archivo 1">
+            <label>VIN 1</label>
+            <input id="knownVin1" type="text" maxlength="17" placeholder="VIN archivo 1">
             <label>BIN 2</label>
             <button id="pickBin2" class="action-btn">ELEGIR BIN 2</button>
             <span id="bin2Name" class="pair-name">Ninguno</span>
             <label>KM 2</label>
             <input id="knownKm2" type="text" placeholder="KM archivo 2">
+            <label>VIN 2</label>
+            <input id="knownVin2" type="text" maxlength="17" placeholder="VIN archivo 2">
             <button id="analyzePairBtn" class="action-btn green">ANALIZAR PAR</button>
+            <button id="analyzeVinPairBtn" class="action-btn purple">PAR VIN</button>
         </div>
         <input type="file" id="fileInput2" accept=".bin,.eep,.hex" hidden>
 
@@ -257,6 +265,10 @@
                 <p id="aiKmOrder">-----</p>
                 <p><strong>CHECKSUM DEL KM</strong></p>
                 <p id="aiKmChecksum">-----</p>
+                <p><strong>ORDEN DEL VIN</strong></p>
+                <p id="aiVinOrder">-----</p>
+                <p><strong>CHECKSUM DEL VIN</strong></p>
+                <p id="aiVinChecksum">-----</p>
             </div>
 
             <div id="checksumPanel" class="panel checksum-wide">
@@ -298,6 +310,7 @@
                     <label>TAMAÑO:</label>
                     <select id="dataSize">
                         <option>4 BYTES</option>
+                        <option>17 BYTES</option>
                         <option>2 BYTES</option>
                         <option>3 BYTES</option>
                         <option>1 BYTE</option>
@@ -467,19 +480,19 @@
     </div>
 </div>
 
-<script src="mark-book.js?v=vin1"></script>
-<script src="math-engine.js?v=vin1"></script>
-<script src="checksum-engine.js?v=vin1"></script>
-<script src="knowledge-base.js?v=vin1"></script>
-<script src="mind-engine.js?v=vin1"></script>
-<script src="hunters.js?v=vin1"></script>
-<script src="dna-discovery.js?v=vin1"></script>
-<script src="editor-upa.js?v=vin1"></script>
-<script src="bin-object.js?v=vin1"></script>
-<script src="family-library.js?v=vin1"></script>
-<script src="omega-kernel.js?v=vin1"></script>
-<script src="bin-core.js?v=vin1"></script>
-<script src="app.js?v=vin1"></script>
+<script src="mark-book.js?v=vin2"></script>
+<script src="math-engine.js?v=vin2"></script>
+<script src="checksum-engine.js?v=vin2"></script>
+<script src="knowledge-base.js?v=vin2"></script>
+<script src="mind-engine.js?v=vin2"></script>
+<script src="hunters.js?v=vin2"></script>
+<script src="dna-discovery.js?v=vin2"></script>
+<script src="editor-upa.js?v=vin2"></script>
+<script src="bin-object.js?v=vin2"></script>
+<script src="family-library.js?v=vin2"></script>
+<script src="omega-kernel.js?v=vin2"></script>
+<script src="bin-core.js?v=vin2"></script>
+<script src="app.js?v=vin2"></script>
 
 </body>
 </html>

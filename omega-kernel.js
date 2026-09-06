@@ -429,7 +429,7 @@ const OmegaKernel = {
         this.add(evidence, "BIN CORE", "profile", { size: bytes.length, chip: bin.chip }, 95, "tamaño y chip");
         say("BIN CORE", "Perfil: " + bytes.length + " bytes · " + bin.chip);
 
-        const vins = MindEngine.extractVins(bytes);
+        const vins = MindEngine.extractVins(bytes, options.knownVin);
         const vinHeart = vins[0] || null;
         const vinId = vinHeart ? MindEngine.decodeVin(vinHeart.value) : null;
         if (vinHeart) {
@@ -772,5 +772,63 @@ const OmegaKernel = {
             size: c.size, description: "ventana " + c.window, copies: 1
         }));
         return map.concat(extra).slice(0, 24);
+    },
+
+    runVin(bin, options) {
+        options = options || {};
+        const bytes = bin.working || bin.original;
+        const vin = options.knownVin;
+        const vin2 = options.knownVin2;
+        const log = [];
+        const say = (module, message) => { log.push({ module, message, time: new Date().toLocaleTimeString() }); };
+        say("VIN HEART", "Análisis propio del VIN. El KM no se usa.");
+        let hearts = MindEngine.vinHeart(bytes, vin);
+        if (this.compareBins[0] && vin && vin2) {
+            MindEngine.reasonVinPair(bytes, this.compareBins[0].bytes, vin, vin2).forEach((hit) => {
+                hearts.unshift(hit);
+            });
+            say("VIN PAR", "Misma plantilla buscada en BIN 1 y BIN 2");
+        }
+        const heart = hearts[0] || null;
+        if (heart) {
+            say("VIN HEART", heart.value + " · " + heart.layoutLabel + " · " + (heart.copies || [heart.address]).length + " copias · " + heart.span + " bytes");
+            say("VIN ALGORITMO", heart.writeHow);
+        } else {
+            say("VIN HEART", vin
+                ? "No está en ASCII ni XOR/pad. Escribe las 17 letras o marca la zona."
+                : "Sin VIN visible. Escribe el VIN conocido de 17 letras y vuelve a analizar VIN.");
+        }
+        const vinId = heart ? MindEngine.decodeVin(heart.value) : null;
+        const thinking = heart
+            ? ("VIN HEART: " + heart.value + " se guarda como " + heart.layoutLabel +
+                " en " + (heart.copies || [heart.address]).length + " copias. " + (heart.writeHow || ""))
+            : "VIN HEART en espera. No reutilizo el algoritmo del kilometraje.";
+        const omegaCard = heart
+            ? [
+                "VIN HEART (independiente del KM)",
+                "VIN: " + heart.value,
+                "Layout: " + heart.layoutLabel,
+                "Fórmula: " + heart.formula,
+                "Dirección: " + heart.addressText,
+                "Copias: " + (heart.copies || [heart.address]).join(", "),
+                "Bytes por copia: " + heart.span,
+                heart.checksum ? ("Checksum: " + heart.checksum.name + " @ " + heart.checksum.storedAt) : "Checksum VIN: no ligado"
+            ].join("\n")
+            : "No hay VIN demostrado. Carga el dump y escribe el VIN de 17 letras.";
+        return {
+            log,
+            vins: hearts,
+            vinHeart: heart,
+            vinId,
+            vinFocus: true,
+            thinking,
+            omegaCard,
+            kmOrder: {
+                layout: heart ? heart.layoutLabel : "Sin VIN",
+                hex: heart ? heart.value : "----",
+                copies: heart ? (heart.copies || []).length : 0
+            },
+            kmChecksums: heart && heart.checksum ? [heart.checksum] : []
+        };
     }
 };

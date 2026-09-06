@@ -34,7 +34,10 @@ function collectMarks() {
         }
     };
     if (!currentBIN) return marks;
-    Hunters.huntVIN(currentBIN.original).forEach((v) => {
+    const vinList = (currentBIN.analysis && currentBIN.analysis.vins && currentBIN.analysis.vins.length)
+        ? currentBIN.analysis.vins
+        : Hunters.huntVIN(currentBIN.original);
+    vinList.forEach((v) => {
         (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
     });
     if (currentBIN.analysis && currentBIN.analysis.best) {
@@ -124,7 +127,9 @@ function showVinCard(which, bytes) {
         addr.textContent = "—";
         return null;
     }
-    const found = Hunters.huntVIN(bytes);
+    const found = (which === 1 && currentBIN && currentBIN.analysis && currentBIN.analysis.vins && currentBIN.analysis.vins.length)
+        ? currentBIN.analysis.vins
+        : Hunters.huntVIN(bytes);
     if (!found.length) {
         val.textContent = "SIN VIN EN EL DUMP";
         maker.textContent = "El nombre del archivo no cuenta";
@@ -291,9 +296,20 @@ function renderDNA(dna, discovery) {
     }
     if ($("aiKmChecksum")) {
         const linked = omega && omega.kmChecksums && omega.kmChecksums[0];
-        $("aiKmChecksum").textContent = linked
+        $("aiKmChecksum").textContent = linked && !omega.vinFocus
             ? linked.name + " " + linked.endian + " @ " + padHex(linked.storedAt) + " (ventana " + linked.window + ")"
-            : "Sin checksum ligado al KM. Puede valerse solo de copias espejo.";
+            : (omega && omega.vinFocus ? "—" : "Sin checksum ligado al KM. Puede valerse solo de copias espejo.");
+    }
+    const heart = omega && omega.vinHeart;
+    if ($("aiVinOrder")) {
+        $("aiVinOrder").textContent = heart
+            ? heart.layoutLabel + " · " + heart.formula + " · " + (heart.copies || [heart.address]).length + " copias · " + heart.addressText
+            : "-----";
+    }
+    if ($("aiVinChecksum")) {
+        $("aiVinChecksum").textContent = heart && heart.checksum
+            ? heart.checksum.name + " @ " + padHex(heart.checksum.storedAt)
+            : "Sin checksum ligado al VIN.";
     }
 }
 
@@ -378,6 +394,57 @@ function knownKm2() {
     return raw === "" ? null : Number(raw);
 }
 
+function knownVin() {
+    const raw = $("knownVin") ? $("knownVin").value : "";
+    const one = $("knownVin1") && $("knownVin1").value ? $("knownVin1").value : raw;
+    const clean = MindEngine.cleanVin(one);
+    return clean.length >= 3 ? clean : "";
+}
+
+function knownVin2() {
+    const raw = $("knownVin2") ? $("knownVin2").value : "";
+    const clean = MindEngine.cleanVin(raw);
+    return clean.length >= 3 ? clean : "";
+}
+
+function scrollHexTo(addr) {
+    const el = document.querySelector("#hexViewer [data-addr=\"" + addr + "\"]");
+    if (el) el.scrollIntoView({ block: "center" });
+}
+
+function renderVinAnalysis(analysis) {
+    window.labFocus = "VIN";
+    if ($("dataType")) $("dataType").value = "VIN";
+    fillEditorVin(analysis);
+    renderDNA(analysis.dna || (currentBIN.analysis && currentBIN.analysis.dna) || { score: 0, status: "VIN", manufacturer: "—", family: "VIN HEART", version: "—" }, analysis.discovery || { algorithm: "VIN HEART", type: "VIN", region: "—", confidence: 0, patterns: 0, note: "Análisis VIN" });
+    if (analysis.omega) {
+        $("omegaCard").textContent = analysis.omega.omegaCard;
+        $("omegaThink").textContent = analysis.omega.thinking;
+        if ($("aiAlgorithm")) $("aiAlgorithm").textContent = analysis.omega.vinHeart ? analysis.omega.vinHeart.formula : "VIN no localizado";
+        if ($("aiType")) $("aiType").textContent = "VIN";
+        if ($("aiRegion")) $("aiRegion").textContent = analysis.omega.vinHeart ? analysis.omega.vinHeart.addressText : "-----";
+        if ($("aiHow")) $("aiHow").textContent = analysis.omega.vinHeart ? analysis.omega.vinHeart.writeHow : "Escribe las 17 letras del VIN y pulsa ANALIZAR VIN.";
+        if ($("aiConfidence") && analysis.omega.vinHeart) $("aiConfidence").textContent = analysis.omega.vinHeart.confidence + "%";
+    }
+    refreshIdentity();
+    showHEX(currentBIN.working);
+    if (analysis.omega && analysis.omega.vinHeart) scrollHexTo(analysis.omega.vinHeart.address);
+    addLogRows();
+    setStatus(analysis.omega && analysis.omega.vinHeart ? "VIN LISTO" : "VIN NO HALLADO", !!analysis.omega.vinHeart);
+    focusPanel("editorPanel");
+}
+
+function runVinAnalysis() {
+    if (!needBIN()) return;
+    if ($("dataType")) $("dataType").value = "VIN";
+    if ($("knownVin1") && $("knownVin").value && !$("knownVin1").value) $("knownVin1").value = $("knownVin").value;
+    setStatus("ANALIZANDO VIN", false);
+    setTimeout(function () {
+        const analysis = binCore.analyzeVin(knownVin(), knownVin2());
+        renderVinAnalysis(analysis);
+    }, 40);
+}
+
 function needBIN() {
     if (currentBIN) return true;
     alert("Primero abre un archivo BIN.");
@@ -429,6 +496,12 @@ function runAnalysis(extra) {
     setTimeout(function () {
         const opts = extra || {};
         if (opts.knownKm2 === undefined && knownKm2() !== null) opts.knownKm2 = knownKm2();
+        if (opts.knownVin === undefined && knownVin()) opts.knownVin = knownVin();
+        if ($("dataType") && $("dataType").value === "VIN") {
+            runVinAnalysis();
+            return;
+        }
+        window.labFocus = "KM";
         const analysis = binCore.analyze(km, hours, opts);
         renderAnalysis(analysis);
     }, 40);
@@ -997,6 +1070,8 @@ function wireUI() {
 
     bindClick("analyzeBtn", runAnalysis);
     bindClick("analyzeBtnTop", runAnalysis);
+    bindClick("analyzeVinBtn", runVinAnalysis);
+    bindClick("analyzeVinPairBtn", runVinAnalysis);
     bindClick("saveBinBtn", runGenerateBIN);
     bindClick("saveAlgoBtn", saveAlgorithm);
     bindClick("saveAlgoBtnTop", saveAlgorithm);
@@ -1005,12 +1080,7 @@ function wireUI() {
     bindClick("memoryMapBtn", () => focusPanel("memoryPanel"));
     bindClick("countersBtn", () => focusPanel("counterPanel"));
     bindClick("checksumBtn", () => focusPanel("checksumPanel"));
-    bindClick("vinHunterBtn", () => {
-        if ($("dataType")) $("dataType").value = "VIN";
-        if (currentBIN && currentBIN.analysis) fillEditorVin(currentBIN.analysis);
-        focusPanel("vinStrip");
-        focusPanel("editorPanel");
-    });
+    bindClick("vinHunterBtn", runVinAnalysis);
     if ($("dataType")) {
         $("dataType").onchange = () => {
             if (!currentBIN || !currentBIN.analysis) return;

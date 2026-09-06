@@ -44,6 +44,7 @@ class BINCore {
             knownKm,
             knownHours,
             knownKm2: extra && extra.knownKm2,
+            knownVin: extra && extra.knownVin,
             impossible: extra && extra.impossible
         });
 
@@ -68,6 +69,25 @@ class BINCore {
         };
         bin.status = "ANALIZADO";
         this.addLog("VALIDATION", report.truth.status + " · " + report.truth.confidence + "%");
+        return bin.analysis;
+    }
+
+    analyzeVin(knownVin, knownVin2) {
+        const bin = this.currentBIN;
+        if (!bin) return null;
+        this.addLog("VIN HEART", "Analizo el VIN como dato propio, no como KM.");
+        const report = OmegaKernel.runVin(bin, { knownVin, knownVin2 });
+        (report.log || []).forEach((row) => this.addLog(row.module, row.message));
+        const prev = bin.analysis || {};
+        bin.analysis = Object.assign({}, prev, {
+            vins: report.vins,
+            omega: Object.assign({}, prev.omega || {}, report),
+            vinFocus: true
+        });
+        bin.status = "VIN ANALIZADO";
+        this.addLog("VIN HEART", report.vinHeart
+            ? report.vinHeart.layoutLabel + " · " + (report.vinHeart.copies || []).length + " copias"
+            : "VIN no localizado");
         return bin.analysis;
     }
 
