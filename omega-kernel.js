@@ -271,6 +271,23 @@ const OmegaKernel = {
         };
     },
 
+    kmHitScore(hit) {
+        if (!hit) return 0;
+        let score = Number(hit.confidence) || 0;
+        if (hit.fromFamily && hit.writable) score += 28;
+        if (hit.fromPair) score += 22;
+        if (hit.fromStair && !hit.scatter) score += 16;
+        if (hit.fromStair && (hit.copies || []).length >= 8) score += 6;
+        if (hit.fromUser) score += 14;
+        if (hit.fromFamily && hit.writable === false) score += 8;
+        if (hit.scatter) score -= 10;
+        return score;
+    },
+
+    rankKmHits(hits) {
+        return (hits || []).slice().sort((a, b) => this.kmHitScore(b) - this.kmHitScore(a));
+    },
+
     truthJudge(hit, links, stress, binsChecked) {
         if (!hit) {
             return { status: "SIN EVIDENCIA", confidence: 0, note: "No hay contador demostrable." };
@@ -279,6 +296,7 @@ const OmegaKernel = {
         const checksumLinked = links.some((l) => l.why.indexOf("checksum") !== -1);
         const copies = (hit.copies || []).length;
         if (copies >= 2) score += 6;
+        if (hit.fromStair && copies >= 4) score += 8;
         if (checksumLinked) score += 8;
         if (hit.fromMemory) score += 7;
         if (stress.rate >= 0.8) score += 6;
@@ -400,6 +418,9 @@ const OmegaKernel = {
         }
         const familyLine = best.familyId ? "Familia kernel: " + best.familyId : null;
         const chk = checksums.find((c) => c.status === "VALIDO");
+        const stairLine = best.fromStair
+            ? "Lectura: TODO el BIN · rampa " + ((best.copies || []).length) + " huecos ±1"
+            : null;
         return [
             familyLine || "BIN HUNTER OMEGA",
             "COUNTER DETECTADO",
@@ -407,13 +428,14 @@ const OmegaKernel = {
             "Tamaño: " + best.width + " bytes",
             "Representación: " + (best.representation || best.endian || "desconocida"),
             "Transformación candidata: " + best.formula,
+            stairLine,
             "Correlación: " + (links[0] ? links[0].confidence + "%" : "0%"),
             "BINs comprobados: " + binsChecked,
             "Hipótesis: " + truth.status,
             "Checksum asociado: " + (chk ? chk.name + " encontrado" : "no demostrado"),
             "Stress test: " + stress.passed + "/" + stress.cases + " · " + stress.status,
             "Confianza: " + truth.confidence + "%"
-        ].join("\n");
+        ].filter(Boolean).join("\n");
     },
 
     run(bin, options) {
@@ -485,10 +507,20 @@ const OmegaKernel = {
         say("HOURS HUNTER", hoursHits.length ? "Horas: " + hoursHits[0].formula : "sin horas conocidas");
 
         const unknown = this.unknownCounters(bytes, map);
+        const stairs = MindEngine.scanStairs(bytes, knownKm);
+        stairs.forEach((stair) => {
+            mileageHits.unshift(stair);
+            unknown.unshift(stair);
+        });
         MindEngine.scanRings(bytes).forEach((ring) => {
             unknown.unshift(ring);
             if (!mileageHits.length) mileageHits.unshift(ring);
         });
+        if (stairs.length) {
+            say("BIN COMPLETO", stairs.length + " rampas ±1 en todo el archivo (" + stairs[0].copies.length + " huecos)");
+        } else {
+            say("BIN COMPLETO", "Recorrí los " + bytes.length + " bytes. Sin rampa ±1 clara todavía.");
+        }
         this.add(evidence, "UNKNOWN DECODER", "candidates", { count: unknown.length }, unknown[0] ? unknown[0].confidence : 30, "contadores sin etiqueta");
         say("UNKNOWN DECODER", unknown.length + " bloques candidatos");
 
@@ -502,6 +534,7 @@ const OmegaKernel = {
         say("VIN HUNTER", vins.length ? vins[0].value : "no encontrado");
         say("SERIAL HUNTER", serials.length ? serials.length + " candidatos" : "no encontrado");
 
+        mileageHits = this.rankKmHits(mileageHits);
         let best = mileageHits[0] || hoursHits[0] || unknown[0] || null;
         const copiesExact = best && best.copies ? Hunters.hiddenCopies([best]) : [];
         const copiesHidden = this.hiddenCopies(bytes, patterns);
@@ -515,6 +548,13 @@ const OmegaKernel = {
         }
         const checksums = ChecksumEngine.hunt(bytes, hot);
         const kmChecksums = ChecksumEngine.linkToKm(bytes, best);
+        if (best && best.fromStair) {
+            ChecksumEngine.linkStair(bytes, best).forEach((item) => {
+                if (!kmChecksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
+                    kmChecksums.unshift(item);
+                }
+            });
+        }
         ChecksumEngine.fromUserMarks(bytes, best).forEach((item) => {
             if (!kmChecksums.some((c) => c.name === item.name && c.storedAt === item.storedAt)) {
                 kmChecksums.unshift(item);
@@ -604,6 +644,12 @@ const OmegaKernel = {
                 confidence: 98.4,
                 note: "El par demuestra la misma fórmula en la misma dirección. No usé el nombre del archivo."
             };
+        } else if (best && best.fromStair && !best.scatter && (best.copies || []).length >= 6) {
+            truth = {
+                status: "DEMOSTRADO",
+                confidence: Math.max(truth.confidence, 96.8),
+                note: "Rampa ±1 recorrida en todo el BIN. El KM actual es el más alto."
+            };
         }
         const thought = MindEngine.think({
             vinId,
@@ -614,7 +660,8 @@ const OmegaKernel = {
             best,
             diffs,
             diffWorld,
-            knownKm
+            knownKm,
+            size: bytes.length
         });
         say("TRUTH ENGINE", truth.status + " · " + truth.confidence + "%");
         say("THINKING ENGINE", thought);

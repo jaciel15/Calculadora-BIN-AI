@@ -1,6 +1,37 @@
 let currentBIN = null;
 let lastSimulation = null;
 
+const LabMode = {
+    current: "KM",
+    labels: {
+        KM: "MODO KM — Analizar y editar solo kilometraje",
+        VIN: "MODO VIN — Analizar y editar solo el VIN completo",
+        CHK: "MODO CHECKSUM — Analizar y marcar solo sumas/CRC"
+    },
+    set(mode) {
+        this.current = mode || "KM";
+        document.body.setAttribute("data-lab-mode", this.current);
+        document.querySelectorAll(".mode-btn").forEach((btn) => {
+            btn.classList.toggle("active", btn.getAttribute("data-mode") === this.current);
+        });
+        if ($("modeBanner")) $("modeBanner").textContent = this.labels[this.current];
+        if ($("dataType")) {
+            $("dataType").value = this.current === "VIN" ? "VIN" : "KILOMETRAJE (KM)";
+        }
+        if ($("analyzeBtn")) $("analyzeBtn").textContent = "ANALIZAR";
+        if ($("analyzeBtnTop")) $("analyzeBtnTop").textContent = "ANALIZAR";
+        if ($("analyzePairBtn")) $("analyzePairBtn").textContent = "ANALIZAR PAR";
+        if (currentBIN && currentBIN.working) showHEX(currentBIN.working);
+        if (currentBIN && currentBIN.analysis) {
+            if (this.current === "VIN") fillEditorVin(currentBIN.analysis);
+            else if (this.current === "KM") fillEditorFromBest(currentBIN.analysis);
+        }
+    },
+    is(mode) {
+        return this.current === mode;
+    }
+};
+
 function $(id) {
     return document.getElementById(id);
 }
@@ -34,19 +65,26 @@ function collectMarks() {
         }
     };
     if (!currentBIN) return marks;
+    const omega = currentBIN.analysis && currentBIN.analysis.omega;
     const vinList = (currentBIN.analysis && currentBIN.analysis.vins && currentBIN.analysis.vins.length)
         ? currentBIN.analysis.vins
         : Hunters.huntVIN(currentBIN.original);
-    vinList.forEach((v) => {
-        (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
-    });
-    if (currentBIN.analysis && currentBIN.analysis.best) {
+    if (!LabMode.is("CHK")) {
+        vinList.forEach((v) => {
+            (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
+        });
+    }
+    if (LabMode.is("KM") && currentBIN.analysis && currentBIN.analysis.best) {
         const hit = currentBIN.analysis.best;
         (hit.copies || [hit.address]).forEach((addr) => paint(addr, hit.width || 2, "hex-km"));
     }
-    const omega = currentBIN.analysis && currentBIN.analysis.omega;
-    if (omega && omega.kmChecksums) {
+    if ((LabMode.is("CHK") || LabMode.is("KM")) && omega && omega.kmChecksums) {
         omega.kmChecksums.forEach((c) => {
+            if (c.storedAt !== null && c.storedAt !== undefined) paint(c.storedAt, c.size || 2, "hex-chk");
+        });
+    }
+    if (LabMode.is("CHK") && currentBIN.analysis && currentBIN.analysis.checksums) {
+        currentBIN.analysis.checksums.forEach((c) => {
             if (c.storedAt !== null && c.storedAt !== undefined) paint(c.storedAt, c.size || 2, "hex-chk");
         });
     }
@@ -314,6 +352,7 @@ function renderDNA(dna, discovery) {
 }
 
 function activeEditorKind() {
+    if (LabMode.is("VIN")) return "VIN";
     const type = $("dataType") ? $("dataType").value : "";
     if (type === "VIN") return "VIN";
     if (type === "HORAS MOTOR") return "HOURS";
@@ -336,7 +375,7 @@ function fillEditorVin(analysis) {
 }
 
 function fillEditorFromBest(analysis) {
-    if ($("dataType") && $("dataType").value === "VIN") {
+    if (LabMode.is("VIN")) {
         fillEditorVin(analysis);
         return;
     }
@@ -347,7 +386,7 @@ function fillEditorFromBest(analysis) {
     $("address").value = best.addressText;
     $("dataSize").value = best.width + " BYTES";
     $("newValue").value = typeof best.value === "number" ? String(best.value) : "";
-    if ($("dataType").value !== "HORAS MOTOR") $("dataType").value = "KILOMETRAJE (KM)";
+    if (!LabMode.is("VIN")) $("dataType").value = "KILOMETRAJE (KM)";
 }
 
 function renderOmega(analysis) {
@@ -413,7 +452,7 @@ function scrollHexTo(addr) {
 }
 
 function renderVinAnalysis(analysis) {
-    window.labFocus = "VIN";
+    LabMode.set("VIN");
     if ($("dataType")) $("dataType").value = "VIN";
     fillEditorVin(analysis);
     renderDNA(analysis.dna || (currentBIN.analysis && currentBIN.analysis.dna) || { score: 0, status: "VIN", manufacturer: "—", family: "VIN HEART", version: "—" }, analysis.discovery || { algorithm: "VIN HEART", type: "VIN", region: "—", confidence: 0, patterns: 0, note: "Análisis VIN" });
@@ -423,7 +462,7 @@ function renderVinAnalysis(analysis) {
         if ($("aiAlgorithm")) $("aiAlgorithm").textContent = analysis.omega.vinHeart ? analysis.omega.vinHeart.formula : "VIN no localizado";
         if ($("aiType")) $("aiType").textContent = "VIN";
         if ($("aiRegion")) $("aiRegion").textContent = analysis.omega.vinHeart ? analysis.omega.vinHeart.addressText : "-----";
-        if ($("aiHow")) $("aiHow").textContent = analysis.omega.vinHeart ? analysis.omega.vinHeart.writeHow : "Escribe las 17 letras del VIN y pulsa ANALIZAR VIN.";
+        if ($("aiHow")) $("aiHow").textContent = analysis.omega.vinHeart ? analysis.omega.vinHeart.writeHow : "VIN no localizado en el dump.";
         if ($("aiConfidence") && analysis.omega.vinHeart) $("aiConfidence").textContent = analysis.omega.vinHeart.confidence + "%";
     }
     refreshIdentity();
@@ -436,7 +475,7 @@ function renderVinAnalysis(analysis) {
 
 function runVinAnalysis() {
     if (!needBIN()) return;
-    if ($("dataType")) $("dataType").value = "VIN";
+    LabMode.set("VIN");
     if ($("knownVin1") && $("knownVin").value && !$("knownVin1").value) $("knownVin1").value = $("knownVin").value;
     setStatus("ANALIZANDO VIN", false);
     setTimeout(function () {
@@ -492,17 +531,24 @@ function runAnalysis(extra) {
     if (!needBIN()) return;
     const km = knownKm();
     const hours = knownHours();
-    setStatus("ANALIZANDO COMBINACIONES", false);
+    const stayChk = LabMode.is("CHK");
+    if (!stayChk) LabMode.set("KM");
+    setStatus(stayChk ? "ANALIZANDO SUM" : "ANALIZANDO", false);
     setTimeout(function () {
         const opts = extra || {};
         if (opts.knownKm2 === undefined && knownKm2() !== null) opts.knownKm2 = knownKm2();
         if (opts.knownVin === undefined && knownVin()) opts.knownVin = knownVin();
-        if ($("dataType") && $("dataType").value === "VIN") {
-            runVinAnalysis();
+        const analysis = binCore.analyze(km, hours, opts);
+        if (stayChk) {
+            LabMode.set("CHK");
+            renderChecksums(analysis.checksums);
+            renderOmega(analysis);
+            showHEX(currentBIN.working);
+            addLogRows();
+            setStatus("SUM LISTO", true);
+            focusPanel("checksumPanel");
             return;
         }
-        window.labFocus = "KM";
-        const analysis = binCore.analyze(km, hours, opts);
         renderAnalysis(analysis);
     }, 40);
 }
@@ -1070,8 +1116,10 @@ function wireUI() {
 
     bindClick("analyzeBtn", runAnalysis);
     bindClick("analyzeBtnTop", runAnalysis);
-    bindClick("analyzeVinBtn", runVinAnalysis);
-    bindClick("analyzeVinPairBtn", runVinAnalysis);
+    document.querySelectorAll(".mode-btn").forEach((btn) => {
+        btn.onclick = () => LabMode.set(btn.getAttribute("data-mode"));
+    });
+    LabMode.set("KM");
     bindClick("saveBinBtn", runGenerateBIN);
     bindClick("saveAlgoBtn", saveAlgorithm);
     bindClick("saveAlgoBtnTop", saveAlgorithm);
@@ -1080,12 +1128,14 @@ function wireUI() {
     bindClick("memoryMapBtn", () => focusPanel("memoryPanel"));
     bindClick("countersBtn", () => focusPanel("counterPanel"));
     bindClick("checksumBtn", () => focusPanel("checksumPanel"));
-    bindClick("vinHunterBtn", runVinAnalysis);
+    bindClick("vinHunterBtn", () => {
+        if (!needBIN()) return;
+        refreshIdentity();
+        showHEX(currentBIN.working);
+    });
     if ($("dataType")) {
         $("dataType").onchange = () => {
-            if (!currentBIN || !currentBIN.analysis) return;
-            if ($("dataType").value === "VIN") fillEditorVin(currentBIN.analysis);
-            else fillEditorFromBest(currentBIN.analysis);
+            if ($("dataType").value !== "VIN") LabMode.set("KM");
         };
     }
     bindClick("diffBtn", () => focusPanel("diffPanel"));

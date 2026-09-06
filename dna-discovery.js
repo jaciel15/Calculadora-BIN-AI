@@ -23,6 +23,7 @@ const DNADiscovery = {
         if (validChecksums) score += 8;
         if (best && best.fromMemory) score += 10;
         if (best && best.fromPair) score += 12;
+        if (best && best.fromStair && !best.scatter) score += 10;
         if (familyMatch) score = Math.max(score, familyMatch.confidence);
         score = Math.max(0, Math.min(99.8, score));
 

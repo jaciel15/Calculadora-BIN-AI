@@ -418,7 +418,201 @@ const MindEngine = {
                 });
             });
         });
+        this.reasonPairStairs(bytesA, bytesB, kmA, kmB).forEach((hit) => hits.unshift(hit));
         return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 14);
+    },
+
+    reasonPairStairs(bytesA, bytesB, kmA, kmB) {
+        const stairsA = this.scanStairs(bytesA, kmA);
+        const stairsB = this.scanStairs(bytesB, kmB);
+        const hits = [];
+        const seen = new Set();
+        stairsA.forEach((ha) => {
+            if (ha.scatter) return;
+            stairsB.forEach((hb) => {
+                if (hb.scatter) return;
+                if (ha.width !== hb.width || ha.endian !== hb.endian || ha.formula !== hb.formula) return;
+                const common = (ha.copies || []).filter((addr) => (hb.copies || []).indexOf(addr) !== -1);
+                if (common.length < 4) return;
+                const key = ha.formula + "|" + ha.endian + ha.width + "|" + common[0];
+                if (seen.has(key)) return;
+                seen.add(key);
+                hits.push({
+                    fromMind: true,
+                    fromPair: true,
+                    fromStair: true,
+                    label: "KILOMETRAJE",
+                    name: ha.name,
+                    formula: ha.formula,
+                    width: ha.width,
+                    endian: ha.endian,
+                    copies: common,
+                    stair: ha.stair,
+                    step: ha.step,
+                    address: ha.address,
+                    addressText: ha.addressText,
+                    hex: ha.hex,
+                    numeric: kmA,
+                    value: kmA,
+                    writeHow: "Par: misma rampa ±1 en ambos BIN, " + common.length +
+                        " huecos. Las copias no son iguales. El actual es el más alto.",
+                    confidence: Math.min(99.5, 96 + Math.min(common.length, 6)),
+                    representation: "escalera par " + (ha.step > 0 ? "+1" : "-1")
+                });
+            });
+        });
+        return hits;
+    },
+
+    scanStairs(bytes, knownKm) {
+        const hits = [];
+        const widths = [2, 3, 4];
+        const strides = [4, 8, 16, 32, 64];
+        const scales = [
+            { formula: "X", fn: (k) => k },
+            { formula: "X * 10", fn: (k) => k * 10 },
+            { formula: "X * 10 - 1", fn: (k) => k * 10 - 1 },
+            { formula: "X * 10 - 5", fn: (k) => k * 10 - 5 },
+            { formula: "X * 100", fn: (k) => k * 100 }
+        ];
+        const matchScale = (raw) => {
+            if (knownKm === null || knownKm === undefined) {
+                if (this.looksLikeKm(raw)) return { formula: "X", km: raw };
+                const tenth = Math.round(raw / 10);
+                if (this.looksLikeKm(tenth)) return { formula: "X * 10", km: tenth };
+                return null;
+            }
+            const hit = scales.find((s) => Math.abs(raw - s.fn(knownKm)) <= 8);
+            return hit ? { formula: hit.formula, km: knownKm } : null;
+        };
+
+        strides.forEach((stride) => {
+            widths.forEach((width) => {
+                if (width > stride) return;
+                [true, false].forEach((little) => {
+                    for (let phase = 0; phase < stride; phase++) {
+                        const slots = [];
+                        for (let p = phase; p + width <= bytes.length; p += stride) {
+                            const value = MathEngine.fromBytes(bytes, p, width, little);
+                            if (value === null) continue;
+                            slots.push({ addr: p, value });
+                        }
+                        if (slots.length < 4) continue;
+                        let run = [slots[0]];
+                        const flush = () => {
+                            if (run.length < 4) return;
+                            const step = run[1].value - run[0].value;
+                            if (step !== 1 && step !== -1) return;
+                            let ok = true;
+                            for (let i = 1; i < run.length; i++) {
+                                if (run[i].addr !== run[i - 1].addr + stride) ok = false;
+                                if (run[i].value - run[i - 1].value !== step) ok = false;
+                            }
+                            if (!ok) return;
+                            const high = run.reduce((a, b) => (a.value >= b.value ? a : b));
+                            const scaled = matchScale(high.value);
+                            if (!scaled) return;
+                            hits.push({
+                                fromMind: true,
+                                fromStair: true,
+                                label: "KILOMETRAJE",
+                                name: "STAIR_" + (little ? "LE" : "BE") + width + "_S" + stride.toString(16).toUpperCase(),
+                                formula: scaled.formula,
+                                width,
+                                endian: little ? "LE" : "BE",
+                                copies: run.map((s) => s.addr),
+                                stair: run.map((s) => ({ addr: s.addr, value: s.value })),
+                                step,
+                                address: high.addr,
+                                addressText: Hunters.range(high.addr, width),
+                                hex: MathEngine.hexBytes(bytes.slice(high.addr, high.addr + width)),
+                                numeric: scaled.km,
+                                value: scaled.km,
+                                writeHow: "Todo el BIN: rampa de " + run.length + " huecos, cada " + stride +
+                                    " bytes, van " + (step > 0 ? "+1" : "-1") +
+                                    " hasta el KM. Las copias no son iguales. El actual es el más alto.",
+                                confidence: Math.min(98.6, 76 + Math.min(run.length, 16)),
+                                representation: "escalera " + (step > 0 ? "+1" : "-1") + " stride " + stride
+                            });
+                        };
+                        for (let i = 1; i < slots.length; i++) {
+                            const prev = run[run.length - 1];
+                            const cur = slots[i];
+                            const step = cur.value - prev.value;
+                            const want = run.length >= 2 ? (run[1].value - run[0].value) : null;
+                            if (cur.addr === prev.addr + stride && (step === 1 || step === -1) && (want === null || step === want)) {
+                                run.push(cur);
+                            } else {
+                                flush();
+                                run = [cur];
+                            }
+                        }
+                        flush();
+                    }
+                });
+            });
+        });
+
+        if (knownKm !== null && knownKm !== undefined) {
+            scales.forEach((scale) => {
+                const want = scale.fn(knownKm);
+                widths.forEach((width) => {
+                    [true, false].forEach((little) => {
+                        const found = [];
+                        for (let i = 0; i + width <= bytes.length; i++) {
+                            const value = MathEngine.fromBytes(bytes, i, width, little);
+                            if (value === null) continue;
+                            const delta = want - value;
+                            if (delta >= 0 && delta <= 40) found.push({ addr: i, value, delta });
+                        }
+                        if (found.length < 4) return;
+                        const deltas = found.map((s) => s.delta);
+                        if (deltas.indexOf(0) === -1) return;
+                        const uniq = Array.from(new Set(deltas)).sort((a, b) => a - b);
+                        let chain = 1;
+                        let bestChain = 1;
+                        for (let i = 1; i < uniq.length; i++) {
+                            chain = uniq[i] === uniq[i - 1] + 1 ? chain + 1 : 1;
+                            if (chain > bestChain) bestChain = chain;
+                        }
+                        if (bestChain < 4) return;
+                        const copies = found.map((s) => s.addr).sort((a, b) => a - b);
+                        const high = found.reduce((a, b) => (a.delta <= b.delta ? a : b));
+                        hits.push({
+                            fromMind: true,
+                            fromStair: true,
+                            scatter: true,
+                            label: "KILOMETRAJE",
+                            name: "STAIR_SCATTER_" + (little ? "LE" : "BE") + width,
+                            formula: scale.formula,
+                            width,
+                            endian: little ? "LE" : "BE",
+                            copies,
+                            stair: found,
+                            step: -1,
+                            address: high.addr,
+                            addressText: Hunters.range(high.addr, width),
+                            hex: MathEngine.hexBytes(bytes.slice(high.addr, high.addr + width)),
+                            numeric: knownKm,
+                            value: knownKm,
+                            writeHow: "Todo el BIN: " + found.length + " huecos con KM, KM-1, KM-2… No son copias idénticas.",
+                            confidence: Math.min(94.5, 70 + Math.min(bestChain, 12)),
+                            representation: "desglose -1 en todo el archivo"
+                        });
+                    });
+                });
+            });
+        }
+
+        const uniq = [];
+        const seen = new Set();
+        hits.sort((a, b) => b.confidence - a.confidence).forEach((hit) => {
+            const key = hit.endian + "|" + hit.width + "|" + hit.address + "|" + hit.copies.length;
+            if (seen.has(key)) return;
+            seen.add(key);
+            uniq.push(hit);
+        });
+        return uniq.slice(0, 12);
     },
 
     scanRings(bytes) {
@@ -468,20 +662,9 @@ const MindEngine = {
 
     think(ctx) {
         const parts = [];
-        if (ctx.vinId && ctx.vinId.maker) {
-            parts.push("VIN 1 " + ctx.vinId.vin + " → " + ctx.vinId.maker + ".");
-        } else {
-            parts.push("BIN 1 sin VIN. No uso el nombre del archivo.");
-        }
-        if (ctx.vinId2) {
-            parts.push(ctx.vinId2.maker
-                ? "VIN 2 " + ctx.vinId2.vin + " → " + ctx.vinId2.maker + "."
-                : "VIN 2 " + ctx.vinId2.vin + ".");
-            if (ctx.vinId && ctx.vinId.vin !== ctx.vinId2.vin) {
-                parts.push("Los VIN son distintos: comparo todo el dump, no solo el KM.");
-            } else if (ctx.vinId && ctx.vinId.vin === ctx.vinId2.vin) {
-                parts.push("Mismo VIN. Lo que cambia es odómetro u otros contadores.");
-            }
+        parts.push("Recorro el archivo binario completo" + (ctx.size ? " (" + ctx.size + " bytes)" : "") + ". El nombre no cuenta.");
+        if (ctx.best && ctx.best.fromStair) {
+            parts.push("Rampa ±1 en " + (ctx.best.copies || []).length + " huecos. El KM actual es el más alto; las copias no son iguales.");
         }
         if (ctx.diffWorld && ctx.diffWorld.ranges.length) {
             const kinds = {};

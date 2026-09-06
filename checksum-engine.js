@@ -158,6 +158,11 @@ const ChecksumEngine = {
         if (hit.endian === "LE") layout = "lo + hi  (little-endian: primero el byte bajo)";
         if (hit.endian === "BE") layout = "hi + lo  (big-endian: primero el byte alto)";
         if (hit.endian === "BCD") layout = "BCD  (cada nibble es un dígito decimal)";
+        if (hit.fromStair) {
+            layout = "Rampa en TODO el BIN: " + (hit.copies || []).length +
+                " huecos van " + (hit.step > 0 ? "+1" : "-1") +
+                ". El KM actual es el más alto. Las copias no son iguales.";
+        }
         if (hit.familyId === "YAMAHA_MT09_93C86") {
             layout = (hit.swapped ? "DUMP SWAP 16: hi+lo en el word" : "00 00 + KM uint16 LE (lo hi)") +
                 " · 6 ranuras de 4 bytes";
@@ -176,6 +181,72 @@ const ChecksumEngine = {
             formula: hit.formula,
             address: hit.addressText
         };
+    },
+
+    linkStair(bytes, hit) {
+        if (!hit || !hit.copies || hit.copies.length < 2) return [];
+        const width = hit.width || 3;
+        const copies = hit.copies.slice().sort((a, b) => a - b);
+        const found = [];
+        const seen = new Set();
+        copies.forEach((addr) => {
+            const sum8 = this.sum8(bytes, addr, addr + width);
+            const sum16 = this.sum16(bytes, addr, addr + width);
+            const spots = [addr + width, addr + width + 1];
+            if (hit.step && copies[1]) spots.push(addr + (copies[1] - copies[0]) - 2);
+            [
+                { name: "SUM8", calc: sum8, size: 1 },
+                { name: "SUM16", calc: sum16, size: 2 },
+                { name: "XOR8", calc: this.xor8(bytes, addr, addr + width), size: 1 }
+            ].forEach((algo) => {
+                ["LE", "BE"].forEach((endian) => {
+                    this.storeMatches(bytes, algo.calc, algo.size, endian === "LE").forEach((at) => {
+                        if (spots.indexOf(at) === -1) return;
+                        const key = algo.name + "|" + addr + "|" + at;
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        found.push({
+                            name: algo.name,
+                            start: addr,
+                            end: addr + width,
+                            storedAt: at,
+                            valueBin: algo.calc,
+                            calculated: algo.calc,
+                            endian,
+                            size: algo.size,
+                            status: "VALIDO",
+                            confidence: 93,
+                            window: "rampa-km",
+                            linkedTo: "KM-STAIR"
+                        });
+                    });
+                });
+            });
+        });
+        const blockStart = copies[0];
+        const blockEnd = copies[copies.length - 1] + width;
+        const blockSum = this.sum16(bytes, blockStart, blockEnd);
+        this.storeMatches(bytes, blockSum, 2, false).concat(this.storeMatches(bytes, blockSum, 2, true)).forEach((at) => {
+            if (at < blockEnd || at > blockEnd + 8) return;
+            const key = "SUM16|block|" + at;
+            if (seen.has(key)) return;
+            seen.add(key);
+            found.push({
+                name: "SUM16",
+                start: blockStart,
+                end: blockEnd,
+                storedAt: at,
+                valueBin: blockSum,
+                calculated: blockSum,
+                endian: "BE",
+                size: 2,
+                status: "VALIDO",
+                confidence: 91,
+                window: "suma-bytes-que-cambian",
+                linkedTo: "KM-STAIR"
+            });
+        });
+        return found.sort((a, b) => b.confidence - a.confidence).slice(0, 8);
     },
 
     linkToKm(bytes, hit) {

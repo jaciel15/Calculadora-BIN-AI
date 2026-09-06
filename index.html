@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=vin2">
+    <link rel="stylesheet" href="style.css?v=analizar2">
 </head>
 
 <body>
@@ -52,6 +52,13 @@
         <input type="file" id="fileInput" accept=".bin,.eep,.hex" hidden>
         <input type="file" id="compareInput" accept=".bin,.eep,.hex" multiple hidden>
 
+        <div class="mode-bar" id="modeBar">
+            <span class="mode-label">TRABAJAR EN</span>
+            <button type="button" class="mode-btn active" data-mode="KM">KM</button>
+            <button type="button" class="mode-btn" data-mode="CHK">CHECKSUM</button>
+            <strong id="modeBanner">MODO KM — Analizar y editar solo kilometraje</strong>
+        </div>
+
         <div class="top-actions">
             <button id="openBtnTop" class="action-btn">ABRIR BIN</button>
             <button id="analyzeBtnTop" class="action-btn green">ANALIZAR</button>
@@ -70,7 +77,6 @@
             <label>HORAS MOTOR</label>
             <input id="knownHours" type="text" placeholder="Opcional">
             <button id="analyzeBtn" class="action-btn green">ANALIZAR</button>
-            <button id="analyzeVinBtn" class="action-btn purple">ANALIZAR VIN</button>
             <span id="familyCount" class="family-count">Familia: 0 BIN</span>
         </div>
 
@@ -90,7 +96,6 @@
             <label>VIN 2</label>
             <input id="knownVin2" type="text" maxlength="17" placeholder="VIN archivo 2">
             <button id="analyzePairBtn" class="action-btn green">ANALIZAR PAR</button>
-            <button id="analyzeVinPairBtn" class="action-btn purple">PAR VIN</button>
         </div>
         <input type="file" id="fileInput2" accept=".bin,.eep,.hex" hidden>
 
@@ -480,19 +485,19 @@
     </div>
 </div>
 
-<script src="mark-book.js?v=vin2"></script>
-<script src="math-engine.js?v=vin2"></script>
-<script src="checksum-engine.js?v=vin2"></script>
-<script src="knowledge-base.js?v=vin2"></script>
-<script src="mind-engine.js?v=vin2"></script>
-<script src="hunters.js?v=vin2"></script>
-<script src="dna-discovery.js?v=vin2"></script>
-<script src="editor-upa.js?v=vin2"></script>
-<script src="bin-object.js?v=vin2"></script>
-<script src="family-library.js?v=vin2"></script>
-<script src="omega-kernel.js?v=vin2"></script>
-<script src="bin-core.js?v=vin2"></script>
-<script src="app.js?v=vin2"></script>
+<script src="mark-book.js?v=analizar2"></script>
+<script src="math-engine.js?v=analizar2"></script>
+<script src="checksum-engine.js?v=analizar2"></script>
+<script src="knowledge-base.js?v=analizar2"></script>
+<script src="mind-engine.js?v=analizar2"></script>
+<script src="hunters.js?v=analizar2"></script>
+<script src="dna-discovery.js?v=analizar2"></script>
+<script src="editor-upa.js?v=analizar2"></script>
+<script src="bin-object.js?v=analizar2"></script>
+<script src="family-library.js?v=analizar2"></script>
+<script src="omega-kernel.js?v=analizar2"></script>
+<script src="bin-core.js?v=analizar2"></script>
+<script src="app.js?v=analizar2"></script>
 
 </body>
 </html>
