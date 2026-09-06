@@ -166,7 +166,7 @@ const ChecksumEngine = {
             layout = "AF + word fino + FF · 3 copias seguidas. Orden interno aún no demostrado";
         }
         if (hit.familyId === "YAMAHA_R5F10") {
-            layout = "página 32 B: lo mid hi = (KM×10−5) LE24 · bytes 30–31 = SUM16 BE (hi lo del total)";
+            layout = "anillo 32 B: lo mid hi LE24 de décimas · última = KM×10 · bytes 30–31 = SUM16 BE";
         }
         return {
             layout,

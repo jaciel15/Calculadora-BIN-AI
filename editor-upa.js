@@ -36,15 +36,19 @@ const EditorEngine = {
     },
 
     apply(bytes, hit, newValue) {
+        if (hit.familyId === "YAMAHA_R5F10") {
+            const written = FamilyLibrary.writeR5FRing(new Uint8Array(bytes), hit.address, Number(newValue));
+            return {
+                bytes: written.bytes,
+                encoded: written.encoded,
+                hex: MathEngine.hexBytes(written.encoded),
+                copies: written.count
+            };
+        }
         const encoded = this.encodeValue(Number(newValue), hit);
         const working = new Uint8Array(bytes);
         (hit.copies || [hit.address]).forEach((addr) => {
             working.set(encoded, addr);
-            if (hit.familyId === "YAMAHA_R5F10" && encoded.length >= 3) {
-                const sum16 = encoded[0] + encoded[1] + encoded[2];
-                working[addr + 30] = (sum16 >> 8) & 0xFF;
-                working[addr + 31] = sum16 & 0xFF;
-            }
         });
         return {
             bytes: working,

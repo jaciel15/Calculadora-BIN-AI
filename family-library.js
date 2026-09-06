@@ -34,8 +34,8 @@ const FamilyLibrary = {
             size: 8192,
             status: "DEMOSTRADO",
             writable: true,
-            writeHow: "Última página de 32 B: lo mid hi = (KM×10−5) little-endian. Bytes 30–31 = SUM16 big-endian de esos 3 bytes. Bajar KM exige borrar el anillo.",
-            binsProven: 7
+            writeHow: "Reescribe TODO el anillo del banco: páginas de 32 B en cadena +1. La última es KM×10 LE24. Cada página: lo mid hi + SUM16 BE en 30–31. No toca páginas FF.",
+            binsProven: 8
         }
     ],
 
@@ -226,7 +226,7 @@ const FamilyLibrary = {
             familyId: "YAMAHA_R5F10",
             label: "KILOMETRAJE",
             name: "YAMAHA_R5F10_LE24_X10",
-            formula: "X * 10 - 5",
+            formula: "X * 10",
             width: 3,
             endian: "LE",
             copies: [last.addr],
@@ -235,10 +235,10 @@ const FamilyLibrary = {
             hex,
             numeric: km,
             value: km,
-            writeHow: "LE24 (KM×10−5) en la última página 0x" + last.addr.toString(16).toUpperCase() +
-                ". Bytes +30/+31 = SUM16 BE. Anillo de " + valid.length + " páginas.",
+            writeHow: "Reescribe las " + valid.filter((p) => (p.addr & ~0x3FF) === (last.addr & ~0x3FF)).length +
+                " páginas del banco: última = KM×10 LE24, las anteriores −1, −2… SUM16 en cada cola.",
             confidence: 99.1,
-            representation: "lo mid hi de (KM×10−5) + SUM16 BE @ +30",
+            representation: "anillo LE24 de décimas · última = KM×10 · SUM16 BE @ +30",
             writable: true,
             checksumAt: last.addr + 30,
             checksumName: "SUM16"
@@ -255,6 +255,35 @@ const FamilyLibrary = {
 
     identify(bytes) {
         return this.detectYamaha(bytes) || this.detectR5F(bytes) || this.detectOdyssey(bytes) || null;
+    },
+
+    r5fBank(bytes, lastAddr) {
+        return this.r5fPages(bytes)
+            .filter((p) => p.ok && ((p.addr & ~0x3FF) === (lastAddr & ~0x3FF)))
+            .sort((a, b) => a.addr - b.addr);
+    },
+
+    writeR5FRing(bytes, lastAddr, km) {
+        const working = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        const run = this.r5fBank(working, lastAddr);
+        const lastVal = Number(km) * 10;
+        if (!run.length || !Number.isFinite(lastVal) || lastVal < 50) return { bytes: working, encoded: new Uint8Array(3), count: 0 };
+        run.forEach((page, index) => {
+            const value = lastVal - (run.length - 1 - index);
+            working[page.addr] = value & 0xFF;
+            working[page.addr + 1] = (value >> 8) & 0xFF;
+            working[page.addr + 2] = (value >> 16) & 0xFF;
+            for (let i = 3; i < 30; i++) working[page.addr + i] = 0;
+            const sum16 = working[page.addr] + working[page.addr + 1] + working[page.addr + 2];
+            working[page.addr + 30] = (sum16 >> 8) & 0xFF;
+            working[page.addr + 31] = sum16 & 0xFF;
+        });
+        const last = run[run.length - 1];
+        return {
+            bytes: working,
+            encoded: working.slice(last.addr, last.addr + 3),
+            count: run.length
+        };
     },
 
     list() {
