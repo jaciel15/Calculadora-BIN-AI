@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=anillo1">
+    <link rel="stylesheet" href="style.css?v=divbe1">
 </head>
 
 <body>
@@ -102,9 +102,18 @@
             <label>VIN 2</label>
             <input id="knownVin2" type="text" maxlength="17" placeholder="VIN archivo 2">
             <button id="analyzePairBtn" class="action-btn green">ANALIZAR PAR</button>
+            <button type="button" id="attackBtn" class="action-btn blue">ATAQUE 10 MIN</button>
             <button type="button" id="loadSamplePairBtn" class="action-btn yellow">CARGAR PAR 35000 / 150500</button>
-            <a id="videoPruebaLink" class="action-btn" href="video-confirmado.html" target="_blank" rel="noopener">VIDEO DE LA PRUEBA</a>
         </div>
+        <div class="known-bar pair-bar" id="bin3Bar">
+            <label>BIN 3</label>
+            <button id="pickBin3" class="action-btn">ELEGIR BIN 3</button>
+            <span id="bin3Name" class="pair-name">Ninguno</span>
+            <label>KM 3</label>
+            <input id="knownKm3" type="text" placeholder="KM archivo 3">
+            <span id="needBin3Ask" class="bin3-ask hidden">Si el par no cierra CRC/SUM, sube un tercer BIN con otro KM. El ataque de 10 min usa el entorno de los tres.</span>
+        </div>
+        <input type="file" id="fileInput3" accept=".bin,.eep,.hex" hidden>
         <div class="help-recipe-bar">
             <label>CÓMO LO HAGO</label>
             <textarea id="helpRecipe" rows="3" placeholder="Línea 0260 col 00 = KM ×10. Hacia 0000 baja de 1. La suma de esos 3 bytes va a la línea 0270. Si pasa de 255 aparece 01."></textarea>
@@ -554,21 +563,38 @@
     </div>
 </div>
 
-<script src="mark-book.js?v=anillo1"></script>
-<script src="math-engine.js?v=anillo1"></script>
-<script src="checksum-engine.js?v=anillo1"></script>
-<script src="knowledge-base.js?v=anillo1"></script>
-<script src="bin-world.js?v=anillo1"></script>
-<script src="mind-engine.js?v=anillo1"></script>
-<script src="hunters.js?v=anillo1"></script>
-<script src="dna-discovery.js?v=anillo1"></script>
-<script src="editor-upa.js?v=anillo1"></script>
-<script src="write-machine.js?v=anillo1"></script>
-<script src="bin-object.js?v=anillo1"></script>
-<script src="family-library.js?v=anillo1"></script>
-<script src="omega-kernel.js?v=anillo1"></script>
-<script src="bin-core.js?v=anillo1"></script>
-<script src="app.js?v=anillo1"></script>
+<div id="attackOverlay" class="attack-overlay hidden">
+    <div class="attack-box">
+        <h2>ATACANDO SOLO LO QUE CAMBIA</h2>
+        <p id="attackStatus">Preparando líneas distintas…</p>
+        <div class="attack-bar"><i id="attackFill"></i></div>
+        <p id="attackClock">0:00 / 10:00</p>
+    </div>
+</div>
+<div id="attackToast" class="attack-toast hidden"></div>
+
+<script src="mark-book.js?v=divbe1"></script>
+<script src="operation-registry.js?v=divbe1"></script>
+<script src="expression-tree.js?v=divbe1"></script>
+<script src="math-engine.js?v=divbe1"></script>
+<script src="expression-generator.js?v=divbe1"></script>
+<script src="fitness-engine.js?v=divbe1"></script>
+<script src="validation-engine.js?v=divbe1"></script>
+<script src="checksum-engine.js?v=divbe1"></script>
+<script src="knowledge-base.js?v=divbe1"></script>
+<script src="bin-world.js?v=divbe1"></script>
+<script src="mind-engine.js?v=divbe1"></script>
+<script src="hunters.js?v=divbe1"></script>
+<script src="dna-discovery.js?v=divbe1"></script>
+<script src="editor-upa.js?v=divbe1"></script>
+<script src="write-machine.js?v=divbe1"></script>
+<script src="bin-object.js?v=divbe1"></script>
+<script src="family-library.js?v=divbe1"></script>
+<script src="omega-kernel.js?v=divbe1"></script>
+<script src="bin-core.js?v=divbe1"></script>
+<script src="discovery-manager.js?v=divbe1"></script>
+<script src="deep-attack.js?v=divbe1"></script>
+<script src="app.js?v=divbe1"></script>
 
 </body>
 </html>

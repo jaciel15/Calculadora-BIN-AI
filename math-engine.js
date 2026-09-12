@@ -145,6 +145,22 @@ const MathEngine = {
 
     lastComboCount: 0,
     COMBO_CAP: 350000,
+    DIV_MAX: 1000000,
+
+    divisorsUpTo(value, maxD) {
+        const out = [];
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0) return out;
+        const cap = Math.min(maxD || this.DIV_MAX, n);
+        const root = Math.floor(Math.sqrt(n));
+        for (let d = 1; d <= root; d++) {
+            if (n % d) continue;
+            if (d <= cap) out.push(d);
+            const other = n / d;
+            if (other !== d && other <= cap) out.push(other);
+        }
+        return out.sort((a, b) => a - b);
+    },
 
     transforms(value) {
         const items = [];
@@ -187,6 +203,9 @@ const MathEngine = {
             push("X + " + factor, value + factor);
             if (value >= factor) push("X - " + factor, value - factor);
             push("X MOD " + factor, value % factor);
+        });
+        this.divisorsUpTo(value, this.DIV_MAX).forEach((d) => {
+            if (d > 1) push("X / " + d, value / d);
         });
 
         xorMasks.forEach((mask) => {
@@ -370,6 +389,17 @@ const MathEngine = {
         this.lastComboCount = variants.length;
         this._variantCache = { value, items: variants };
         return variants;
+    },
+
+    evaluate(expression, input) {
+        if (expression && typeof expression === "object" && expression.type) {
+            return ExpressionTree.evaluate(expression, input);
+        }
+        return this.applyFormula(input, expression);
+    },
+
+    generate(config) {
+        return typeof ExpressionGenerator !== "undefined" ? ExpressionGenerator.generate(config) : [];
     }
 
 };

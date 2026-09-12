@@ -298,8 +298,37 @@ const MindEngine = {
             { formula: "X * 100", fn: (k) => k * 100, widths: [3, 4] },
             { formula: "X * 16", fn: (k) => k * 16, widths: [2, 3, 4] },
             { formula: "X * 10 + 5", fn: (k) => k * 10 + 5, widths: [3, 4] },
-            { formula: "X * 1000", fn: (k) => k * 1000, widths: [3, 4] }
+            { formula: "X * 1000", fn: (k) => k * 1000, widths: [3, 4] },
+            { formula: "X / 10", fn: (k) => Math.round(k / 10), widths: [2, 3, 4] },
+            { formula: "X / 100", fn: (k) => Math.round(k / 100), widths: [2, 3, 4] },
+            { formula: "X / 1000", fn: (k) => Math.round(k / 1000), widths: [2, 3, 4] }
         ];
+    },
+
+    inferDivScales(bytesA, bytesB, kmA, kmB) {
+        const scales = [];
+        const seen = new Set();
+        const starts = this.pairStarts(bytesA, bytesB);
+        const n = Math.min(bytesA.length, bytesB.length);
+        starts.forEach((i) => {
+            [2, 3, 4].forEach((width) => {
+                if (i + width > n) return;
+                [true, false].forEach((little) => {
+                    const a = MathEngine.fromBytes(bytesA, i, width, little);
+                    const b = MathEngine.fromBytes(bytesB, i, width, little);
+                    if (!a || !b || a === b) return;
+                    if (kmA % a !== 0) return;
+                    const d = kmA / a;
+                    if (d < 1 || d > 1000000 || d !== Math.round(d)) return;
+                    if (Math.abs(b - (kmB / d)) > 8) return;
+                    const formula = "X / " + d;
+                    if (seen.has(formula)) return;
+                    seen.add(formula);
+                    scales.push({ formula: formula, fn: (k) => Math.round(k / d), widths: [width] });
+                });
+            });
+        });
+        return scales;
     },
 
     pairStarts(bytesA, bytesB) {
@@ -390,7 +419,7 @@ const MindEngine = {
 
         const n = bytesA.length;
         const starts = this.pairStarts(bytesA, bytesB);
-        this.pairScales().forEach((scale) => {
+        this.pairScales().concat(this.inferDivScales(bytesA, bytesB, kmA, kmB)).forEach((scale) => {
             scale.widths.forEach((width) => {
                 ["LE", "BE"].forEach((endian) => {
                     const little = endian !== "BE";

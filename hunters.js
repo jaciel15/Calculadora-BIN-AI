@@ -46,7 +46,8 @@ const Hunters = {
                 });
             }
             if (!hits.length) return;
-            if (variant.width <= 2 && hits.length > 12) return;
+            const isDiv = String(variant.formula || "").indexOf("X /") === 0;
+            if (variant.width <= 2 && hits.length > (isDiv ? 48 : 12)) return;
             seen.add(key);
             found.push({
                 fromMemory: false,

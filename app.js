@@ -557,6 +557,32 @@ function knownKm2() {
     return raw === "" ? null : Number(raw);
 }
 
+function knownKm3() {
+    if (!$("knownKm3")) return null;
+    const raw = $("knownKm3").value.replace(/[^\d]/g, "");
+    return raw === "" ? null : Number(raw);
+}
+
+function familyCountText() {
+    const n = 1 + (OmegaKernel.compareBins ? OmegaKernel.compareBins.length : 0);
+    if ($("familyCount")) $("familyCount").textContent = "Familia: " + n + " BIN";
+}
+
+function showBin3Ask(need) {
+    const box = $("needBin3Ask");
+    if (!box) return;
+    box.classList.toggle("hidden", !need);
+}
+
+function needsThirdBin(report) {
+    if (OmegaKernel.compareBins.length >= 2) return false;
+    if (!OmegaKernel.compareBins.length) return false;
+    const disc = report && report.discoveries && report.discoveries[0];
+    const hasChk = report && report.best && report.best.checksumAt !== undefined;
+    if (disc && disc.status === "VALIDATED" && hasChk) return false;
+    return true;
+}
+
 function knownVin() {
     const raw = $("knownVin") ? $("knownVin").value : "";
     const one = $("knownVin1") && $("knownVin1").value ? $("knownVin1").value : raw;
@@ -675,6 +701,7 @@ function runAnalysis(extra) {
     setTimeout(function () {
         const opts = extra || {};
         if (opts.knownKm2 === undefined && knownKm2() !== null) opts.knownKm2 = knownKm2();
+        if (opts.knownKm3 === undefined && knownKm3() !== null) opts.knownKm3 = knownKm3();
         if (opts.knownVin === undefined && knownVin()) opts.knownVin = knownVin();
         const analysis = binCore.analyze(km, hours, opts);
         if (stayChk) {
@@ -1193,12 +1220,14 @@ async function loadBIN2(event) {
     const file = event.target.files[0];
     if (!file) return;
     const buffer = await file.arrayBuffer();
+    const third = OmegaKernel.compareBins[1] || null;
     OmegaKernel.compareBins = [{
         fileName: file.name,
         bytes: new Uint8Array(buffer)
     }];
+    if (third) OmegaKernel.compareBins.push(third);
     if ($("bin2Name")) $("bin2Name").textContent = file.name;
-    $("familyCount").textContent = "Familia: " + (1 + OmegaKernel.compareBins.length) + " BIN";
+    familyCountText();
     if (binCore.currentBIN) binCore.addLog("COMPARADOR", "BIN 2 cargado: " + file.name);
     refreshIdentity();
     if (currentBIN) {
@@ -1210,6 +1239,26 @@ async function loadBIN2(event) {
         showHEX(currentBIN.working);
     }
     addLogRows();
+}
+
+async function loadBIN3(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!OmegaKernel.compareBins[0]) {
+        alert("Primero carga BIN 1 y BIN 2. El tercero confirma CRC/SUM en otro entorno.");
+        return;
+    }
+    const buffer = await file.arrayBuffer();
+    OmegaKernel.compareBins[1] = {
+        fileName: file.name,
+        bytes: new Uint8Array(buffer)
+    };
+    if ($("bin3Name")) $("bin3Name").textContent = file.name;
+    familyCountText();
+    showBin3Ask(false);
+    if (binCore.currentBIN) binCore.addLog("COMPARADOR", "BIN 3 cargado: " + file.name + " · entorno extra para CRC/SUM");
+    addLogRows();
+    if (knownKm3() !== null) startDeepAttack();
 }
 
 async function loadSamplePair() {
@@ -1227,7 +1276,7 @@ async function loadSamplePair() {
         if ($("knownKm1")) $("knownKm1").value = "35000";
         if ($("knownKm2")) $("knownKm2").value = "150500";
         if ($("helpRecipe")) $("helpRecipe").value = R5F_RECIPE;
-        runAnalysis();
+        runPairAnalysis();
     } catch (error) {
         alert("No pude cargar el par de ejemplo. Elige BIN 1 (35000 línea 260) y BIN 2 (150500) a mano.");
     }
@@ -1240,10 +1289,109 @@ function runPairAnalysis() {
         return;
     }
     if ($("knownKm1") && $("knownKm1").value) $("knownKm").value = $("knownKm1").value;
-    runAnalysis({ knownKm2: knownKm2() });
+    runAnalysis({ knownKm2: knownKm2(), knownKm3: knownKm3() });
     setTimeout(function () {
         showPairReport();
+        startDeepAttack();
     }, 80);
+}
+
+function clockText(ms) {
+    const s = Math.min(600, Math.floor(ms / 1000));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return m + ":" + String(r).padStart(2, "0") + " / 10:00";
+}
+
+function showAttackToast(text) {
+    const box = $("attackToast");
+    if (!box) {
+        alert(text);
+        return;
+    }
+    box.textContent = text;
+    box.classList.remove("hidden");
+    setTimeout(function () { box.classList.add("hidden"); }, 20000);
+}
+
+async function startDeepAttack() {
+    if (!needBIN()) return;
+    if (!OmegaKernel.compareBins[0]) {
+        alert("Carga BIN 1 y BIN 2. El ataque solo pica las líneas que cambian.");
+        return;
+    }
+    const km1 = knownKm();
+    const km2 = knownKm2();
+    const km3 = knownKm3();
+    if (km1 === null || km2 === null) {
+        alert("Pon KM 1 y KM 2. Sin eso el ataque no sabe qué valor es basura.");
+        return;
+    }
+    if (OmegaKernel.compareBins[1] && km3 === null) {
+        alert("Cargaste BIN 3. Pon su KM 3 para verificar CRC/SUM en ese entorno.");
+        return;
+    }
+    const overlay = $("attackOverlay");
+    const fill = $("attackFill");
+    const status = $("attackStatus");
+    const clock = $("attackClock");
+    if (overlay) overlay.classList.remove("hidden");
+    const report = await DeepAttack.run({
+        bytes: currentBIN.original,
+        bytes2: OmegaKernel.compareBins[0].bytes,
+        bytes3: OmegaKernel.compareBins[1] ? OmegaKernel.compareBins[1].bytes : null,
+        km1: km1,
+        km2: km2,
+        km3: km3,
+        onTick: function (info) {
+            if (fill) fill.style.width = info.pct.toFixed(1) + "%";
+            if (clock) clock.textContent = clockText(info.elapsed);
+            if (status) {
+                status.textContent = "Línea " + padHex(info.line || 0) + " · " +
+                    info.tested + " pruebas · " + info.hits + " hipótesis · " +
+                    info.lines + " líneas que cambian · " +
+                    (OmegaKernel.compareBins[1] ? "3 BIN" : "2 BIN");
+            }
+        }
+    });
+    if (overlay) overlay.classList.add("hidden");
+    if (report.best && currentBIN.analysis) {
+        currentBIN.analysis.best = report.best;
+        if ($("helpRecipe")) $("helpRecipe").value = report.best.writeHow;
+        if ($("aiHow")) $("aiHow").textContent = report.best.writeHow;
+        if ($("aiAlgorithm")) $("aiAlgorithm").textContent = report.best.formula;
+        if ($("omegaThink")) $("omegaThink").textContent = report.message;
+        fillEditorFromBest(currentBIN.analysis);
+        if (typeof WriteMachine !== "undefined") {
+            currentBIN.analysis.omega = currentBIN.analysis.omega || {};
+            currentBIN.analysis.omega.machine = WriteMachine.seal(currentBIN.original, {
+                best: report.best,
+                truth: { status: "DEMOSTRADO", confidence: report.best.confidence },
+                kmChecksums: report.best.checksumAt !== undefined ? [{
+                    name: report.best.checksumName,
+                    storedAt: report.best.checksumAt,
+                    start: report.best.address,
+                    end: report.best.address + report.best.width,
+                    size: /16/.test(report.best.checksumName || "") ? 2 : 1,
+                    endian: "BE"
+                }] : [],
+                closed: []
+            });
+            renderMachine(currentBIN.analysis.omega.machine);
+        }
+    }
+    showAttackToast(report.message);
+    if (typeof binCore !== "undefined") binCore.addLog("ATAQUE 10 MIN", report.message);
+    addLogRows();
+    const need3 = needsThirdBin(report);
+    showBin3Ask(need3);
+    openLab("ATAQUE TERMINÓ", "<p>" + report.message + "</p><p>Líneas distintas: " +
+        report.lines + " · Pruebas: " + report.tested + "</p>" +
+        (need3
+            ? "<p><strong>Falta un tercer BIN</strong> con otro KM para cerrar CRC/SUM en un entorno distinto. Súbelo en BIN 3 y vuelve a ATAQUE 10 MIN.</p>"
+            : (OmegaKernel.compareBins[1]
+                ? "<p>Trabajó con 3 BIN. CRC/SUM se contrastó en tres entornos.</p>"
+                : "")));
 }
 
 function showPairReport() {
@@ -1361,6 +1509,9 @@ function closeProject() {
     $("fileSize").textContent = "0";
     if ($("bin1Name")) $("bin1Name").textContent = "Ninguno";
     if ($("bin2Name")) $("bin2Name").textContent = "Ninguno";
+    if ($("bin3Name")) $("bin3Name").textContent = "Ninguno";
+    showBin3Ask(false);
+    familyCountText();
     refreshIdentity();
     renderDiffTable(null);
     renderWorld(null);
@@ -1378,6 +1529,7 @@ function wireUI() {
     $("fileInput").addEventListener("change", loadBIN);
     if ($("compareInput")) $("compareInput").addEventListener("change", loadCompare);
     if ($("fileInput2")) $("fileInput2").addEventListener("change", loadBIN2);
+    if ($("fileInput3")) $("fileInput3").addEventListener("change", loadBIN3);
 
     bindClick("analyzeBtn", runAnalysis);
     bindClick("analyzeBtnTop", runAnalysis);
@@ -1416,8 +1568,8 @@ function wireUI() {
     bindClick("checksumBtn", () => focusPanel("checksumPanel"));
     bindClick("vinHunterBtn", () => {
         if (!needBIN()) return;
-        refreshIdentity();
-        showHEX(currentBIN.working);
+        runVinAnalysis();
+        focusPanel("hexViewer");
     });
     if ($("dataType")) {
         $("dataType").onchange = () => {
@@ -1431,7 +1583,9 @@ function wireUI() {
     bindClick("reasoningBtn", showReasoning);
     bindClick("pickBin1", () => $("fileInput").click());
     bindClick("pickBin2", () => $("fileInput2").click());
+    bindClick("pickBin3", () => $("fileInput3").click());
     bindClick("analyzePairBtn", runPairAnalysis);
+    bindClick("attackBtn", startDeepAttack);
     bindClick("binGenBtn", runGenerateBIN);
     bindClick("binGenBtnTop", runGenerateBIN);
     bindClick("generateBinBtn", runGenerateBIN);

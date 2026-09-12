@@ -510,13 +510,14 @@ const OmegaKernel = {
         say("PATTERN HUNTER", patterns.length + " patrones repetidos");
 
         const preferDiff = new Set();
-        if (this.compareBins[0] && this.compareBins[0].bytes) {
-            const other = this.compareBins[0].bytes;
+        this.compareBins.forEach((otherBin) => {
+            if (!otherBin || !otherBin.bytes) return;
+            const other = otherBin.bytes;
             const n = Math.min(bytes.length, other.length);
             for (let i = 0; i < n; i++) {
                 if (bytes[i] !== other[i]) preferDiff.add(i);
             }
-        }
+        });
         const huntZone = new Set();
         preferDiff.forEach((addr) => {
             for (let d = -6; d <= 6; d++) {
@@ -576,11 +577,15 @@ const OmegaKernel = {
         recalled.filter(inZone).forEach((hit) => mileageHits.unshift(hit));
         if (recalled.length) say("SELF LEARNING", "Memoria reutiliza " + recalled[0].formula + " @ " + recalled[0].addressText);
 
+        const km3 = options.knownKm3;
         const pairHits = (this.compareBins[0] && knownKm !== null && km2 !== null)
             ? MindEngine.reasonPair(bytes, this.compareBins[0].bytes, knownKm, km2)
             : [];
+        if (this.compareBins[1] && knownKm !== null && km3 !== null) {
+            MindEngine.reasonPair(bytes, this.compareBins[1].bytes, knownKm, km3).forEach((hit) => pairHits.unshift(hit));
+        }
         pairHits.forEach((hit) => mileageHits.unshift(hit));
-        if (pairHits.length) say("PAIR MIND", pairHits[0].formula + " demostrado por los dos BIN");
+        if (pairHits.length) say("PAIR MIND", pairHits[0].formula + " demostrado por " + (this.compareBins[1] && km3 ? "3" : "2") + " BIN");
         const closed = MindEngine.scanClosedCells(bytes, knownKm, huntZone.size ? huntZone : null);
         closed.forEach((hit) => mileageHits.unshift(hit));
         if (closed.length) {
@@ -639,6 +644,10 @@ const OmegaKernel = {
         if (!userGuiding && familyMatch && familyMatch.hits && familyMatch.hits[0] && familyMatch.hits[0].familyId === "YAMAHA_R5F10") {
             best = familyMatch.hits[0];
             say("FAMILY KERNEL", "Este anillo manda: KM en 0260→0000 y SUM en la cola de cada página.");
+        }
+        if (typeof DiscoveryManager !== "undefined" && DiscoveryManager.lastResults && DiscoveryManager.lastResults[0]) {
+            const found = DiscoveryManager.lastResults[0];
+            say("DISCOVERY V1", found.expression + " · " + found.status + " · " + found.confidence + "%");
         }
         const copiesExact = best && best.copies ? Hunters.hiddenCopies([best]) : [];
         const copiesHidden = this.hiddenCopies(bytes, patterns);

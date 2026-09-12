@@ -202,6 +202,17 @@ class BINCore {
         this.addLog("EDITOR", "BIN restaurado al original");
     }
 
+    startDiscovery(config, onEvent) {
+        if (typeof DiscoveryManager === "undefined") return null;
+        this.addLog("DISCOVERY V1", "Busco fórmulas solo en candidatos / variación.");
+        return DiscoveryManager.start(config, onEvent);
+    }
+
+    cancelDiscovery() {
+        if (typeof DiscoveryManager !== "undefined") DiscoveryManager.cancel();
+        this.addLog("DISCOVERY V1", "Búsqueda cancelada.");
+    }
+
     generateBIN() {
         if (!this.currentBIN) return null;
         this.addLog("BIN GENERATOR", "BIN listo: " + this.currentBIN.fileName);

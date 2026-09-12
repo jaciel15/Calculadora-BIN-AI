@@ -273,6 +273,7 @@ const KnowledgeBase = {
             if (!data.algorithms) data.algorithms = [];
             if (!data.graph) data.graph = [];
             if (!data.learned) data.learned = [];
+            if (!data.discoveries) data.discoveries = [];
             return data;
         } catch (error) {
             return this.empty();
@@ -286,6 +287,7 @@ const KnowledgeBase = {
             files: [],
             graph: [],
             learned: [],
+            discoveries: [],
             updated: null
         };
     },
@@ -394,6 +396,33 @@ const KnowledgeBase = {
         db.algorithms = (db.algorithms || []).filter((a) => a.name !== name);
         this.save(db);
         return true;
+    },
+
+    rememberValidatedDiscovery(hit) {
+        if (!hit || hit.status !== "VALIDATED") return null;
+        const db = this.load();
+        if (!db.discoveries) db.discoveries = [];
+        const key = hit.expression + "|" + hit.length + "|" + hit.endian;
+        let item = db.discoveries.find((d) => d.key === key);
+        if (!item) {
+            item = {
+                key: key,
+                expression: hit.expression,
+                offset: hit.offset,
+                length: hit.length,
+                endian: hit.endian,
+                confidence: hit.confidence,
+                status: hit.status,
+                evidence: hit.evidence,
+                hits: 0
+            };
+            db.discoveries.push(item);
+        }
+        item.hits += 1;
+        item.lastSeen = new Date().toISOString();
+        item.confidence = hit.confidence;
+        this.save(db);
+        return item;
     },
 
     userAlgorithms() {
