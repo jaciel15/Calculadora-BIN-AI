@@ -718,7 +718,7 @@ function runAnalysis(extra) {
             return;
         }
         renderAnalysis(analysis);
-        if (opts.offerFile && analysis.best) offerEditedFile("ANÁLISIS LISTO");
+        if (opts.offerFile && analysis.best) offerDetectedAlgorithm("ANÁLISIS LISTO");
     }, 40);
 }
 
@@ -828,6 +828,132 @@ function fileNameSafe(raw, km) {
     if (!name) name = (km || "KM") + " OK";
     if (!/\.(bin|eep|hex)$/i.test(name)) name += ".bin";
     return name;
+}
+
+function escapeText(value) {
+    return String(value == null ? "" : value).replace(/[&<>"]/g, function (ch) {
+        return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[ch];
+    });
+}
+
+function relatedAlgorithms(best) {
+    if (!best) return [];
+    const rows = [];
+    if (typeof CodeBook !== "undefined") {
+        CodeBook.list().forEach((c) => {
+            if (c.formula === "FINO") return;
+            if (typeof KnowledgeBase !== "undefined" && KnowledgeBase.isHidden(c)) return;
+            rows.push({ name: c.name, formula: c.formula, width: c.width, endian: c.endian, familyId: c.id });
+        });
+    }
+    if (typeof KnowledgeBase !== "undefined") {
+        KnowledgeBase.load().algorithms.forEach((a) => {
+            if (KnowledgeBase.isHidden(a)) return;
+            rows.push(a);
+        });
+    }
+    const score = (row) => {
+        let n = 0;
+        if (row.formula === best.formula) n += 4;
+        if (Number(row.width) === Number(best.width)) n += 2;
+        if (row.endian === best.endian) n += 2;
+        if (row.familyId && best.familyId && row.familyId === best.familyId) n += 3;
+        if (row.name && best.name && String(row.name).toLowerCase() === String(best.name).toLowerCase()) n += 5;
+        return n;
+    };
+    return rows.filter((row, i, all) => all.findIndex((x) => x.name === row.name) === i)
+        .sort((a, b) => score(b) - score(a));
+}
+
+function pendingChecksums() {
+    if (!currentBIN || !currentBIN.analysis) return [];
+    return currentBIN.analysis.omega
+        ? (currentBIN.analysis.omega.kmChecksums || []).concat(currentBIN.analysis.checksums || [])
+        : (currentBIN.analysis.checksums || []);
+}
+
+function offerDetectedAlgorithm(title, extraHtml) {
+    if (!currentBIN || !currentBIN.analysis || !currentBIN.analysis.best) return false;
+    const best = currentBIN.analysis.best;
+    const related = relatedAlgorithms(best);
+    window._pendingAlgo = { title: title, extra: extraHtml || "", best: best };
+    const near = related.slice(0, 3).map((r) => r.name + " (" + (r.formula || "") + ")").join(" · ");
+    const html = (extraHtml || "") +
+        "<p class=\"gen-ask\">Detecté 1 algoritmo</p>" +
+        "<p><strong>" + escapeText(best.name || best.formula) + "</strong><br>" +
+        "Fórmula <strong>" + escapeText(best.formula || "X") + "</strong> · " +
+        (best.width || "?") + "B " + escapeText(best.endian || "") +
+        " @ " + escapeText(best.addressText || padHex(best.address || 0)) + "</p>" +
+        (near
+            ? "<p>Parecido a lo que ya tienes: " + escapeText(near) + "</p>"
+            : "<p>No vi uno igual guardado.</p>") +
+        "<p>Dime si es <strong>una nueva versión</strong> de uno que ya existe, o <strong>otro nuevo</strong>.</p>" +
+        "<div class=\"gen-actions\">" +
+        "<button type=\"button\" class=\"action-btn green\" id=\"algoVerBtn\">NUEVA VERSIÓN</button>" +
+        "<button type=\"button\" class=\"action-btn yellow\" id=\"algoNewBtn\">OTRO NUEVO</button>" +
+        "<button type=\"button\" class=\"action-btn\" id=\"algoSkipBtn\">AHORA NO</button>" +
+        "</div>";
+    openLab(title || "ALGORITMO DETECTADO", html);
+    bindClick("algoVerBtn", showAlgoVersionForm);
+    bindClick("algoNewBtn", showAlgoNewForm);
+    bindClick("algoSkipBtn", function () {
+        offerEditedFile(window._pendingAlgo.title, window._pendingAlgo.extra);
+    });
+    return true;
+}
+
+function showAlgoVersionForm() {
+    const pending = window._pendingAlgo;
+    if (!pending || !pending.best) return;
+    const related = relatedAlgorithms(pending.best);
+    const options = (related.length ? related : [{ name: pending.best.name || "ALGORITMO", formula: pending.best.formula }])
+        .map((row) => "<option value=\"" + escapeText(row.name) + "\">" +
+            escapeText(row.name) + " · " + escapeText(row.formula || "") + "</option>")
+        .join("");
+    openLab("NUEVA VERSIÓN",
+        "<p>Esto se guarda como <strong>versión nueva</strong> del algoritmo que elijas.</p>" +
+        "<div class=\"gen-form\">" +
+        "<label>ALGORITMO BASE</label>" +
+        "<select id=\"algoParentPick\">" + options + "</select>" +
+        "</div>" +
+        "<button type=\"button\" class=\"action-btn green\" id=\"algoVerSave\">GUARDAR VERSIÓN</button>");
+    bindClick("algoVerSave", function () {
+        const parent = $("algoParentPick") ? $("algoParentPick").value : pending.best.name;
+        const best = Object.assign({}, pending.best);
+        best.chip = currentBIN.chip;
+        const item = KnowledgeBase.addVersion(parent, best, currentBIN.fileName, currentBIN.fileSize, pendingChecksums());
+        binCore.addLog("MEMORIA", "Nueva versión v" + (item.version || "?") + " de " + item.name);
+        addLogRows();
+        showAttackToast("Guardé versión nueva de " + item.name);
+        offerEditedFile(pending.title, pending.extra);
+    });
+}
+
+function showAlgoNewForm() {
+    const pending = window._pendingAlgo;
+    if (!pending || !pending.best) return;
+    const suggest = (pending.best.familyId || pending.best.name || "KM") + " " + (pending.best.formula || "");
+    openLab("OTRO NUEVO",
+        "<p>Se guarda como <strong>algoritmo nuevo</strong>, aparte de los que ya tienes.</p>" +
+        "<div class=\"gen-form\">" +
+        "<label>NOMBRE</label>" +
+        "<input id=\"algoNewName\" type=\"text\" value=\"" + escapeText(suggest) + "\" placeholder=\"YAMAHA X / 100\">" +
+        "</div>" +
+        "<button type=\"button\" class=\"action-btn green\" id=\"algoNewSave\">GUARDAR NUEVO</button>");
+    bindClick("algoNewSave", function () {
+        const name = $("algoNewName") ? $("algoNewName").value.trim() : "";
+        if (!name) {
+            alert("Ponle un nombre al algoritmo nuevo.");
+            return;
+        }
+        const best = Object.assign({}, pending.best);
+        best.chip = currentBIN.chip;
+        const item = KnowledgeBase.saveAsNew(best, name, currentBIN.fileName, currentBIN.fileSize, pendingChecksums());
+        binCore.addLog("MEMORIA", "Algoritmo nuevo: " + item.name);
+        addLogRows();
+        showAttackToast("Guardé algoritmo nuevo: " + item.name);
+        offerEditedFile(pending.title, pending.extra);
+    });
 }
 
 function offerEditedFile(title, extraHtml) {
@@ -1067,7 +1193,7 @@ function showAlgoDetail(item) {
     const steps = item.steps && item.steps.length ? item.steps : KnowledgeBase.recipe(item);
     const dirs = (item.addresses || item.copies || []).map((a) => padHex(Number(a))).join(" ");
     const chk = (item.checksums || []).map((c) => c.name + " @ " + padHex(c.storedAt)).join(", ") || "sin complemento";
-    box.innerHTML = "<h4>" + item.name + "</h4>" +
+    box.innerHTML = "<h4>" + item.name + (item.version ? " · v" + item.version : "") + "</h4>" +
         "<p><strong>Fórmula:</strong> " + (item.formula || "—") + " · " + (item.width || "?") + "B " + (item.endian || "") + "</p>" +
         "<p><strong>Direcciones:</strong> " + (dirs || "—") + "</p>" +
         "<p><strong>Complemento:</strong> " + chk + "</p>" +
@@ -1521,7 +1647,7 @@ async function startDeepAttack() {
             : (OmegaKernel.compareBins[1]
                 ? "<p>Trabajó con 3 BIN. CRC/SUM se contrastó en tres entornos.</p>"
                 : ""));
-    if (!offerEditedFile("ATAQUE TERMINÓ", extra)) {
+    if (!offerDetectedAlgorithm("ATAQUE TERMINÓ", extra)) {
         openLab("ATAQUE TERMINÓ", extra);
     }
 }

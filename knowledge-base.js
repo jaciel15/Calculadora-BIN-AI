@@ -323,7 +323,35 @@ const KnowledgeBase = {
     rememberAlgorithm(hit, fileName, fileSize, checksums) {
         const db = this.load();
         const name = hit.displayName || this.algorithmName(hit.formula, hit.width, hit.endian);
-        let item = db.algorithms.find((a) => a.name === name || (a.formula === hit.formula && a.width === hit.width && a.endian === hit.endian && a.familyId === hit.familyId));
+        let item = null;
+        if (hit.asVersionOf) {
+            item = db.algorithms.find((a) => a.name === hit.asVersionOf);
+        } else if (!hit.forceNew) {
+            item = db.algorithms.find((a) => a.name === name || (a.formula === hit.formula && a.width === hit.width && a.endian === hit.endian && a.familyId === hit.familyId));
+        }
+        if (!item && hit.forceNew) {
+            let unique = name;
+            let n = 2;
+            while (db.algorithms.some((a) => a.name === unique)) {
+                unique = name + " (" + n + ")";
+                n++;
+            }
+            item = {
+                name: unique,
+                formula: hit.formula,
+                width: hit.width,
+                endian: hit.endian,
+                writeHow: MathEngine.encodeWriteup(hit.formula, hit.endian, hit.width),
+                copies: hit.copies || [],
+                checksums: [],
+                hits: 0,
+                files: [],
+                version: 1,
+                versions: [],
+                created: new Date().toISOString()
+            };
+            db.algorithms.push(item);
+        }
         if (!item) {
             item = {
                 name,
@@ -353,7 +381,45 @@ const KnowledgeBase = {
         if (packed.length) item.checksums = packed;
         item.steps = this.recipe(hit);
         item.howManual = item.steps.map((s) => s.n + ". " + s.title + ": " + s.text).join(" ");
+        if (!item.version) item.version = 1;
+        if (!item.versions) item.versions = [];
         this.save(db);
+        return item;
+    },
+
+    addVersion(parentName, hit, fileName, fileSize, checksums) {
+        const db = this.load();
+        let parent = db.algorithms.find((a) => a.name === parentName);
+        if (!parent) {
+            hit.displayName = parentName;
+            parent = this.rememberAlgorithm(hit, fileName, fileSize, checksums);
+        }
+        parent.version = (parent.version || 1) + 1;
+        parent.versions = parent.versions || [];
+        parent.versions.push({
+            version: parent.version,
+            formula: hit.formula,
+            width: hit.width,
+            endian: hit.endian,
+            address: hit.address,
+            file: fileName,
+            saved: new Date().toISOString()
+        });
+        this.save(db);
+        hit.displayName = parent.name;
+        hit.asVersionOf = parent.name;
+        const item = this.rememberAlgorithm(hit, fileName, fileSize, checksums);
+        item.version = parent.version;
+        item.versions = parent.versions;
+        this.markUserSaved(item.name);
+        return item;
+    },
+
+    saveAsNew(hit, displayName, fileName, fileSize, checksums) {
+        hit.displayName = displayName;
+        hit.forceNew = true;
+        const item = this.rememberAlgorithm(hit, fileName, fileSize, checksums);
+        this.markUserSaved(item.name);
         return item;
     },
 
