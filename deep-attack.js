@@ -237,7 +237,10 @@ const DeepAttack = {
                     }
                     ji++;
                 }
-                const pct = Math.min(99.9, (elapsed / self.MAX_MS) * 100);
+                const found = hits.length > 0;
+                const pct = found
+                    ? 100
+                    : Math.min(99, jobs.length ? (ji / jobs.length) * 100 : (elapsed / self.MAX_MS) * 100);
                 if (opts.onTick) {
                     opts.onTick({
                         pct: pct,
@@ -246,14 +249,15 @@ const DeepAttack = {
                         tested: tested,
                         hits: hits.length,
                         lines: lines.length,
-                        doneJobs: ji >= jobs.length
+                        found: found,
+                        formula: found ? hits[hits.length - 1].formula : ""
                     });
                 }
-                if (elapsed >= self.MAX_MS) {
+                if (found || elapsed >= self.MAX_MS || ji >= jobs.length) {
                     resolve(self.finish(hits, lines, tested, false));
                     return;
                 }
-                self.timer = setTimeout(tick, ji >= jobs.length ? 250 : 16);
+                self.timer = setTimeout(tick, 16);
             };
 
             if (typeof Notification !== "undefined" && Notification.permission === "default") {

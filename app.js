@@ -534,7 +534,7 @@ function renderAnalysis(analysis) {
     $("chipSize").textContent = currentBIN.totalBytes + " Bytes";
     $("footerFile").textContent = currentBIN.fileName;
     $("footerChip").textContent = currentBIN.chip;
-    setStatus(analysis.omega && analysis.omega.truth ? analysis.omega.truth.status : "ANALIZADO", true);
+    setStatus(analysis.best ? "KM DETECTADO" : (analysis.omega && analysis.omega.truth ? analysis.omega.truth.status : "ANALIZADO"), analysis.best ? "ok" : true);
     refreshIdentity();
     renderDiffTable(analysis.omega ? analysis.omega.diffWorld : null);
     showHEX(currentBIN.working);
@@ -1457,11 +1457,19 @@ async function startDeepAttack() {
         onTick: function (info) {
             if (fill) fill.style.width = info.pct.toFixed(1) + "%";
             if (clock) clock.textContent = clockText(info.elapsed);
+            if (info.found) {
+                if (fill) {
+                    fill.style.width = "100%";
+                    fill.classList.remove("busy");
+                    fill.classList.add("done");
+                }
+                setStatus("KM DETECTADO", "ok");
+                if (status) status.textContent = "KM encontrado: " + (info.formula || "") + " · ya terminó.";
+                return;
+            }
             setStatus("CARGANDO", "busy");
             if (status) {
-                status.textContent = (info.doneJobs
-                    ? "Cálculo listo. La barra sigue en rojo hasta 10:00. "
-                    : "Línea " + padHex(info.line || 0) + " · ") +
+                status.textContent = "Línea " + padHex(info.line || 0) + " · " +
                     info.tested + " pruebas · " + info.hits + " hipótesis · " +
                     info.lines + " líneas que cambian · " +
                     (OmegaKernel.compareBins[1] ? "3 BIN" : "2 BIN");
