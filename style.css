@@ -847,6 +847,38 @@ body {
     font-size: 13px;
 }
 
+.gen-ask {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0b6e99;
+}
+
+.gen-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.gen-form {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 10px 12px;
+    align-items: center;
+    margin: 14px 0;
+}
+
+.gen-form label {
+    font-weight: 800;
+    color: #064b6b;
+}
+
+.gen-form input {
+    padding: 8px 10px;
+    border: 2px solid #00b4e6;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
 .omega-panel {
     margin-bottom: 12px;
 }

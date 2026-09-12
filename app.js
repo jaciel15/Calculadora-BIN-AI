@@ -715,6 +715,7 @@ function runAnalysis(extra) {
             return;
         }
         renderAnalysis(analysis);
+        if (opts.offerFile && analysis.best) offerEditedFile("ANÁLISIS LISTO");
     }, 40);
 }
 
@@ -798,20 +799,118 @@ function runRestore() {
     addLogRows();
 }
 
-function runGenerateBIN() {
+function currentKmGuess() {
+    if (knownKm() !== null) return knownKm();
+    if (currentBIN && currentBIN.analysis && currentBIN.analysis.best && typeof currentBIN.analysis.best.value === "number") {
+        return currentBIN.analysis.best.value;
+    }
+    if ($("currentValue")) {
+        const n = $("currentValue").value.replace(/[^\d]/g, "");
+        if (n) return Number(n);
+    }
+    return null;
+}
+
+function defaultFileLabel(newKm) {
+    const chip = currentBIN && currentBIN.chip ? String(currentBIN.chip) : "";
+    const text = ((currentBIN && currentBIN.analysis && currentBIN.analysis.best && currentBIN.analysis.best.familyId) || chip || "").toUpperCase();
+    const brand = /YAMAHA/.test(text) ? "YAMAHA" : (chip ? chip.replace(/[^\w]+/g, " ").trim() : "KM");
+    return (brand + " KM " + (newKm || "OK")).replace(/\s+/g, " ").trim();
+}
+
+function fileNameSafe(raw, km) {
+    let name = String(raw || "").trim();
+    if (!name) name = defaultFileLabel(km);
+    name = name.replace(/[<>:"/\\|?*]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!name) name = (km || "KM") + " OK";
+    if (!/\.(bin|eep|hex)$/i.test(name)) name += ".bin";
+    return name;
+}
+
+function offerEditedFile(title, extraHtml) {
+    if (!currentBIN || !currentBIN.analysis || !currentBIN.analysis.best) return false;
+    if (currentBIN.analysis.best.writable === false) return false;
+    const have = currentKmGuess();
+    const html = (extraHtml || "") +
+        "<p class=\"gen-ask\">¿Generar un archivo ya editado?</p>" +
+        "<p>Ahora el archivo tiene <strong>" + (have !== null ? have + " KM" : "un KM detectado") + "</strong>. Si pulsas SÍ, pones el nuevo KM y el nombre (ej. YAMAHA KM OK).</p>" +
+        "<div class=\"gen-actions\">" +
+        "<button type=\"button\" class=\"action-btn green\" id=\"genYesBtn\">SÍ</button>" +
+        "<button type=\"button\" class=\"action-btn\" id=\"genNoBtn\">AHORA NO</button>" +
+        "</div>";
+    openLab(title || "LISTO", html);
+    bindClick("genYesBtn", function () { showGenerateForm(have); });
+    bindClick("genNoBtn", function () { $("labModal").classList.remove("open"); });
+    return true;
+}
+
+function showGenerateForm(haveKm) {
     if (!needBIN()) return;
-    if (activeEditorKind() !== "VIN" && currentBIN.analysis && currentBIN.analysis.best && currentBIN.analysis.best.writable === false) {
+    if (!currentBIN.analysis) runAnalysis();
+    if (!currentBIN.analysis || !currentBIN.analysis.best) {
+        alert("Primero analiza o termina el ataque. Sin fórmula no se edita el archivo.");
+        return;
+    }
+    if (currentBIN.analysis.best.writable === false) {
         alert("Familia reconocida, pero no se genera BIN: la fórmula no está demostrada.");
         return;
     }
-    if (!currentBIN.analysis) runAnalysis();
-    if (!lastSimulation) runApply();
+    const have = haveKm !== undefined && haveKm !== null ? haveKm : currentKmGuess();
+    openLab("GENERAR ARCHIVO",
+        "<p>El archivo tiene <strong>" + (have !== null ? have : "—") + " KM</strong>. Pon el nuevo y el nombre que quieras.</p>" +
+        "<div class=\"gen-form\">" +
+        "<label>KM QUE TIENEN</label>" +
+        "<input id=\"genHaveKm\" type=\"text\" value=\"" + (have !== null ? have : "") + "\">" +
+        "<label>NUEVO KM</label>" +
+        "<input id=\"genNewKm\" type=\"text\" placeholder=\"Ej. 12000\">" +
+        "<label>NOMBRE DEL ARCHIVO</label>" +
+        "<input id=\"genFileName\" type=\"text\" placeholder=\"YAMAHA KM OK\" value=\"YAMAHA KM OK\">" +
+        "</div>" +
+        "<button type=\"button\" class=\"action-btn green\" id=\"genMakeBtn\">CREAR ARCHIVO EDITADO</button>");
+    bindClick("genMakeBtn", makeEditedFile);
+    if ($("genNewKm")) {
+        $("genNewKm").addEventListener("input", function () {
+            const km = this.value.replace(/[^\d]/g, "");
+            if ($("genFileName") && !$("genFileName").getAttribute("data-locked")) {
+                $("genFileName").value = defaultFileLabel(km || "OK");
+            }
+        });
+    }
+    if ($("genFileName")) {
+        $("genFileName").addEventListener("input", function () {
+            this.setAttribute("data-locked", "1");
+        });
+    }
+}
+
+function makeEditedFile() {
+    if (!needBIN() || !currentBIN.analysis) return;
+    const have = $("genHaveKm") ? $("genHaveKm").value.replace(/[^\d]/g, "") : "";
+    const neu = $("genNewKm") ? $("genNewKm").value.replace(/[^\d]/g, "") : "";
+    if (!neu) {
+        alert("Pon el nuevo KM.");
+        return;
+    }
+    if ($("knownKm") && have) $("knownKm").value = have;
+    if ($("knownKm1") && have) $("knownKm1").value = have;
+    if ($("currentValue")) $("currentValue").value = have || String(currentKmGuess() || "");
+    if ($("newValue")) $("newValue").value = neu;
+    if ($("ghostKm")) $("ghostKm").value = neu;
+    runApply();
+    if (!lastSimulation) return;
     const bytes = binCore.generateBIN();
     if (!bytes) return;
-    const km = $("newValue") ? $("newValue").value.replace(/[^\d]/g, "") : "";
-    const name = km ? km + "_KM_prueba_de_bin.bin" : "prueba_de_bin.bin";
+    const name = fileNameSafe($("genFileName") && $("genFileName").value, neu);
     downloadBlob(name, [bytes], "application/octet-stream");
+    $("labModal").classList.remove("open");
+    showAttackToast("Archivo listo: " + name);
+    if (typeof binCore !== "undefined") binCore.addLog("BIN GENERATOR", "Archivo editado " + name + " · " + have + " → " + neu + " KM");
     addLogRows();
+}
+
+function runGenerateBIN() {
+    if (!needBIN()) return;
+    showGenerateForm(currentKmGuess());
 }
 
 function runUPA() {
@@ -1385,13 +1484,16 @@ async function startDeepAttack() {
     addLogRows();
     const need3 = needsThirdBin(report);
     showBin3Ask(need3);
-    openLab("ATAQUE TERMINÓ", "<p>" + report.message + "</p><p>Líneas distintas: " +
+    const extra = "<p>" + report.message + "</p><p>Líneas distintas: " +
         report.lines + " · Pruebas: " + report.tested + "</p>" +
         (need3
-            ? "<p><strong>Falta un tercer BIN</strong> con otro KM para cerrar CRC/SUM en un entorno distinto. Súbelo en BIN 3 y vuelve a ATAQUE 10 MIN.</p>"
+            ? "<p><strong>Falta un tercer BIN</strong> con otro KM para cerrar CRC/SUM en un entorno distinto. Súbelo en BIN 3 y vuelve a ATAQUE 10 MIN. Si ya quieres el archivo, pulsa SÍ.</p>"
             : (OmegaKernel.compareBins[1]
                 ? "<p>Trabajó con 3 BIN. CRC/SUM se contrastó en tres entornos.</p>"
-                : "")));
+                : ""));
+    if (!offerEditedFile("ATAQUE TERMINÓ", extra)) {
+        openLab("ATAQUE TERMINÓ", extra);
+    }
 }
 
 function showPairReport() {
@@ -1531,8 +1633,8 @@ function wireUI() {
     if ($("fileInput2")) $("fileInput2").addEventListener("change", loadBIN2);
     if ($("fileInput3")) $("fileInput3").addEventListener("change", loadBIN3);
 
-    bindClick("analyzeBtn", runAnalysis);
-    bindClick("analyzeBtnTop", runAnalysis);
+    bindClick("analyzeBtn", () => runAnalysis({ offerFile: true }));
+    bindClick("analyzeBtnTop", () => runAnalysis({ offerFile: true }));
     document.querySelectorAll(".mode-btn").forEach((btn) => {
         btn.onclick = () => LabMode.set(btn.getAttribute("data-mode"));
     });
