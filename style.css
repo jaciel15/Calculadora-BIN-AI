@@ -279,8 +279,23 @@ body {
 }
 
 .status-circle.ok {
-    border-color: var(--sage);
-    color: var(--sage);
+    border-color: #1b8a3a;
+    color: #145c28;
+    background: #d7f5df;
+    box-shadow: 0 0 0 4px rgba(27, 138, 58, 0.18);
+}
+
+.status-circle.busy {
+    border-color: #d32f2f;
+    color: #b71c1c;
+    background: #ffebee;
+    box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.2);
+    animation: status-pulse 1s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
 }
 
 .ok-text { color: var(--sage); }
@@ -1085,8 +1100,14 @@ html, body {
     display: block;
     height: 100%;
     width: 0;
-    background: linear-gradient(90deg, #0277bd, #00e5ff);
-    transition: width 0.16s linear;
+    background: linear-gradient(90deg, #b71c1c, #ff1744);
+    transition: width 0.2s linear;
+}
+.attack-bar i.busy {
+    background: linear-gradient(90deg, #b71c1c, #ff1744);
+}
+.attack-bar i.done {
+    background: linear-gradient(90deg, #1b8a3a, #69f0ae);
 }
 .attack-toast {
     position: fixed;

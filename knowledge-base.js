@@ -274,6 +274,7 @@ const KnowledgeBase = {
             if (!data.graph) data.graph = [];
             if (!data.learned) data.learned = [];
             if (!data.discoveries) data.discoveries = [];
+            if (!data.hidden) data.hidden = [];
             return data;
         } catch (error) {
             return this.empty();
@@ -288,6 +289,7 @@ const KnowledgeBase = {
             graph: [],
             learned: [],
             discoveries: [],
+            hidden: [],
             updated: null
         };
     },
@@ -391,9 +393,35 @@ const KnowledgeBase = {
         return item;
     },
 
-    removeAlgorithm(name) {
+    hideKey(item) {
+        if (!item) return "";
+        return String(item.codeId || item.id || item.name || item.key || "").trim().toLowerCase();
+    },
+
+    isHidden(item) {
+        const hidden = this.load().hidden || [];
+        const name = String(item && item.name || "").trim().toLowerCase();
+        const key = this.hideKey(item);
+        return hidden.some((h) => {
+            const hn = String(h.name || "").trim().toLowerCase();
+            const hk = String(h.codeId || h.id || h.key || "").trim().toLowerCase();
+            return (name && hn === name) || (key && (hk === key || hn === key));
+        });
+    },
+
+    removeAlgorithm(name, extra) {
         const db = this.load();
         db.algorithms = (db.algorithms || []).filter((a) => a.name !== name);
+        if (!db.hidden) db.hidden = [];
+        const mark = {
+            name: name,
+            codeId: extra && (extra.codeId || extra.id) || "",
+            key: extra && extra.key || "",
+            lastFile: extra && extra.lastFile || ""
+        };
+        const exists = db.hidden.some((h) => String(h.name || "").toLowerCase() === String(name || "").toLowerCase() ||
+            (mark.codeId && h.codeId === mark.codeId));
+        if (!exists) db.hidden.push(mark);
         this.save(db);
         return true;
     },

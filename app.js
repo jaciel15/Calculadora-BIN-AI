@@ -225,12 +225,15 @@ function addLogRows() {
     }).join("");
 }
 
-function setStatus(text, ok) {
+function setStatus(text, mode) {
     const circle = $("statusCircle");
     const label = $("statusText");
     if (circle) circle.textContent = text;
     if (label) label.textContent = text;
-    if (circle) circle.className = "status-circle" + (ok ? " ok" : "");
+    let cls = "status-circle";
+    if (mode === true || mode === "ok") cls += " ok";
+    else if (mode === false || mode === "busy") cls += " busy";
+    if (circle) circle.className = cls;
     const footer = $("footerState");
     if (footer) footer.textContent = "ESTADO: " + text;
 }
@@ -1196,6 +1199,7 @@ function showAlgorithms() {
     FamilyLibrary.list().forEach((f, index) => {
         catalog.push({
             key: "k" + index,
+            id: f.id,
             name: f.id,
             formula: f.status,
             width: f.size,
@@ -1203,6 +1207,7 @@ function showAlgorithms() {
             writeHow: f.writeHow,
             hits: f.binsProven,
             lastFile: "KERNEL",
+            codeId: f.id,
             steps: KnowledgeBase.recipe({
                 formula: f.writable ? "X" : "FINO",
                 width: 2,
@@ -1217,11 +1222,12 @@ function showAlgorithms() {
     db.algorithms.forEach((item, index) => {
         catalog.push(Object.assign({ key: "a" + index }, item));
     });
-    window._algoCatalog = catalog;
-    if (!catalog.length) {
+    const visible = catalog.filter((item) => !KnowledgeBase.isHidden(item));
+    window._algoCatalog = visible;
+    if (!visible.length) {
         body.innerHTML = "<tr><td colspan=\"6\">Aún no hay algoritmos. Analiza y pulsa Guardar algoritmo.</td></tr>";
     } else {
-        body.innerHTML = catalog.map((item) => {
+        body.innerHTML = visible.map((item) => {
             return "<tr class=\"algo-row\" data-key=\"" + item.key + "\">" +
                 "<td>" + item.name + "</td>" +
                 "<td>" + (item.formula || "") + "</td>" +
@@ -1435,6 +1441,12 @@ async function startDeepAttack() {
     const status = $("attackStatus");
     const clock = $("attackClock");
     if (overlay) overlay.classList.remove("hidden");
+    if (fill) {
+        fill.classList.remove("done");
+        fill.classList.add("busy");
+        fill.style.width = "0%";
+    }
+    setStatus("CARGANDO", "busy");
     const report = await DeepAttack.run({
         bytes: currentBIN.original,
         bytes2: OmegaKernel.compareBins[0].bytes,
@@ -1445,14 +1457,24 @@ async function startDeepAttack() {
         onTick: function (info) {
             if (fill) fill.style.width = info.pct.toFixed(1) + "%";
             if (clock) clock.textContent = clockText(info.elapsed);
+            setStatus("CARGANDO", "busy");
             if (status) {
-                status.textContent = "Línea " + padHex(info.line || 0) + " · " +
+                status.textContent = (info.doneJobs
+                    ? "Cálculo listo. La barra sigue en rojo hasta 10:00. "
+                    : "Línea " + padHex(info.line || 0) + " · ") +
                     info.tested + " pruebas · " + info.hits + " hipótesis · " +
                     info.lines + " líneas que cambian · " +
                     (OmegaKernel.compareBins[1] ? "3 BIN" : "2 BIN");
             }
         }
     });
+    if (fill) {
+        fill.style.width = "100%";
+        fill.classList.remove("busy");
+        fill.classList.add("done");
+    }
+    setStatus("LISTO", "ok");
+    await new Promise(function (resolve) { setTimeout(resolve, 900); });
     if (overlay) overlay.classList.add("hidden");
     if (report.best && currentBIN.analysis) {
         currentBIN.analysis.best = report.best;
@@ -1715,12 +1737,12 @@ function wireUI() {
         fillAlgoForm(window._selectedAlgo);
     });
     bindClick("algoDelBtn", () => {
-        if (!window._selectedAlgo || !window._selectedAlgo.formula || window._selectedAlgo.lastFile === "KERNEL") {
-            alert("Elige un algoritmo guardado para quitarlo.");
+        if (!window._selectedAlgo) {
+            alert("Pulsa una fila y luego QUITAR.");
             return;
         }
         if (!confirm("¿Quitar " + window._selectedAlgo.name + "?")) return;
-        KnowledgeBase.removeAlgorithm(window._selectedAlgo.name);
+        KnowledgeBase.removeAlgorithm(window._selectedAlgo.name, window._selectedAlgo);
         showAlgorithms();
     });
     bindClick("algoUpaBtn", () => {

@@ -237,25 +237,23 @@ const DeepAttack = {
                     }
                     ji++;
                 }
-                const pct = Math.min(99, Math.max(
-                    (elapsed / self.MAX_MS) * 100,
-                    jobs.length ? (ji / jobs.length) * 100 : 0
-                ));
+                const pct = Math.min(99.9, (elapsed / self.MAX_MS) * 100);
                 if (opts.onTick) {
                     opts.onTick({
                         pct: pct,
                         elapsed: elapsed,
-                        line: jobs[Math.min(ji, jobs.length - 1)] ? jobs[Math.min(ji, jobs.length - 1)].line : (lines[0] || 0),
+                        line: jobs[Math.min(ji, Math.max(0, jobs.length - 1))] ? jobs[Math.min(ji, Math.max(0, jobs.length - 1))].line : (lines[0] || 0),
                         tested: tested,
                         hits: hits.length,
-                        lines: lines.length
+                        lines: lines.length,
+                        doneJobs: ji >= jobs.length
                     });
                 }
-                if (elapsed >= self.MAX_MS || ji >= jobs.length) {
+                if (elapsed >= self.MAX_MS) {
                     resolve(self.finish(hits, lines, tested, false));
                     return;
                 }
-                self.timer = setTimeout(tick, 16);
+                self.timer = setTimeout(tick, ji >= jobs.length ? 250 : 16);
             };
 
             if (typeof Notification !== "undefined" && Notification.permission === "default") {
