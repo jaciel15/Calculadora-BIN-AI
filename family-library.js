@@ -34,7 +34,7 @@ const FamilyLibrary = {
             size: 8192,
             status: "DEMOSTRADO",
             writable: true,
-            writeHow: "Reescribe TODO el anillo del banco: páginas de 32 B en cadena +1. La última es KM×10 LE24. Cada página: lo mid hi + SUM16 BE en 30–31. No toca páginas FF.",
+            writeHow: "Línea 0260 col 00: KM actual ×10 en 3 bytes LE. Hacia 0000 el KM baja de 1 en 1. La suma de esos 3 bytes va a la línea 0270 (cola +30/+31). Si pasa de 255 aparece 01. GENERAR solo toca KM (3 B) y SUM (2 B) de cada página 0000–0260.",
             binsProven: 8
         }
     ],
@@ -190,15 +190,23 @@ const FamilyLibrary = {
     },
 
     r5fPages(bytes) {
+        return this.r5fRingPages(bytes).filter((p) => p.ok);
+    },
+
+    r5fRingPages(bytes) {
         const pages = [];
         for (let p = 0; p + 32 <= bytes.length; p += 0x20) {
+            let ff = 0;
+            for (let i = 0; i < 32; i++) {
+                if (bytes[p + i] === 0xFF) ff++;
+            }
+            if (ff >= 28) break;
             let pad = 0;
             for (let i = 3; i < 30; i++) {
                 if (bytes[p + i] === 0) pad++;
             }
-            if (pad < 25) continue;
+            if (pad < 25) break;
             const value = this.le24(bytes, p);
-            if (value < 50 || value > 2500000) continue;
             const sum16 = bytes[p] + bytes[p + 1] + bytes[p + 2];
             const stored = (bytes[p + 30] << 8) | bytes[p + 31];
             pages.push({
@@ -206,7 +214,7 @@ const FamilyLibrary = {
                 value,
                 sum16,
                 stored,
-                ok: stored === sum16
+                ok: stored === sum16 && value >= 50 && value <= 2500000
             });
         }
         return pages;
@@ -214,33 +222,37 @@ const FamilyLibrary = {
 
     detectR5F(bytes) {
         if (bytes.length !== 8192) return null;
-        const pages = this.r5fPages(bytes);
-        const valid = pages.filter((p) => p.ok);
+        const ring = this.r5fRingPages(bytes);
+        const valid = ring.filter((p) => p.ok);
         if (valid.length < 6) return null;
-        const last = valid.reduce((a, b) => (a.value >= b.value ? a : b));
-        const km = Math.round(last.value / 10);
-        const hex = MathEngine.hexBytes(bytes.slice(last.addr, last.addr + 3));
+        const lastOk = valid.reduce((a, b) => (a.value >= b.value ? a : b));
+        const lastPage = ring[ring.length - 1];
+        const km = Math.round(lastOk.value / 10);
+        const hex = MathEngine.hexBytes(bytes.slice(lastPage.addr, lastPage.addr + 3));
         const hit = {
             fromMemory: true,
             fromFamily: true,
+            fromStair: true,
             familyId: "YAMAHA_R5F10",
             label: "KILOMETRAJE",
             name: "YAMAHA_R5F10_LE24_X10",
             formula: "X * 10",
             width: 3,
             endian: "LE",
-            copies: [last.addr],
-            address: last.addr,
-            addressText: Hunters.range(last.addr, 3),
+            copies: ring.map((p) => p.addr),
+            address: lastPage.addr,
+            addressText: Hunters.range(lastPage.addr, 3),
             hex,
             numeric: km,
             value: km,
-            writeHow: "Reescribe las " + valid.filter((p) => (p.addr & ~0x3FF) === (last.addr & ~0x3FF)).length +
-                " páginas del banco: última = KM×10 LE24, las anteriores −1, −2… SUM16 en cada cola.",
+            writeHow: "Línea " + lastPage.addr.toString(16).toUpperCase().padStart(4, "0") +
+                " col 00: KM actual ×10 (3 bytes LE). Hacia 0000 baja de 1 en 1. La suma de esos 3 bytes se escribe en la línea " +
+                (lastPage.addr + 0x10).toString(16).toUpperCase().padStart(4, "0") +
+                " (cola +30/+31). Si pasa de 255 aparece 01. Solo se tocan KM y SUM de cada página.",
             confidence: 99.1,
-            representation: "anillo LE24 de décimas · última = KM×10 · SUM16 BE @ +30",
+            representation: "rampa 32 B · 0260→0000 decrece · SUM16 de los 3 bytes del KM @ +30",
             writable: true,
-            checksumAt: last.addr + 30,
+            checksumAt: lastPage.addr + 30,
             checksumName: "SUM16"
         };
         return {
@@ -368,25 +380,29 @@ const FamilyLibrary = {
     },
 
     writeR5FRing(bytes, lastAddr, km) {
-        const working = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-        const run = this.r5fBank(working, lastAddr);
+        const working = bytes instanceof Uint8Array ? new Uint8Array(bytes) : new Uint8Array(bytes);
+        const ring = this.r5fRingPages(working);
+        let last = (lastAddr === undefined || lastAddr === null) ? 0 : (lastAddr & ~0x1F);
+        if (ring.length && ring[ring.length - 1].addr > last) last = ring[ring.length - 1].addr;
+        const addrs = [];
+        for (let p = 0; p <= last; p += 0x20) addrs.push(p);
         const lastVal = Number(km) * 10;
-        if (!run.length || !Number.isFinite(lastVal) || lastVal < 50) return { bytes: working, encoded: new Uint8Array(3), count: 0 };
-        run.forEach((page, index) => {
-            const value = lastVal - (run.length - 1 - index);
-            working[page.addr] = value & 0xFF;
-            working[page.addr + 1] = (value >> 8) & 0xFF;
-            working[page.addr + 2] = (value >> 16) & 0xFF;
-            for (let i = 3; i < 30; i++) working[page.addr + i] = 0;
-            const sum16 = working[page.addr] + working[page.addr + 1] + working[page.addr + 2];
-            working[page.addr + 30] = (sum16 >> 8) & 0xFF;
-            working[page.addr + 31] = sum16 & 0xFF;
+        if (!addrs.length || !Number.isFinite(lastVal) || lastVal < 50) {
+            return { bytes: working, encoded: new Uint8Array(3), count: 0 };
+        }
+        addrs.forEach((addr, index) => {
+            const value = (lastVal - (addrs.length - 1 - index)) >>> 0;
+            working[addr] = value & 0xFF;
+            working[addr + 1] = (value >> 8) & 0xFF;
+            working[addr + 2] = (value >> 16) & 0xFF;
+            const sum16 = working[addr] + working[addr + 1] + working[addr + 2];
+            working[addr + 30] = (sum16 >> 8) & 0xFF;
+            working[addr + 31] = sum16 & 0xFF;
         });
-        const last = run[run.length - 1];
         return {
             bytes: working,
-            encoded: working.slice(last.addr, last.addr + 3),
-            count: run.length
+            encoded: working.slice(last, last + 3),
+            count: addrs.length
         };
     },
 

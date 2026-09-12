@@ -294,6 +294,18 @@ function describeOperation(hit) {
 function describeEdited(hit, newKm) {
     if (!hit || hit.writable === false) return "Esta familia no tiene operación de escritura demostrada.";
     if (newKm === "" || newKm === null) return "Escribe un nuevo KM para ver la operación editada.";
+    if (hit.familyId === "YAMAHA_R5F10") {
+        const pages = (hit.copies && hit.copies.length) ? hit.copies.length : 20;
+        const raw = Number(newKm) * 10;
+        const lo = raw & 0xFF;
+        const mid = (raw >> 8) & 0xFF;
+        const hi = (raw >> 16) & 0xFF;
+        const sum = lo + mid + hi;
+        return "Nuevo KM " + newKm + " → ×10 = " + raw + " en línea 0260 col 00 (" +
+            padHex(lo, 2) + " " + padHex(mid, 2) + " " + padHex(hi, 2) +
+            "). Hacia 0000 baja 1. SUM de esos 3 bytes = " + padHex(sum, 4) +
+            " en línea 0270 cola. Solo " + pages + " páginas × 5 bytes. Nada más.";
+    }
     try {
         const encoded = EditorEngine.encodeValue(Number(newKm), hit);
         return "Nuevo KM " + newKm + " → " + hit.formula + " → " + MathEngine.hexBytes(encoded) +
@@ -302,6 +314,8 @@ function describeEdited(hit, newKm) {
         return "No se pudo calcular la operación editada.";
     }
 }
+
+const R5F_RECIPE = "Línea 0260 columna 00 es el KM actual ×10 (3 bytes). Hacia la línea 0000 el KM baja de 1 en 1. La suma de esos 3 bytes se escribe en la línea 0270 (últimos 2 bytes). Si pasa de 255 aparece 01. El checksum también baja cuando baja el KM. GENERAR BIN solo toca esos 5 bytes por página.";
 
 function renderDNA(dna, discovery) {
     $("dnaScore").textContent = dna.score + "%";
@@ -521,6 +535,9 @@ function renderAnalysis(analysis) {
     refreshIdentity();
     renderDiffTable(analysis.omega ? analysis.omega.diffWorld : null);
     showHEX(currentBIN.working);
+    if (analysis.best && analysis.best.familyId === "YAMAHA_R5F10" && $("helpRecipe")) {
+        $("helpRecipe").value = R5F_RECIPE;
+    }
     addLogRows();
 }
 
@@ -1195,6 +1212,27 @@ async function loadBIN2(event) {
     addLogRows();
 }
 
+async function loadSamplePair() {
+    try {
+        const [one, two] = await Promise.all([
+            fetch("samples/35000-line-260.bin"),
+            fetch("samples/150500-pair.bin")
+        ]);
+        if (!one.ok || !two.ok) throw new Error("sample");
+        const f1 = new File([await one.arrayBuffer()], "35000 line 260 final.bin.bin");
+        const f2 = new File([await two.arrayBuffer()], "150500_KM_Org.NISSAN.EDITADO.bin");
+        await loadBIN({ target: { files: [f1] } });
+        await loadBIN2({ target: { files: [f2] } });
+        if ($("knownKm")) $("knownKm").value = "35000";
+        if ($("knownKm1")) $("knownKm1").value = "35000";
+        if ($("knownKm2")) $("knownKm2").value = "150500";
+        if ($("helpRecipe")) $("helpRecipe").value = R5F_RECIPE;
+        runAnalysis();
+    } catch (error) {
+        alert("No pude cargar el par de ejemplo. Elige BIN 1 (35000 línea 260) y BIN 2 (150500) a mano.");
+    }
+}
+
 function runPairAnalysis() {
     if (!needBIN()) return;
     if (!OmegaKernel.compareBins.length) {
@@ -1356,9 +1394,10 @@ function wireUI() {
     if ($("brainInput")) $("brainInput").addEventListener("change", importBrain);
     bindClick("markAcceptBtn", acceptMarkLesson);
     bindClick("markSkipBtn", skipMarkLesson);
+    bindClick("loadSamplePairBtn", loadSamplePair);
     bindClick("helpExampleBtn", () => {
         if ($("helpRecipe")) {
-            $("helpRecipe").value = "Rojo es KM multiplicado x10 en 3 bytes little-endian. Morado es la suma de esos 3 bytes y ahí se escribe el checksum.";
+            $("helpRecipe").value = R5F_RECIPE;
             if (typeof MarkBook !== "undefined") MarkBook.persist();
         }
     });

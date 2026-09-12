@@ -635,6 +635,11 @@ const OmegaKernel = {
             }
         }
         let best = mileageHits[0] || hoursHits[0] || unknown[0] || null;
+        const userGuiding = typeof MarkBook !== "undefined" && MarkBook.hasHelp();
+        if (!userGuiding && familyMatch && familyMatch.hits && familyMatch.hits[0] && familyMatch.hits[0].familyId === "YAMAHA_R5F10") {
+            best = familyMatch.hits[0];
+            say("FAMILY KERNEL", "Este anillo manda: KM en 0260→0000 y SUM en la cola de cada página.");
+        }
         const copiesExact = best && best.copies ? Hunters.hiddenCopies([best]) : [];
         const copiesHidden = this.hiddenCopies(bytes, patterns);
         say("COPIAS OCULTAS", (copiesHidden.length + copiesExact.length) + " relaciones");

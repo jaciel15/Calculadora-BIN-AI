@@ -96,54 +96,71 @@ const WriteMachine = {
             seen.add(key);
             checksums.push(item);
         };
-        (ctx.kmChecksums || []).forEach((c) => {
-            addChk({
-                kind: "WINDOW",
-                name: c.name,
-                start: c.start,
-                end: c.end,
-                storedAt: c.storedAt,
-                size: c.size || 1,
-                endian: c.endian || "LE"
+        if (best.familyId === "YAMAHA_R5F10" && typeof FamilyLibrary !== "undefined") {
+            const ring = FamilyLibrary.r5fRingPages(bytes);
+            const last = ring.length ? ring[ring.length - 1].addr : (best.address || 0);
+            for (let p = 0; p <= last; p += 0x20) {
+                addChk({
+                    kind: "CLOSED",
+                    name: "SUM16",
+                    start: p,
+                    end: p + 3,
+                    storedAt: p + 30,
+                    size: 2,
+                    endian: "BE"
+                });
+            }
+        } else {
+            (ctx.kmChecksums || []).forEach((c) => {
+                addChk({
+                    kind: "WINDOW",
+                    name: c.name,
+                    start: c.start,
+                    end: c.end,
+                    storedAt: c.storedAt,
+                    size: c.size || 1,
+                    endian: c.endian || "LE"
+                });
             });
-        });
-        (ctx.closed || []).forEach((cell) => {
-            if (cell.checksumAt === undefined) return;
-            addChk({
-                kind: "CLOSED",
-                name: cell.checksumName || "SUM8",
-                start: cell.address,
-                end: cell.address + (cell.width || width),
-                storedAt: cell.checksumAt,
-                size: /16/.test(cell.checksumName || "") ? 2 : 1,
-                endian: "LE"
+            (ctx.closed || []).forEach((cell) => {
+                if (cell.checksumAt === undefined) return;
+                addChk({
+                    kind: "CLOSED",
+                    name: cell.checksumName || "SUM8",
+                    start: cell.address,
+                    end: cell.address + (cell.width || width),
+                    storedAt: cell.checksumAt,
+                    size: /16/.test(cell.checksumName || "") ? 2 : 1,
+                    endian: "LE"
+                });
             });
-        });
+            const world = ctx.world;
+            if (world && world.worlds && world.worlds[0] && world.worlds[0].checksum) {
+                const w = world.worlds[0];
+                addChk({
+                    kind: "CHANGING",
+                    name: w.checksum.name,
+                    addrs: w.addrs.slice(),
+                    width: w.width,
+                    offsets: this.varyOffsets(bytes, w.addrs, w.width),
+                    storedAt: w.checksum.storedAt,
+                    size: w.checksum.size || 1,
+                    endian: "LE"
+                });
+            }
+            if (best.checksumAt !== undefined) {
+                addChk({
+                    kind: "CLOSED",
+                    name: best.checksumName || "SUM8",
+                    start: best.address,
+                    end: best.address + width,
+                    storedAt: best.checksumAt,
+                    size: /16/.test(best.checksumName || "") ? 2 : 1,
+                    endian: "LE"
+                });
+            }
+        }
         const world = ctx.world;
-        if (world && world.worlds && world.worlds[0] && world.worlds[0].checksum) {
-            const w = world.worlds[0];
-            addChk({
-                kind: "CHANGING",
-                name: w.checksum.name,
-                addrs: w.addrs.slice(),
-                width: w.width,
-                offsets: this.varyOffsets(bytes, w.addrs, w.width),
-                storedAt: w.checksum.storedAt,
-                size: w.checksum.size || 1,
-                endian: "LE"
-            });
-        }
-        if (best.checksumAt !== undefined) {
-            addChk({
-                kind: "CLOSED",
-                name: best.checksumName || "SUM8",
-                start: best.address,
-                end: best.address + width,
-                storedAt: best.checksumAt,
-                size: /16/.test(best.checksumName || "") ? 2 : 1,
-                endian: "LE"
-            });
-        }
         const locked = !!(
             best.writable !== false &&
             ctx.truth &&

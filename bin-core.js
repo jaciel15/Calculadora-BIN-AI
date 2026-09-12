@@ -163,15 +163,14 @@ class BINCore {
                 return null;
             }
             if (ghost) {
-                const extra = ChecksumEngine.recalculate(ghost.bytes, bin.analysis.checksums || []);
                 this.addLog("MAQUINA SELLADA", ghost.proved.ok
-                    ? "Fantasma " + newValue + " KM · " + ghost.diffs.length + " bytes · el sello sigue cerrado"
+                    ? "Fantasma " + newValue + " KM · " + ghost.diffs.length + " bytes · solo KM y SUM del anillo"
                     : "Fantasma " + newValue + " KM · el sello se rompe: " + ghost.proved.broken.join(", "));
                 return {
                     applied: { bytes: ghost.bytes, copies: ghost.slots, hex: "" },
-                    repaired: extra.concat(ghost.repaired),
+                    repaired: ghost.repaired || [],
                     copies: ghost.slots,
-                    checksums: extra.length + ghost.repaired.length,
+                    checksums: (ghost.repaired || []).length,
                     ghost
                 };
             }

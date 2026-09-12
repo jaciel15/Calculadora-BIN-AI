@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=colores3">
+    <link rel="stylesheet" href="style.css?v=anillo1">
 </head>
 
 <body>
@@ -102,10 +102,12 @@
             <label>VIN 2</label>
             <input id="knownVin2" type="text" maxlength="17" placeholder="VIN archivo 2">
             <button id="analyzePairBtn" class="action-btn green">ANALIZAR PAR</button>
+            <button type="button" id="loadSamplePairBtn" class="action-btn yellow">CARGAR PAR 35000 / 150500</button>
+            <a id="videoPruebaLink" class="action-btn" href="video-confirmado.html" target="_blank" rel="noopener">VIDEO DE LA PRUEBA</a>
         </div>
         <div class="help-recipe-bar">
             <label>CÓMO LO HAGO</label>
-            <textarea id="helpRecipe" rows="2" placeholder="Ejemplo: rojo es KM multiplicado x10 en 3 bytes. Morado es la suma de esos 3 bytes y ahí se escribe el checksum."></textarea>
+            <textarea id="helpRecipe" rows="3" placeholder="Línea 0260 col 00 = KM ×10. Hacia 0000 baja de 1. La suma de esos 3 bytes va a la línea 0270. Si pasa de 255 aparece 01."></textarea>
             <button type="button" id="helpExampleBtn" class="action-btn">EJEMPLO</button>
         </div>
         <input type="file" id="fileInput2" accept=".bin,.eep,.hex" hidden>
@@ -552,21 +554,21 @@
     </div>
 </div>
 
-<script src="mark-book.js?v=colores3"></script>
-<script src="math-engine.js?v=colores3"></script>
-<script src="checksum-engine.js?v=colores3"></script>
-<script src="knowledge-base.js?v=colores3"></script>
-<script src="bin-world.js?v=colores3"></script>
-<script src="mind-engine.js?v=colores3"></script>
-<script src="hunters.js?v=colores3"></script>
-<script src="dna-discovery.js?v=colores3"></script>
-<script src="editor-upa.js?v=colores3"></script>
-<script src="write-machine.js?v=colores3"></script>
-<script src="bin-object.js?v=colores3"></script>
-<script src="family-library.js?v=colores3"></script>
-<script src="omega-kernel.js?v=colores3"></script>
-<script src="bin-core.js?v=colores3"></script>
-<script src="app.js?v=colores3"></script>
+<script src="mark-book.js?v=anillo1"></script>
+<script src="math-engine.js?v=anillo1"></script>
+<script src="checksum-engine.js?v=anillo1"></script>
+<script src="knowledge-base.js?v=anillo1"></script>
+<script src="bin-world.js?v=anillo1"></script>
+<script src="mind-engine.js?v=anillo1"></script>
+<script src="hunters.js?v=anillo1"></script>
+<script src="dna-discovery.js?v=anillo1"></script>
+<script src="editor-upa.js?v=anillo1"></script>
+<script src="write-machine.js?v=anillo1"></script>
+<script src="bin-object.js?v=anillo1"></script>
+<script src="family-library.js?v=anillo1"></script>
+<script src="omega-kernel.js?v=anillo1"></script>
+<script src="bin-core.js?v=anillo1"></script>
+<script src="app.js?v=anillo1"></script>
 
 </body>
 </html>

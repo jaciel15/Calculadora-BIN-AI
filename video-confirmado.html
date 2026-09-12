@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video confirmado · anillo 0260</title>
+    <style>
+        html, body { margin: 0; height: 100%; background: #111; color: #f4ead8; font-family: Arial, sans-serif; }
+        .stage { max-width: 920px; margin: 0 auto; min-height: 100%; padding: 28px 22px 80px; box-sizing: border-box; }
+        h1 { color: #e2b340; font-size: 28px; margin: 0 0 8px; }
+        .sub { color: #b9a88a; margin-bottom: 22px; }
+        .card { display: none; background: #1c1914; border: 1px solid #3d3428; border-radius: 12px; padding: 22px; min-height: 360px; }
+        .card.on { display: block; }
+        h2 { color: #e2b340; margin-top: 0; }
+        p, li { line-height: 1.5; font-size: 18px; }
+        code, .hex { font-family: Consolas, monospace; color: #8fd18f; }
+        .bad { color: #ff8080; }
+        .ok { color: #8fd18f; }
+        .bar { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+        button { background: #e2b340; border: 0; padding: 10px 16px; font-weight: 700; cursor: pointer; border-radius: 6px; }
+        a { color: #e2b340; }
+        .progress { height: 8px; background: #333; border-radius: 8px; overflow: hidden; margin: 16px 0; }
+        .progress i { display: block; height: 100%; background: #e2b340; width: 0; }
+    </style>
+</head>
+<body>
+    <div class="stage">
+        <h1>VIDEO CONFIRMADO</h1>
+        <p class="sub">Par 35000 línea 260 + 150500 · lo que hace la página y lo que ya no debe tocar</p>
+        <div class="progress"><i id="bar"></i></div>
+
+        <section class="card on" data-s="0">
+            <h2>1. Tus dos archivos</h2>
+            <p>BIN 1: <code>35000 line 260 final.bin.bin</code> · 8192 bytes · empieza <code>18 57 05</code></p>
+            <p>BIN 2: <code>150500 ... NISSAN EDITADO</code> · 8192 bytes · 100 bytes distintos en 21 zonas</p>
+            <p>En la página: pulsa <b>CARGAR PAR 35000 / 150500</b> y luego <b>ANALIZAR</b>.</p>
+        </section>
+
+        <section class="card" data-s="1">
+            <h2>2. Cómo está estructurado</h2>
+            <ul>
+                <li>Páginas de 32 bytes, de la línea <code>0000</code> a la <code>0260</code>.</li>
+                <li><b>KM</b> en la columna 00 de cada página: 3 bytes little-endian, valor = KM × 10.</li>
+                <li>La línea <code>0260</code> es el KM actual. Hacia <code>0000</code> baja de 1 en 1. Por eso decrece.</li>
+                <li>La <b>suma</b> es solo esos 3 bytes del KM de esa misma página.</li>
+                <li>El resultado se escribe en la línea de la cola: en 0260 eso es la línea <code>0270</code>, bytes <code>027E 027F</code>.</li>
+                <li>Si la suma pasa de 255 aparece <code>01</code>. Cuando baja el KM, también baja esa suma.</li>
+            </ul>
+        </section>
+
+        <section class="card" data-s="2">
+            <h2>3. Prueba en el BIN 1 (35000)</h2>
+            <p>Línea 0260 col 00: <code>2B 57 05</code> = 350027 (×10, el vivo del anillo).</p>
+            <p>Línea 0270 cola: <code>00 87</code>. Suma 2B+57+05 = <span class="ok">87</span>. Cierra.</p>
+            <p>Línea 0000: <code>18 57 05</code> y cola <code>00 74</code>. También baja, también cierra.</p>
+        </section>
+
+        <section class="card" data-s="3">
+            <h2>4. Qué hacía mal GENERAR BIN</h2>
+            <p>El BIN 2 ya salió de un generate viejo. En 0000–0240 el KM sí subió a 150500.</p>
+            <p>Pero la línea <code>0260</code> quedó <span class="bad">0B 27 00</span> (basura) y la suma <code>01 F4</code> (la de 150500 ×10).</p>
+            <p>Eso es “edita partes que ni encuentra”: escribía la última página mal y además recálculaba checksums de otras zonas del chip.</p>
+        </section>
+
+        <section class="card" data-s="4">
+            <h2>5. Generate nuevo · 12000 KM · CONFIRMADO</h2>
+            <p>Solo cambian 5 bytes por página (KM 3 + SUM 2). El medio de la página y todo lo de <code>0280</code> en adelante <span class="ok">no se toca</span>.</p>
+            <p>0260: <code>C0 D4 01</code> = 120000. Cola 0270: <code>01 95</code>. C0+D4+01 = 195. Cierra.</p>
+            <p>0000: 119981 y su suma. Extra-edits = <span class="ok">0</span>.</p>
+        </section>
+
+        <section class="card" data-s="5">
+            <h2>6. Generate nuevo · 150500 KM · CONFIRMADO</h2>
+            <p>0260 ahora sí: <code>E8 F6 16</code> = 1505000. Cola: <code>01 F4</code>. E8+F6+16 = 1F4. Cierra.</p>
+            <p>Ya no deja <span class="bad">0B 27 00</span> en 260.</p>
+            <p>0000: <code>D5 F6 16</code> + <code>01 E1</code>. La rampa decrece. Extra-edits = <span class="ok">0</span>.</p>
+        </section>
+
+        <section class="card" data-s="6">
+            <h2>7. Cómo lo haces en la página</h2>
+            <ol>
+                <li>Entra a <a href="index.html">VELOCÍMETROS CDMX</a>.</li>
+                <li>Pulsa <b>CARGAR PAR 35000 / 150500</b> (o elige tus dos BIN).</li>
+                <li>Pulsa <b>ANALIZAR</b>. Lee “CÓMO LO HAGO”: 260 → 00 y suma en 270.</li>
+                <li>En NUEVO VALOR escribe por ejemplo <code>12000</code>.</li>
+                <li>APLICAR CAMBIOS y <b>GENERAR BIN</b>.</li>
+                <li>Abre el BIN nuevo: solo deben cambiar las columnas 00–02 y la cola de cada línea 0000…0260.</li>
+            </ol>
+        </section>
+
+        <div class="bar">
+            <button type="button" id="prev">◀</button>
+            <button type="button" id="play">PAUSA</button>
+            <button type="button" id="next">▶</button>
+            <span id="num">1 / 7</span>
+            <a href="index.html">Ir a la calculadora</a>
+        </div>
+    </div>
+    <script>
+        const cards = Array.from(document.querySelectorAll(".card"));
+        let i = 0, t = null, playing = true;
+        function show(n) {
+            i = (n + cards.length) % cards.length;
+            cards.forEach((c, k) => c.classList.toggle("on", k === i));
+            document.getElementById("num").textContent = (i + 1) + " / " + cards.length;
+            document.getElementById("bar").style.width = ((i + 1) / cards.length * 100) + "%";
+        }
+        function tick() { show(i + 1); }
+        function play() {
+            playing = true;
+            document.getElementById("play").textContent = "PAUSA";
+            clearInterval(t);
+            t = setInterval(tick, 7000);
+        }
+        function pause() {
+            playing = false;
+            document.getElementById("play").textContent = "PLAY";
+            clearInterval(t);
+        }
+        document.getElementById("play").onclick = () => playing ? pause() : play();
+        document.getElementById("prev").onclick = () => { pause(); show(i - 1); };
+        document.getElementById("next").onclick = () => { pause(); show(i + 1); };
+        play();
+    </script>
+</body>
+</html>
