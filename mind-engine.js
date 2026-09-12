@@ -341,6 +341,7 @@ const MindEngine = {
         if (bytesA.length !== bytesB.length || kmA === kmB) return [];
         const hits = [];
         const seen = new Set();
+        const zone = this.pairStarts(bytesA, bytesB);
         const varsA = MathEngine.variantsForValue(kmA);
         const varsB = MathEngine.variantsForValue(kmB);
         const mapB = {};
@@ -350,7 +351,12 @@ const MindEngine = {
         varsA.forEach((va) => {
             const vb = mapB[va.formula + "|" + va.width + "|" + va.endian];
             if (!vb || va.hex === vb.hex) return;
-            const locA = MathEngine.findPattern(bytesA, va.bytes);
+            const locA = MathEngine.findPattern(bytesA, va.bytes).filter((addr) => {
+                for (let i = 0; i < va.width; i++) {
+                    if (zone.has(addr + i)) return true;
+                }
+                return false;
+            });
             if (!locA.length || locA.length > 24) return;
             const common = locA.filter((addr) => {
                 for (let i = 0; i < va.width; i++) {
@@ -620,8 +626,16 @@ const MindEngine = {
         return uniq.slice(0, 12);
     },
 
-    scanClosedCells(bytes, knownKm) {
+    scanClosedCells(bytes, knownKm, onlyAddrs) {
         const hits = [];
+        const allowed = (start, width, extra) => {
+            if (!onlyAddrs || !onlyAddrs.size) return true;
+            const last = start + width + (extra || 0) - 1;
+            for (let addr = start; addr <= last && addr < bytes.length; addr++) {
+                if (onlyAddrs.has(addr)) return true;
+            }
+            return false;
+        };
         const scales = [
             { formula: "X", enc: (k) => k, inv: (v) => v },
             { formula: "X * 10", enc: (k) => k * 10, inv: (v) => v / 10 },
@@ -639,6 +653,7 @@ const MindEngine = {
         [2, 3, 4].forEach((width) => {
             [true, false].forEach((little) => {
                 for (let i = 0; i + width + 1 <= bytes.length; i++) {
+                    if (!allowed(i, width, 2)) continue;
                     const raw = MathEngine.fromBytes(bytes, i, width, little);
                     if (raw === null) continue;
                     const matched = [];
@@ -1003,7 +1018,8 @@ const MindEngine = {
 
     deepMarkHunt(bytes, knownKm) {
         if (typeof MarkBook === "undefined" || knownKm === null || knownKm === undefined) return [];
-        const ranges = MarkBook.lessonRanges("KM").concat(MarkBook.lessonRanges("HINT"));
+        const ranges = (MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("KM") : MarkBook.lessonRanges("KM"))
+            .concat(MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("HINT") : MarkBook.lessonRanges("HINT"));
         const painted = MarkBook.paintedAddrs("KM").concat(MarkBook.paintedAddrs("HINT"));
         if (!ranges.length && !painted.length) return [];
         const variants = MathEngine.variantsForValue(knownKm);
@@ -1055,10 +1071,14 @@ const MindEngine = {
         const kmSpans = this.spansFrom(ctx.kmCopies, ctx.kmWidth || 3);
         const chkSpans = this.spansFrom(ctx.checksums, 2);
         if (typeof MarkBook !== "undefined") {
-            MarkBook.lessonRanges("KM").forEach((r) => kmSpans.push({ start: r.start, end: r.end, label: "marca KM" }));
-            MarkBook.lessonRanges("CHK").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca SUM" }));
-            MarkBook.lessonRanges("CRC").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca CRC" }));
-            MarkBook.lessonRanges("COMP").forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca COMP" }));
+            const kmMarks = MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("KM") : MarkBook.lessonRanges("KM");
+            const chkMarks = MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("CHK") : MarkBook.lessonRanges("CHK");
+            const crcMarks = MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("CRC") : MarkBook.lessonRanges("CRC");
+            const compMarks = MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("COMP") : MarkBook.lessonRanges("COMP");
+            kmMarks.forEach((r) => kmSpans.push({ start: r.start, end: r.end, label: "marca KM" }));
+            chkMarks.forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca SUM" }));
+            crcMarks.forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca CRC" }));
+            compMarks.forEach((r) => chkSpans.push({ start: r.start, end: r.end, label: "marca COMP" }));
         }
         let totalBytes = 0;
         ranges.forEach((range) => {
@@ -1070,6 +1090,9 @@ const MindEngine = {
             if (vinHit) {
                 range.kind = "VIN";
                 range.why = "Zona VIN " + (vinHit.label || "");
+            } else if (kmHit && chkHit) {
+                range.kind = "KM+SUM";
+                range.why = "KM y SUM se tocan. Píntalos en bytes distintos.";
             } else if (kmHit) {
                 range.kind = "KM";
                 range.why = "Kilometraje / copias";

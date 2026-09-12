@@ -381,8 +381,9 @@ const ChecksumEngine = {
         if (typeof MarkBook === "undefined") return [];
         const found = [];
         const seen = new Set();
-        const stores = MarkBook.lessonRanges("CHK").concat(MarkBook.lessonRanges("CRC"));
-        const comps = MarkBook.lessonRanges("COMP");
+        const stores = (MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("CHK") : MarkBook.lessonRanges("CHK"))
+            .concat(MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("CRC") : MarkBook.lessonRanges("CRC"));
+        const comps = MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("COMP") : MarkBook.lessonRanges("COMP");
         if (!stores.length && !comps.length) return found;
         const windows = [];
         if (kmHit && kmHit.address !== undefined) {
@@ -390,7 +391,7 @@ const ChecksumEngine = {
             const width = kmHit.width || 3;
             copies.forEach((addr) => windows.push({ start: addr, end: addr + width, label: "km-" + addr.toString(16) }));
         }
-        MarkBook.lessonRanges("KM").forEach((range) => {
+        (MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges("KM") : MarkBook.lessonRanges("KM")).forEach((range) => {
             windows.push({ start: range.start, end: range.end + 1, label: "marca-km" });
         });
         stores.forEach((store) => {
@@ -511,10 +512,10 @@ const ChecksumEngine = {
         return found;
     },
 
-    hunt(bytes, hotAddresses) {
+    hunt(bytes, hotAddresses, opts) {
         const results = [];
         const seen = new Set();
-        const windows = this.buildWindows(bytes, hotAddresses);
+        const windows = this.buildWindows(bytes, hotAddresses, opts);
         const algos = this.algorithms();
 
         windows.forEach((win) => {
@@ -565,16 +566,18 @@ const ChecksumEngine = {
         return results.sort((a, b) => b.confidence - a.confidence);
     },
 
-    buildWindows(bytes, hotAddresses) {
+    buildWindows(bytes, hotAddresses, opts) {
         const size = bytes.length;
-        const windows = [
-            { start: 0, end: size, label: "archivo", priority: false }
-        ];
-        [16, 32, 64, 128, 256].forEach((len) => {
-            if (len >= size) return;
-            windows.push({ start: 0, end: len, label: "0-" + len.toString(16), priority: false });
-            windows.push({ start: size - len, end: size, label: "cola-" + len, priority: false });
-        });
+        const onlyHot = opts && opts.onlyHot;
+        const windows = [];
+        if (!onlyHot) {
+            windows.push({ start: 0, end: size, label: "archivo", priority: false });
+            [16, 32, 64, 128, 256].forEach((len) => {
+                if (len >= size) return;
+                windows.push({ start: 0, end: len, label: "0-" + len.toString(16), priority: false });
+                windows.push({ start: size - len, end: size, label: "cola-" + len, priority: false });
+            });
+        }
         (hotAddresses || []).forEach((addr) => {
             [8, 16, 32, 64].forEach((len) => {
                 const start = Math.max(0, addr - (addr % len));

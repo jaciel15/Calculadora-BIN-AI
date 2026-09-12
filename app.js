@@ -66,44 +66,6 @@ function collectMarks() {
         }
     };
     if (!currentBIN) return marks;
-    const omega = currentBIN.analysis && currentBIN.analysis.omega;
-    const vinList = (currentBIN.analysis && currentBIN.analysis.vins && currentBIN.analysis.vins.length)
-        ? currentBIN.analysis.vins
-        : Hunters.huntVIN(currentBIN.original);
-    if (!LabMode.is("CHK")) {
-        vinList.forEach((v) => {
-            (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
-        });
-    }
-    const guiding = typeof MarkBook !== "undefined" && MarkBook.guiding();
-    const closed = omega && omega.closedCells ? omega.closedCells : [];
-    const worldHits = omega && omega.world && omega.world.hits ? omega.world.hits : [];
-    if (!guiding && worldHits.length) {
-        worldHits.slice(0, 2).forEach((hit) => {
-            (hit.copies || [hit.address]).forEach((addr) => paint(addr, hit.width || 2, "hex-km"));
-            if (hit.checksumAt !== undefined) paint(hit.checksumAt, hit.checksumName && /16/.test(hit.checksumName) ? 2 : 1, "hex-chk");
-        });
-    }
-    if (!guiding && closed.length) {
-        closed.forEach((cell) => {
-            paint(cell.address, cell.width || 3, "hex-km");
-            if (cell.checksumAt !== undefined) paint(cell.checksumAt, cell.checksumName === "SUM8" || cell.checksumName === "XOR8" || cell.checksumName === "LRC" ? 1 : 2, "hex-chk");
-        });
-    }
-    if (!guiding && LabMode.is("KM") && currentBIN.analysis && currentBIN.analysis.best) {
-        const hit = currentBIN.analysis.best;
-        (hit.copies || [hit.address]).forEach((addr) => paint(addr, hit.width || 2, "hex-km"));
-    }
-    if (!guiding && (LabMode.is("CHK") || LabMode.is("KM")) && omega && omega.kmChecksums) {
-        omega.kmChecksums.forEach((c) => {
-            if (c.storedAt !== null && c.storedAt !== undefined) paint(c.storedAt, c.size || 2, "hex-chk");
-        });
-    }
-    if (LabMode.is("CHK") && currentBIN.analysis && currentBIN.analysis.checksums) {
-        currentBIN.analysis.checksums.forEach((c) => {
-            if (c.storedAt !== null && c.storedAt !== undefined) paint(c.storedAt, c.size || 2, "hex-chk");
-        });
-    }
     if (OmegaKernel.compareBins[0]) {
         const a = currentBIN.working || currentBIN.original;
         const b = OmegaKernel.compareBins[0].bytes;
@@ -111,18 +73,17 @@ function collectMarks() {
         for (let i = 0; i < n; i++) {
             if (a[i] !== b[i]) paint(i, 1, "hex-diff");
         }
-        Hunters.huntVIN(b).forEach((v) => {
-            (v.copies || [v.address]).forEach((addr) => paint(addr, v.span || v.width || 17, "hex-vin"));
-        });
     }
     if (lastGhost && lastGhost.diffs) {
         lastGhost.diffs.forEach((d) => paint(d.addr, 1, "hex-ghost"));
     }
     if (typeof MarkBook !== "undefined") {
-        MarkBook.allSaved().forEach((range) => {
-            const info = MarkBook.kinds[range.kind];
-            if (info) paint(range.start, range.size, info.cls);
-        });
+        if (MarkBook.revealed) {
+            MarkBook.allSaved().forEach((range) => {
+                const info = MarkBook.kinds[range.kind];
+                if (info) paint(range.start, range.size, info.cls);
+            });
+        }
         Object.keys(MarkBook.user).forEach((key) => {
             const kind = MarkBook.user[key];
             const info = MarkBook.kinds[kind];
@@ -184,7 +145,7 @@ function showHEX(bytes) {
         paintHex("hexViewer2", OmegaKernel.compareBins[0].bytes, marks);
         if ($("hexLabel2")) $("hexLabel2").textContent = "BIN 2 · " + OmegaKernel.compareBins[0].fileName;
     } else if ($("hexViewer2")) {
-        $("hexViewer2").innerHTML = "Carga el BIN 2. Aquí se pinta el otro archivo y en naranja todo lo que cambia (VIN, KM y el resto).";
+        $("hexViewer2").innerHTML = "Carga el BIN 2. Lo que cambia se marca naranja (variación). Los demás colores los pones tú.";
         if ($("hexLabel2")) $("hexLabel2").textContent = "BIN 2";
     }
     bindHexOracle();
@@ -237,7 +198,7 @@ function renderDiffTable(diffWorld) {
         body.innerHTML = "";
         if (summary) summary.textContent = OmegaKernel.compareBins.length
             ? "Los dos BIN son idénticos."
-            : "Carga BIN 1 y BIN 2. Se marcan VIN, KM, checksum y todo lo demás que cambia.";
+            : "Carga BIN 1 y BIN 2. Solo se analiza y se marca la variación. Tú pones KM / SUM.";
         return;
     }
     if (summary) {
@@ -643,6 +604,12 @@ async function loadBIN(event) {
     const bytes = new Uint8Array(buffer);
     currentBIN = new BINObject(file, bytes);
     binCore.load(currentBIN);
+    lastGhost = null;
+    lastSimulation = null;
+    if (typeof MarkBook !== "undefined") {
+        MarkBook.clear();
+        MarkBook.revealed = false;
+    }
     $("fileName").textContent = currentBIN.fileName;
     if ($("bin1Name")) $("bin1Name").textContent = currentBIN.fileName;
     if ($("knownKm1") && $("knownKm").value) $("knownKm1").value = $("knownKm").value;
@@ -681,7 +648,10 @@ function runAnalysis(extra) {
     if (!stayChk) LabMode.set("KM");
     if (typeof MarkBook !== "undefined") {
         MarkBook.harvest();
-        if (MarkBook.hasHelp()) MarkBook.restoreAccepted();
+        if (MarkBook.hasHelp()) {
+            MarkBook.restoreAccepted();
+            MarkBook.revealed = true;
+        }
     }
     const guided = typeof MarkBook !== "undefined" && MarkBook.hasHelp();
     setStatus(stayChk ? "ANALIZANDO SUM" : (guided ? "ANALIZANDO LO QUE MOSTRASTE" : "ANALIZANDO"), false);

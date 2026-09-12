@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=colores1">
+    <link rel="stylesheet" href="style.css?v=colores3">
 </head>
 
 <body>
@@ -197,10 +197,10 @@
                         <option>8-BIT</option>
                     </select>
                     <span class="hex-legend">
-                        <i class="lg km"></i>KM
-                        <i class="lg vin"></i>VIN
-                        <i class="lg diff"></i>DISTINTO
-                        <i class="lg chk"></i>CHECKSUM
+                        <i class="lg diff"></i>VARIACIÓN
+                        <i class="lg user-km"></i>KM (tú)
+                        <i class="lg user-chk"></i>SUM (tú)
+                        <i class="lg user-crc"></i>CRC (tú)
                     </span>
                 </div>
                 <p id="hexOracle" class="hex-oracle">Pasa el mouse sobre un byte. El oráculo dice qué KM sería (LE16, ×10, BCD…).</p>
@@ -218,7 +218,7 @@
                     <aside class="mark-palette" id="markPalette">
                         <p class="mark-title">MARCAR</p>
                         <p class="mark-active">Activo: <strong id="markActive">KM</strong></p>
-                        <p id="markGuide" class="mark-guide">1. Pinta el KM en rojo. Luego ACEPTO.</p>
+                        <p id="markGuide" class="mark-guide">Pinta KM. ACEPTO quita el color. Luego SUM en otro byte. ANALIZAR pinta lo guardado.</p>
                         <button type="button" class="mark-swatch" data-mark="KM" title="Kilometraje">KM</button>
                         <button type="button" class="mark-swatch" data-mark="CHK" title="Checksum / suma">SUM</button>
                         <button type="button" class="mark-swatch" data-mark="CRC" title="CRC">CRC</button>
@@ -235,7 +235,7 @@
 
             <div id="diffPanel" class="panel checksum-wide">
                 <h3>ZONAS DISTINTAS</h3>
-                <p id="diffSummary">Carga BIN 1 y BIN 2. La mente marca VIN, KM, checksum y todo lo demás que cambia.</p>
+                <p id="diffSummary">Carga BIN 1 y BIN 2. Solo se marca y se analiza la variación. Tú pones KM y SUM.</p>
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -552,21 +552,21 @@
     </div>
 </div>
 
-<script src="mark-book.js?v=colores1"></script>
-<script src="math-engine.js?v=colores1"></script>
-<script src="checksum-engine.js?v=colores1"></script>
-<script src="knowledge-base.js?v=colores1"></script>
-<script src="bin-world.js?v=colores1"></script>
-<script src="mind-engine.js?v=colores1"></script>
-<script src="hunters.js?v=colores1"></script>
-<script src="dna-discovery.js?v=colores1"></script>
-<script src="editor-upa.js?v=colores1"></script>
-<script src="write-machine.js?v=colores1"></script>
-<script src="bin-object.js?v=colores1"></script>
-<script src="family-library.js?v=colores1"></script>
-<script src="omega-kernel.js?v=colores1"></script>
-<script src="bin-core.js?v=colores1"></script>
-<script src="app.js?v=colores1"></script>
+<script src="mark-book.js?v=colores3"></script>
+<script src="math-engine.js?v=colores3"></script>
+<script src="checksum-engine.js?v=colores3"></script>
+<script src="knowledge-base.js?v=colores3"></script>
+<script src="bin-world.js?v=colores3"></script>
+<script src="mind-engine.js?v=colores3"></script>
+<script src="hunters.js?v=colores3"></script>
+<script src="dna-discovery.js?v=colores3"></script>
+<script src="editor-upa.js?v=colores3"></script>
+<script src="write-machine.js?v=colores3"></script>
+<script src="bin-object.js?v=colores3"></script>
+<script src="family-library.js?v=colores3"></script>
+<script src="omega-kernel.js?v=colores3"></script>
+<script src="bin-core.js?v=colores3"></script>
+<script src="app.js?v=colores3"></script>
 
 </body>
 </html>

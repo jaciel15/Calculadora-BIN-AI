@@ -517,7 +517,16 @@ const OmegaKernel = {
                 if (bytes[i] !== other[i]) preferDiff.add(i);
             }
         }
-        if (preferDiff.size) say("DIFF FIRST", preferDiff.size + " bytes cambian; busco el KM ahí primero");
+        const huntZone = new Set();
+        preferDiff.forEach((addr) => {
+            for (let d = -6; d <= 6; d++) {
+                const at = addr + d;
+                if (at >= 0 && at < bytes.length) huntZone.add(at);
+            }
+        });
+        if (preferDiff.size) {
+            say("SOLO VARIACIÓN", preferDiff.size + " bytes cambian. Matemática solo ahí (+ vecinos por si el checksum está pegado).");
+        }
         if (typeof MarkBook !== "undefined" && MarkBook.hasHelp()) {
             const rec = MarkBook.recipe();
             const kmL = MarkBook.lessonRanges("KM");
@@ -526,20 +535,33 @@ const OmegaKernel = {
                 " B · COMP " + MarkBook.countBytes("COMP") + " B");
             if (rec && rec.raw) say("RECETA", rec.note ? rec.note + " · " + rec.raw : rec.raw);
         }
-        let mileageHits = Hunters.huntValue(bytes, knownKm, "KILOMETRAJE", preferDiff.size ? preferDiff : null);
-        if (world && world.hits) world.hits.forEach((hit) => mileageHits.unshift(hit));
+        const inZone = (hit) => {
+            if (!huntZone.size) return true;
+            const copies = hit && hit.copies && hit.copies.length ? hit.copies : (hit ? [hit.address] : []);
+            const width = (hit && hit.width) || 2;
+            return copies.some((addr) => {
+                for (let i = 0; i < width; i++) {
+                    if (huntZone.has(addr + i)) return true;
+                }
+                return false;
+            });
+        };
+        let mileageHits = Hunters.huntValue(bytes, knownKm, "KILOMETRAJE", huntZone.size ? huntZone : null);
+        if (world && world.hits) {
+            world.hits.filter(inZone).forEach((hit) => mileageHits.unshift(hit));
+        }
         if (familyMatch && familyMatch.hits) {
-            familyMatch.hits.forEach((hit) => mileageHits.unshift(hit));
+            familyMatch.hits.filter(inZone).forEach((hit) => mileageHits.unshift(hit));
         }
         const km2 = options.knownKm2;
         const bookHits = CodeBook.hunt(bytes, knownKm, this.compareBins[0] ? this.compareBins[0].bytes : null, km2);
-        bookHits.forEach((hit) => mileageHits.unshift(hit));
+        bookHits.filter(inZone).forEach((hit) => mileageHits.unshift(hit));
         if (bookHits.length) {
             say("LIBRO CAZADOR", bookHits[0].name + " · " + bookHits[0].formula + " · " +
                 bookHits[0].copies.length + " sitios" + (bookHits[0].checksumName ? " · " + bookHits[0].checksumName : ""));
         }
         const recipeHits = MindEngine.fromHelpRecipe(bytes, knownKm);
-        recipeHits.forEach((hit) => mileageHits.unshift(hit));
+        recipeHits.filter((hit) => !huntZone.size || hit.fromUser || inZone(hit)).forEach((hit) => mileageHits.unshift(hit));
         if (recipeHits.length) {
             say("RECETA", recipeHits[0].writeHow);
             if (recipeHits[0].recipe) say("RECETA", recipeHits[0].recipe.raw);
@@ -551,7 +573,7 @@ const OmegaKernel = {
         deepHelp.forEach((hit) => mileageHits.unshift(hit));
         if (deepHelp.length) say("ZONA AYUDA", deepHelp.length + " fórmulas dentro de lo que pintaste (tope " + MathEngine.COMBO_CAP + ")");
         const recalled = MindEngine.recall(bytes);
-        recalled.forEach((hit) => mileageHits.unshift(hit));
+        recalled.filter(inZone).forEach((hit) => mileageHits.unshift(hit));
         if (recalled.length) say("SELF LEARNING", "Memoria reutiliza " + recalled[0].formula + " @ " + recalled[0].addressText);
 
         const pairHits = (this.compareBins[0] && knownKm !== null && km2 !== null)
@@ -559,7 +581,7 @@ const OmegaKernel = {
             : [];
         pairHits.forEach((hit) => mileageHits.unshift(hit));
         if (pairHits.length) say("PAIR MIND", pairHits[0].formula + " demostrado por los dos BIN");
-        const closed = MindEngine.scanClosedCells(bytes, knownKm);
+        const closed = MindEngine.scanClosedCells(bytes, knownKm, huntZone.size ? huntZone : null);
         closed.forEach((hit) => mileageHits.unshift(hit));
         if (closed.length) {
             say("CELDA CERRADA", closed[0].writeHow);
@@ -571,17 +593,21 @@ const OmegaKernel = {
         say("COUNTER HUNTER", mileageHits.length ? "KM: " + mileageHits[0].formula : "sin KM conocido");
         say("HOURS HUNTER", hoursHits.length ? "Horas: " + hoursHits[0].formula : "sin horas conocidas");
 
-        const unknown = this.unknownCounters(bytes, map);
-        const stairs = MindEngine.scanStairs(bytes, knownKm);
+        const unknown = huntZone.size ? [] : this.unknownCounters(bytes, map);
+        const stairs = huntZone.size ? [] : MindEngine.scanStairs(bytes, knownKm);
         stairs.forEach((stair) => {
             mileageHits.unshift(stair);
             unknown.unshift(stair);
         });
-        MindEngine.scanRings(bytes).forEach((ring) => {
-            unknown.unshift(ring);
-            if (!mileageHits.length) mileageHits.unshift(ring);
-        });
-        if (stairs.length) {
+        if (!huntZone.size) {
+            MindEngine.scanRings(bytes).forEach((ring) => {
+                unknown.unshift(ring);
+                if (!mileageHits.length) mileageHits.unshift(ring);
+            });
+        }
+        if (huntZone.size) {
+            say("BIN COMPLETO", "Par cargado: no recorro el archivo entero. Solo la variación.");
+        } else if (stairs.length) {
             say("BIN COMPLETO", stairs.length + " rampas ±1 en todo el archivo (" + stairs[0].copies.length + " huecos)");
         } else {
             say("BIN COMPLETO", "Recorrí los " + bytes.length + " bytes. Sin rampa ±1 clara todavía.");
@@ -615,11 +641,14 @@ const OmegaKernel = {
 
         const hot = [];
         if (best) hot.push(best.address);
-        map.filter((r) => r.kind === "COUNTER CANDIDATE").forEach((r) => hot.push(r.start));
+        if (!huntZone.size) {
+            map.filter((r) => r.kind === "COUNTER CANDIDATE").forEach((r) => hot.push(r.start));
+        }
+        huntZone.forEach((addr) => hot.push(addr));
         if (typeof MarkBook !== "undefined") {
             MarkBook.allRanges().forEach((range) => hot.push(range.start));
         }
-        const checksums = ChecksumEngine.hunt(bytes, hot);
+        const checksums = ChecksumEngine.hunt(bytes, hot, { onlyHot: !!huntZone.size });
         const kmChecksums = ChecksumEngine.linkToKm(bytes, best);
         if (best && best.fromStair) {
             ChecksumEngine.linkStair(bytes, best).forEach((item) => {

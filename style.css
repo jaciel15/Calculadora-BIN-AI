@@ -358,13 +358,14 @@ body {
     pointer-events: auto;
 }
 
-.hex-byte.hex-diff { background: #ffe2c2; color: #7a3508; font-weight: 700; }
-.hex-byte.hex-vin { background: #fff1c2; color: #6b4308; font-weight: 700; }
-.hex-byte.hex-km { background: #d7f5de; color: #145528; font-weight: 700; }
-.hex-byte.hex-chk { background: #f8d5e2; color: #7a2040; font-weight: 700; }
+.hex-byte.hex-diff { background: #ffd089; color: #6a3100; font-weight: 700; box-shadow: inset 0 0 0 1px #e67a22; }
 .hex-byte.hex-ghost { outline: 2px solid #c9a227; box-shadow: inset 0 0 0 1px #f4d35e; }
-.hex-byte.hex-km.hex-diff,
-.hex-byte.hex-vin.hex-diff { outline: 2px solid var(--red); }
+.hex-byte.hex-user-km.hex-diff,
+.hex-byte.hex-user-chk.hex-diff,
+.hex-byte.hex-user-crc.hex-diff,
+.hex-byte.hex-user-comp.hex-diff {
+    box-shadow: inset 0 0 0 2px #e67a22;
+}
 
 .hex-ascii {
     padding: 0;
@@ -525,8 +526,11 @@ body {
 }
 .lg.km { background: var(--sage); }
 .lg.vin { background: var(--gold); }
-.lg.diff { background: var(--copper); }
+.lg.diff { background: #e67a22; }
 .lg.chk { background: var(--rose); }
+.lg.user-km { background: #ff3b3b; }
+.lg.user-chk { background: #2f6bff; }
+.lg.user-crc { background: #7a3cff; }
 
 .vin-strip {
     display: grid;

@@ -19,13 +19,15 @@ const MarkBook = {
         HINT: { cls: "hex-user-hint", label: "PISTA", help: "Otra zona" }
     },
 
+    exclusiveKinds: ["KM", "CHK", "CRC", "COMP"],
+
     stepHelp() {
         return {
-            KM: "Si me ayudas: pinta KM en rojo y ACEPTO. Si no, solo ANALIZAR.",
-            CHK: "2. KM guardado. Ahora pinta SUM o CRC. ACEPTO.",
-            COMP: "3. SUM guardado. Ahora pinta COMP. ACEPTO.",
-            LISTO: "4. Me ayudaste. ACEPTO otra vez o ANALIZAR: recoloreo y analizo."
-        }[this.guideStep] || "Pinta y pulsa ACEPTO.";
+            KM: "Pinta solo el KM. ACEPTO guarda y quita el color para que pintes otro.",
+            CHK: "KM guardado. Pinta SUM o CRC en OTRO byte, no encima del KM. ACEPTO limpia el color.",
+            COMP: "SUM guardado. Pinta COMP aparte. ACEPTO limpia el color.",
+            LISTO: "Tus marcas están guardadas (hex limpio). ANALIZAR las pinta y trabaja solo lo que cambia."
+        }[this.guideStep] || "Pinta un color, ACEPTO, luego otro. ANALIZAR las muestra.";
     },
 
     setBrush(kind) {
@@ -152,12 +154,58 @@ const MarkBook = {
         return this.parseRecipe(this.recipeText());
     },
 
-    paintedAddrs(kind) {
-        const addrs = [];
-        this.lessonRanges(kind).forEach((range) => {
-            for (let addr = range.start; addr <= range.end; addr++) addrs.push(addr);
+    rivalsOf(kind) {
+        if (this.exclusiveKinds.indexOf(kind) < 0) return [];
+        return this.exclusiveKinds.filter((key) => key !== kind);
+    },
+
+    claimExclusive(kind, ranges) {
+        const claimed = new Set();
+        (ranges || []).forEach((range) => {
+            for (let addr = range.start; addr <= range.end; addr++) claimed.add(addr);
         });
-        return addrs;
+        if (!claimed.size) return;
+        this.rivalsOf(kind).forEach((rival) => {
+            const kept = [];
+            (this.lessons[rival] || []).forEach((range) => {
+                for (let addr = range.start; addr <= range.end; addr++) {
+                    if (!claimed.has(addr)) kept.push({ addr, kind: rival });
+                }
+            });
+            this.lessons[rival] = this.compact(kept);
+        });
+    },
+
+    roleSet(kind) {
+        const mine = new Set();
+        this.lessonRanges(kind).forEach((range) => {
+            for (let addr = range.start; addr <= range.end; addr++) mine.add(addr);
+        });
+        this.rivalsOf(kind).forEach((rival) => {
+            this.savedRanges(rival).forEach((range) => {
+                for (let addr = range.start; addr <= range.end; addr++) mine.delete(addr);
+            });
+            this.ranges(rival).forEach((range) => {
+                for (let addr = range.start; addr <= range.end; addr++) mine.delete(addr);
+            });
+        });
+        return mine;
+    },
+
+    paintedAddrs(kind) {
+        return Array.from(this.roleSet(kind)).sort((a, b) => a - b);
+    },
+
+    exclusiveRanges(kind) {
+        const addrs = this.paintedAddrs(kind);
+        const out = [];
+        addrs.forEach((addr) => {
+            const last = out[out.length - 1];
+            if (last && addr === last.end + 1) last.end = addr;
+            else out.push({ start: addr, end: addr, kind });
+        });
+        out.forEach((r) => { r.size = r.end - r.start + 1; });
+        return out;
     },
 
     persist() {
@@ -165,8 +213,7 @@ const MarkBook = {
             localStorage.setItem(this.STORAGE, JSON.stringify({
                 lessons: this.lessons,
                 guideStep: this.guideStep,
-                recipe: this.recipeText(),
-                user: this.user
+                recipe: this.recipeText()
             }));
         } catch (error) { /* ignore */ }
     },
@@ -177,9 +224,10 @@ const MarkBook = {
             if (!raw) return;
             const data = JSON.parse(raw);
             if (data.lessons) this.lessons = Object.assign(this.emptyLessons(), data.lessons);
-            if (data.user && typeof data.user === "object") this.user = data.user;
+            this.user = {};
+            this.revealed = false;
             if (data.guideStep) this.guideStep = data.guideStep;
-            if (!this.hasLessons() && !Object.keys(this.user).length) this.guideStep = "KM";
+            if (!this.hasLessons()) this.guideStep = "KM";
             if (data.recipe && document.getElementById("helpRecipe")) {
                 document.getElementById("helpRecipe").value = data.recipe;
             }
@@ -280,12 +328,14 @@ const MarkBook = {
         if (!kinds.length) {
             if (this.guideStep === "LISTO" && this.hasLessons()) {
                 this.renderGuide();
-                return { ok: true, step: "LISTO", analyze: true, message: "Uso lo que ya aceptaste. Recoloreo y analizo." };
+                return { ok: true, step: "LISTO", analyze: false, message: "Ya está guardado. Pulsa ANALIZAR para ver tus colores." };
             }
             return { ok: false, step: this.guideStep, message: "Pinta el color y luego ACEPTO. Arrastra por todos los bytes." };
         }
         kinds.forEach((kind) => {
-            this.lessons[kind] = this.compact((this.lessons[kind] || []).concat(this.snapshot(kind)));
+            const snap = this.snapshot(kind);
+            this.lessons[kind] = this.compact((this.lessons[kind] || []).concat(snap));
+            this.claimExclusive(kind, snap);
             this.eraseKind(kind);
         });
         const next = this.nextBrush();
@@ -300,13 +350,12 @@ const MarkBook = {
             const n = this.countBytes(kind);
             return (this.kinds[kind] ? this.kinds[kind].label : kind) + " " + n + " B";
         });
-        const analyze = this.guideStep === "LISTO";
         return {
             ok: true,
             step: this.guideStep,
-            analyze,
-            message: "Guardado: " + bits.join(" · ") + ". " +
-                (analyze ? "Listo. ANALIZAR usa tus colores." : "Ahora pinta " + (this.kinds[next] ? this.kinds[next].label : next) + ".")
+            analyze: false,
+            message: "Guardado: " + bits.join(" · ") + ". Color quitado. Ahora pinta " +
+                (this.kinds[next] ? this.kinds[next].label : next) + " o pulsa ANALIZAR."
         };
     },
 
@@ -331,7 +380,7 @@ const MarkBook = {
             this.guideStep = "LISTO";
             this.persist();
             this.renderGuide();
-            return { ok: true, analyze: this.hasLessons(), message: this.hasLessons() ? "Con tu ayuda (sin COMP). Analizo." : "Sin complemento. Pulsa ANALIZAR." };
+            return { ok: true, analyze: false, message: this.hasLessons() ? "Con tu ayuda (sin COMP). Pulsa ANALIZAR." : "Sin complemento. Pulsa ANALIZAR." };
         }
         return { ok: true, message: "Listo." };
     },
@@ -348,7 +397,7 @@ const MarkBook = {
             lessons.textContent = bits.length ? "Guardado: " + bits.join(" · ") : "Nada aceptado aún.";
         }
         const accept = document.getElementById("markAcceptBtn");
-        if (accept) accept.textContent = this.guideStep === "LISTO" ? "LISTO" : "ACEPTO";
+        if (accept) accept.textContent = "ACEPTO";
     },
 
     bindPaint(el) {

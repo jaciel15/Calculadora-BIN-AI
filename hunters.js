@@ -38,13 +38,12 @@ const Hunters = {
             if (seen.has(key)) return;
             let hits = MathEngine.lookupIndex(index, variant.bytes);
             if (preferAddrs && preferAddrs.size) {
-                const filtered = hits.filter((addr) => {
+                hits = hits.filter((addr) => {
                     for (let i = 0; i < variant.width; i++) {
                         if (preferAddrs.has(addr + i)) return true;
                     }
                     return false;
                 });
-                if (filtered.length) hits = filtered;
             }
             if (!hits.length) return;
             if (variant.width <= 2 && hits.length > 12) return;
