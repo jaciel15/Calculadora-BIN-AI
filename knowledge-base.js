@@ -275,6 +275,7 @@ const KnowledgeBase = {
             if (!data.learned) data.learned = [];
             if (!data.discoveries) data.discoveries = [];
             if (!data.hidden) data.hidden = [];
+            if (!data.upaScripts) data.upaScripts = [];
             return data;
         } catch (error) {
             return this.empty();
@@ -290,6 +291,7 @@ const KnowledgeBase = {
             learned: [],
             discoveries: [],
             hidden: [],
+            upaScripts: [],
             updated: null
         };
     },
@@ -649,8 +651,48 @@ const KnowledgeBase = {
             if (exists) Object.assign(exists, fam);
             else db.learned.push(fam);
         });
+        if (!db.upaScripts) db.upaScripts = [];
+        (incoming.upaScripts || []).forEach((script) => {
+            if (!script || !script.id) return;
+            const exists = db.upaScripts.find((s) => s.id === script.id || s.name === script.name);
+            if (exists) Object.assign(exists, script);
+            else db.upaScripts.push(script);
+        });
         this.save(db);
         return db;
+    },
+
+    listUpaScripts() {
+        return (this.load().upaScripts || []).slice();
+    },
+
+    saveUpaScript(script) {
+        const db = this.load();
+        if (!db.upaScripts) db.upaScripts = [];
+        const now = new Date().toISOString();
+        let item = script.id ? db.upaScripts.find((s) => s.id === script.id) : null;
+        if (!item) {
+            item = {
+                id: "upa-" + Date.now().toString(36),
+                created: now
+            };
+            db.upaScripts.unshift(item);
+        }
+        item.name = String(script.name || "SCRIPT UPA").trim() || "SCRIPT UPA";
+        item.kind = script.kind || "write";
+        item.source = script.source || "";
+        item.chip = script.chip || "";
+        item.algos = script.algos || [];
+        item.updated = now;
+        this.save(db);
+        return item;
+    },
+
+    removeUpaScript(id) {
+        const db = this.load();
+        db.upaScripts = (db.upaScripts || []).filter((s) => s.id !== id);
+        this.save(db);
+        return true;
     },
 
     rememberGraph(node) {

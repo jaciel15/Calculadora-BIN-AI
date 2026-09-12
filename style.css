@@ -895,6 +895,17 @@ body {
     font-size: 16px;
 }
 
+#upaSource, #upaErrorBox {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 13px;
+    margin: 8px 0;
+    padding: 10px;
+    border: 2px solid #00b4e6;
+    border-radius: 8px;
+}
+
 .omega-panel {
     margin-bottom: 12px;
 }

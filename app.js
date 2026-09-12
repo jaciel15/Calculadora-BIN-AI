@@ -1055,18 +1055,99 @@ function parseHexList(text) {
 function showUpaModal() {
     const body = $("upaAlgoBody");
     const db = KnowledgeBase.load();
-    if (!body) return;
-    if (!db.algorithms.length) {
-        body.innerHTML = "<tr><td colspan=\"5\">Aún no hay algoritmos guardados. Analiza y pulsa Guardar algoritmo.</td></tr>";
-    } else {
-        body.innerHTML = db.algorithms.map((item) => {
-            const dirs = (item.addresses || item.copies || []).map((a) => padHex(a)).join(" ");
-            const chk = item.checksums && item.checksums[0] ? item.checksums[0].name : "—";
-            return "<tr><td><input type=\"checkbox\" value=\"" + item.name.replace(/"/g, "") + "\"></td>" +
-                "<td>" + item.name + "</td><td>" + (item.formula || "") + "</td><td>" + dirs + "</td><td>" + chk + "</td></tr>";
-        }).join("");
+    const ask = $("upaVersionAsk");
+    const many = (db.algorithms || []).length > 1 || (db.algorithms || []).some((a) => (a.versions || []).length);
+    if (ask) {
+        ask.classList.toggle("hidden", !many);
+        if (many) ask.textContent = "Hay " + db.algorithms.length + " versiones. Puedo generar AUTODETECT de lectura y de escritura.";
     }
+    if (body) {
+        if (!db.algorithms.length) {
+            body.innerHTML = "<tr><td colspan=\"5\">Aún no hay algoritmos. Analiza, guarda uno (versión o nuevo) y vuelve.</td></tr>";
+        } else {
+            body.innerHTML = db.algorithms.map((item) => {
+                const dirs = (item.addresses || item.copies || []).map((a) => padHex(a)).join(" ");
+                return "<tr><td><input type=\"checkbox\" value=\"" + String(item.name).replace(/"/g, "") + "\" checked></td>" +
+                    "<td>" + escapeText(item.name) + "</td><td>" + escapeText(item.formula || "") + "</td>" +
+                    "<td>v" + (item.version || 1) + "</td><td>" + dirs + "</td></tr>";
+            }).join("");
+        }
+    }
+    renderUpaScripts();
     $("upaModal").classList.add("open");
+    if (many && !$("upaSource").value) {
+        if (confirm("Hay varias versiones. ¿Creo AUTODETECT de lectura y escritura ahora?")) {
+            if ($("upaMode")) $("upaMode").value = "auto";
+            buildUpaScript("auto", "YAMAHA AUTODETECT");
+        }
+    }
+}
+
+function renderUpaScripts() {
+    const body = $("upaScriptBody");
+    if (!body) return;
+    const list = KnowledgeBase.listUpaScripts();
+    if (!list.length) {
+        body.innerHTML = "<tr><td colspan=\"3\">Ningún script guardado todavía.</td></tr>";
+        return;
+    }
+    body.innerHTML = list.map((item) => {
+        return "<tr class=\"algo-row\" data-sid=\"" + item.id + "\">" +
+            "<td>" + escapeText(item.name) + "</td><td>" + escapeText(item.kind) + "</td>" +
+            "<td>" + escapeText(item.chip || "—") + "</td></tr>";
+    }).join("");
+}
+
+function loadUpaScript(id) {
+    const item = KnowledgeBase.listUpaScripts().find((s) => s.id === id);
+    if (!item) return;
+    window._upaScript = item;
+    if ($("upaScriptName")) $("upaScriptName").value = item.name;
+    if ($("upaSource")) $("upaSource").value = item.source || "";
+}
+
+function buildUpaScript(kind, defaultName) {
+    const algos = pickedUpaAlgos();
+    if (!algos.length) {
+        alert("Elige o guarda al menos un algoritmo / versión.");
+        return null;
+    }
+    const script = EditorEngine.generatePSC({
+        algorithms: algos,
+        mode: $("upaMode") ? $("upaMode").value : "auto",
+        kind: kind,
+        chip: currentBIN ? currentBIN.chip : (algos[0].chip || "25C080"),
+        fileName: currentBIN ? currentBIN.fileName : "dump.bin"
+    });
+    if ($("upaSource")) $("upaSource").value = script;
+    if ($("upaScriptName") && (!$("upaScriptName").value || defaultName)) {
+        $("upaScriptName").value = defaultName || (kind + " " + (algos[0].name || "KM"));
+    }
+    window._upaKind = kind;
+    binCore.addLog("UPA SCRIPT", "Generé " + kind + " · " + algos.length + " versiones TMS Pascal");
+    addLogRows();
+    return script;
+}
+
+function saveCurrentUpaScript() {
+    const source = $("upaSource") ? $("upaSource").value : "";
+    if (!source.trim()) {
+        alert("Primero crea lectura, escritura o AUTODETECT.");
+        return;
+    }
+    const item = KnowledgeBase.saveUpaScript({
+        id: window._upaScript && window._upaScript.id,
+        name: $("upaScriptName") ? $("upaScriptName").value : "SCRIPT UPA",
+        kind: window._upaKind || "auto",
+        source: source,
+        chip: currentBIN ? currentBIN.chip : "",
+        algos: pickedUpaAlgos().map((a) => a.name)
+    });
+    window._upaScript = item;
+    renderUpaScripts();
+    showAttackToast("Script guardado: " + item.name);
+    binCore.addLog("UPA SCRIPT", "Guardado " + item.name);
+    addLogRows();
 }
 
 function pickedUpaAlgos() {
@@ -1097,19 +1178,12 @@ function pickedUpaAlgos() {
 }
 
 function downloadUpaPsc() {
-    const algos = pickedUpaAlgos();
-    if (!algos.length) {
-        alert("Elige o guarda al menos un algoritmo.");
-        return;
-    }
-    const script = EditorEngine.generatePSC({
-        algorithms: algos,
-        mode: $("upaMode") ? $("upaMode").value : "auto",
-        chip: currentBIN ? currentBIN.chip : (algos[0].chip || "25C080"),
-        fileName: currentBIN ? currentBIN.fileName : "dump.bin"
-    });
-    downloadBlob("CDMX_AutoKM.psc", [script], "text/plain");
-    binCore.addLog("UPA SCRIPT", "PSC TMS Pascal · " + algos.length + " versiones");
+    let script = $("upaSource") ? $("upaSource").value : "";
+    if (!script.trim()) script = buildUpaScript($("upaMode") && $("upaMode").value === "auto" ? "auto" : "write");
+    if (!script) return;
+    const name = fileNameSafe(($("upaScriptName") && $("upaScriptName").value) || "CDMX_AutoKM", "");
+    downloadBlob(name.replace(/\.bin$/i, ".psc"), [script], "text/plain");
+    binCore.addLog("UPA SCRIPT", "Descargué " + name);
     addLogRows();
 }
 
@@ -1886,6 +1960,41 @@ function wireUI() {
     bindClick("algoSaveForm", saveAlgoForm);
     bindClick("upaMakePsc", downloadUpaPsc);
     bindClick("upaMakeTxt", downloadUpaTxt);
+    bindClick("upaReadBtn", () => buildUpaScript("read", "LECTURA KM"));
+    bindClick("upaWriteBtn", () => buildUpaScript("write", "ESCRITURA KM"));
+    bindClick("upaAutoBtn", () => {
+        if ($("upaMode")) $("upaMode").value = "auto";
+        buildUpaScript("auto", "AUTODETECT LECTURA ESCRITURA");
+    });
+    bindClick("upaSaveBtn", saveCurrentUpaScript);
+    bindClick("upaDelBtn", () => {
+        if (!window._upaScript) {
+            alert("Pulsa un script guardado para borrarlo.");
+            return;
+        }
+        if (!confirm("¿Borrar " + window._upaScript.name + "?")) return;
+        KnowledgeBase.removeUpaScript(window._upaScript.id);
+        window._upaScript = null;
+        if ($("upaSource")) $("upaSource").value = "";
+        renderUpaScripts();
+    });
+    bindClick("upaErrorBtn", () => {
+        const text = $("upaErrorBox") ? $("upaErrorBox").value : "";
+        const tip = EditorEngine.analyzeError(text);
+        if ($("upaErrorOut")) $("upaErrorOut").textContent = tip;
+        binCore.addLog("UPA SCRIPT", tip);
+        addLogRows();
+        alert(tip);
+    });
+    if ($("upaScriptBody")) {
+        $("upaScriptBody").addEventListener("click", (event) => {
+            const row = event.target.closest("tr");
+            if (!row || !row.getAttribute("data-sid")) return;
+            document.querySelectorAll("#upaScriptBody tr").forEach((tr) => tr.classList.remove("selected"));
+            row.classList.add("selected");
+            loadUpaScript(row.getAttribute("data-sid"));
+        });
+    }
     bindClick("simBtn", runSimulate);
     bindClick("valBtn", runValidate);
     bindClick("applyBtn", runApply);

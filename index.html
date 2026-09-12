@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=algover1">
+    <link rel="stylesheet" href="style.css?v=upastudio1">
 </head>
 
 <body>
@@ -532,10 +532,16 @@
 <div id="upaModal" class="modal">
     <div class="modal-card">
         <div class="modal-head">
-            <h3>SCRIPT UPA · TMS Pascal</h3>
+            <h3>UPA SCRIPT GENERADOR</h3>
             <button id="closeUpa" class="action-btn">CERRAR</button>
         </div>
-        <p class="modal-help">Elige algoritmos guardados. Auto-detect crea un .psc con varias versiones; o genera solo el algoritmo actual. Código al estilo AI Pack de UUPROGS (SetByteHexEdit, CalcCheckSum, AddDeviceEx).</p>
+        <p class="modal-help">TMS Pascal para UUPROGS (AI pack). Crea lectura, escritura o AUTODETECT si hay varias versiones. Guarda, edita o borra el código. Si el programador falla, pega el error.</p>
+        <p id="upaVersionAsk" class="bin3-ask hidden">Hay varias versiones. ¿Genero AUTODETECT de lectura y escritura?</p>
+        <div class="editor-buttons">
+            <button type="button" id="upaReadBtn" class="btn-blue">CREAR CÓDIGO LECTURA</button>
+            <button type="button" id="upaWriteBtn" class="btn-yellow">CREAR CÓDIGO ESCRITURA</button>
+            <button type="button" id="upaAutoBtn" class="btn-green">AUTODETECT LECTURA + ESCRITURA</button>
+        </div>
         <div class="editor-row">
             <label>MODO</label>
             <select id="upaMode">
@@ -543,6 +549,8 @@
                 <option value="current">Algoritmo del análisis actual</option>
                 <option value="picked">Solo los marcados abajo</option>
             </select>
+            <label>NOMBRE DEL SCRIPT</label>
+            <input id="upaScriptName" type="text" placeholder="YAMAHA LECTURA OK">
         </div>
         <table class="data-table">
             <thead>
@@ -550,16 +558,37 @@
                     <th></th>
                     <th>NOMBRE</th>
                     <th>FÓRMULA</th>
+                    <th>VER</th>
                     <th>DIRS</th>
-                    <th>CHECKSUM</th>
                 </tr>
             </thead>
             <tbody id="upaAlgoBody"></tbody>
         </table>
+        <h4>SCRIPTS GUARDADOS</h4>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>NOMBRE</th>
+                    <th>TIPO</th>
+                    <th>CHIP</th>
+                </tr>
+            </thead>
+            <tbody id="upaScriptBody"></tbody>
+        </table>
+        <label>CÓDIGO .PSC (puedes editar)</label>
+        <textarea id="upaSource" rows="12" placeholder="Aquí aparece el TMS Pascal. Edítalo si el UPA falló."></textarea>
         <div class="editor-buttons">
-            <button id="upaMakePsc" class="btn-green">CREAR .PSC</button>
-            <button id="upaMakeTxt" class="btn-blue">NOTAS .TXT</button>
+            <button type="button" id="upaSaveBtn" class="btn-green">GUARDAR SCRIPT</button>
+            <button type="button" id="upaMakePsc" class="btn-green">DESCARGAR .PSC</button>
+            <button type="button" id="upaDelBtn" class="btn-red">BORRAR SCRIPT</button>
+            <button type="button" id="upaMakeTxt" class="btn-blue">NOTAS .TXT</button>
         </div>
+        <label>ERROR DEL PROGRAMADOR UPA</label>
+        <textarea id="upaErrorBox" rows="4" placeholder="Pega aquí el mensaje rojo o el log de UPA."></textarea>
+        <div class="editor-buttons">
+            <button type="button" id="upaErrorBtn" class="action-btn yellow">ANALIZAR ERROR</button>
+        </div>
+        <p id="upaErrorOut" class="modal-help">Si falla en el programador, pega el error y pulsa ANALIZAR ERROR.</p>
     </div>
 </div>
 
@@ -573,28 +602,28 @@
 </div>
 <div id="attackToast" class="attack-toast hidden"></div>
 
-<script src="mark-book.js?v=algover1"></script>
-<script src="operation-registry.js?v=algover1"></script>
-<script src="expression-tree.js?v=algover1"></script>
-<script src="math-engine.js?v=algover1"></script>
-<script src="expression-generator.js?v=algover1"></script>
-<script src="fitness-engine.js?v=algover1"></script>
-<script src="validation-engine.js?v=algover1"></script>
-<script src="checksum-engine.js?v=algover1"></script>
-<script src="knowledge-base.js?v=algover1"></script>
-<script src="bin-world.js?v=algover1"></script>
-<script src="mind-engine.js?v=algover1"></script>
-<script src="hunters.js?v=algover1"></script>
-<script src="dna-discovery.js?v=algover1"></script>
-<script src="editor-upa.js?v=algover1"></script>
-<script src="write-machine.js?v=algover1"></script>
-<script src="bin-object.js?v=algover1"></script>
-<script src="family-library.js?v=algover1"></script>
-<script src="omega-kernel.js?v=algover1"></script>
-<script src="bin-core.js?v=algover1"></script>
-<script src="discovery-manager.js?v=algover1"></script>
-<script src="deep-attack.js?v=algover1"></script>
-<script src="app.js?v=algover1"></script>
+<script src="mark-book.js?v=upastudio1"></script>
+<script src="operation-registry.js?v=upastudio1"></script>
+<script src="expression-tree.js?v=upastudio1"></script>
+<script src="math-engine.js?v=upastudio1"></script>
+<script src="expression-generator.js?v=upastudio1"></script>
+<script src="fitness-engine.js?v=upastudio1"></script>
+<script src="validation-engine.js?v=upastudio1"></script>
+<script src="checksum-engine.js?v=upastudio1"></script>
+<script src="knowledge-base.js?v=upastudio1"></script>
+<script src="bin-world.js?v=upastudio1"></script>
+<script src="mind-engine.js?v=upastudio1"></script>
+<script src="hunters.js?v=upastudio1"></script>
+<script src="dna-discovery.js?v=upastudio1"></script>
+<script src="editor-upa.js?v=upastudio1"></script>
+<script src="write-machine.js?v=upastudio1"></script>
+<script src="bin-object.js?v=upastudio1"></script>
+<script src="family-library.js?v=upastudio1"></script>
+<script src="omega-kernel.js?v=upastudio1"></script>
+<script src="bin-core.js?v=upastudio1"></script>
+<script src="discovery-manager.js?v=upastudio1"></script>
+<script src="deep-attack.js?v=upastudio1"></script>
+<script src="app.js?v=upastudio1"></script>
 
 </body>
 </html>
