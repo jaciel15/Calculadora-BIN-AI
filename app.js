@@ -98,8 +98,35 @@ function paintHex(targetId, bytes, marks) {
     if (!el || !bytes) return;
     const mode = $("hexMode") ? $("hexMode").value : "16-BIT";
     const step = 16;
+    const MAX_LINES = 180;
+    const focus = new Set();
+    if (OmegaKernel.compareBins[0]) {
+        const other = OmegaKernel.compareBins[0].bytes;
+        const n = Math.min(bytes.length, other.length);
+        for (let i = 0; i < n; i++) {
+            if (bytes[i] === other[i]) continue;
+            const line = i & ~0x0F;
+            focus.add(line);
+            if (line >= step) focus.add(line - step);
+            if (line + step < bytes.length) focus.add(line + step);
+        }
+    }
+    const onlyDiff = focus.size > 0;
+    const totalLines = onlyDiff ? focus.size : Math.ceil(bytes.length / step);
+    let shown = 0;
     let html = "";
+    if (onlyDiff) {
+        html += "<div class=\"hex-note\">Solo líneas que cambian (" +
+            Math.min(totalLines, MAX_LINES) + " de " + Math.ceil(bytes.length / step) +
+            "). El ataque no recorre el archivo entero.</div>";
+    }
     for (let i = 0; i < bytes.length; i += step) {
+        if (onlyDiff && !focus.has(i)) continue;
+        if (shown >= MAX_LINES) {
+            html += "<div class=\"hex-note\">Hay más líneas. El ataque sigue trabajando solo la variación.</div>";
+            break;
+        }
+        shown++;
         html += "<span class=\"hex-addr\">" + padHex(i, 4) + "</span> : ";
         let ascii = "";
         for (let j = 0; j < step; j++) {
@@ -544,9 +571,59 @@ function renderAnalysis(analysis) {
     addLogRows();
 }
 
+function parseKmValue(raw) {
+    if (raw == null) return null;
+    const digits = String(raw).replace(/[^\d]/g, "");
+    if (digits === "") return null;
+    const n = Number(digits);
+    return Number.isFinite(n) ? n : null;
+}
+
+function kmFromField(id) {
+    const el = document.getElementById(id);
+    return el ? parseKmValue(el.value) : null;
+}
+
+function kmLooksLikeOdo(n) {
+    return n !== null && n >= 1 && n <= 2000000;
+}
+
+function kmFromVinField(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const raw = String(el.value || "").trim();
+    if (!/^\d{4,7}$/.test(raw.replace(/[^\d]/g, "")) && !/^\d{4,7}$/.test(raw)) return null;
+    const n = parseKmValue(raw);
+    return kmLooksLikeOdo(n) && String(n).length <= 7 ? n : null;
+}
+
+function kmFromLabeledInput(labelText) {
+    const labels = document.querySelectorAll(".pair-bar label");
+    for (let i = 0; i < labels.length; i++) {
+        if (labels[i].textContent.replace(/\s+/g, " ").trim() !== labelText) continue;
+        let el = labels[i].nextElementSibling;
+        while (el && el.tagName !== "INPUT") el = el.nextElementSibling;
+        if (el) return parseKmValue(el.value);
+    }
+    return null;
+}
+
+function kmFromFileName(name) {
+    if (!name) return null;
+    const text = String(name);
+    const tagged = text.match(/(\d{4,7})\s*KM/i);
+    if (tagged) return Number(tagged[1]);
+    const bare = text.match(/(?:^|[_\-\s])(\d{5,7})(?:[_\-\s.]|$)/);
+    return bare ? Number(bare[1]) : null;
+}
+
+function fillKmField(id, km) {
+    if (km === null || km === undefined || !$(id)) return;
+    $(id).value = String(km);
+}
+
 function knownKm() {
-    const raw = $("knownKm").value.replace(/[^\d]/g, "");
-    return raw === "" ? null : Number(raw);
+    return kmFromField("knownKm");
 }
 
 function knownHours() {
@@ -555,15 +632,63 @@ function knownHours() {
 }
 
 function knownKm2() {
-    if (!$("knownKm2")) return null;
-    const raw = $("knownKm2").value.replace(/[^\d]/g, "");
-    return raw === "" ? null : Number(raw);
+    return kmFromField("knownKm2");
 }
 
 function knownKm3() {
-    if (!$("knownKm3")) return null;
-    const raw = $("knownKm3").value.replace(/[^\d]/g, "");
-    return raw === "" ? null : Number(raw);
+    return kmFromField("knownKm3");
+}
+
+function pairKm1() {
+    const from1 = kmFromField("knownKm1") || kmFromLabeledInput("KM 1");
+    if (kmLooksLikeOdo(from1)) return from1;
+    const fromName = kmFromFileName(currentBIN && currentBIN.fileName);
+    if (kmLooksLikeOdo(fromName)) return fromName;
+    const fromVin = kmFromVinField("knownVin1");
+    if (fromVin) return fromVin;
+    const fromTop = kmFromField("knownKm");
+    return kmLooksLikeOdo(fromTop) ? fromTop : null;
+}
+
+function pairKm2() {
+    const from2 = kmFromField("knownKm2") || kmFromLabeledInput("KM 2");
+    if (kmLooksLikeOdo(from2)) return from2;
+    const fromName = kmFromFileName(OmegaKernel.compareBins[0] && OmegaKernel.compareBins[0].fileName);
+    if (kmLooksLikeOdo(fromName)) return fromName;
+    const fromVin = kmFromVinField("knownVin2");
+    return fromVin || null;
+}
+
+function refreshKmReadout() {
+    const k1 = pairKm1();
+    const k2 = pairKm2();
+    const el = $("kmReadout");
+    if (el) {
+        el.textContent = "Leídos → KM 1: " + (k1 === null ? "NO" : k1) + "   KM 2: " + (k2 === null ? "NO" : k2);
+        el.classList.toggle("km-ok", k1 !== null && k2 !== null);
+        el.classList.toggle("km-bad", k1 === null || k2 === null);
+    }
+    if ($("knownKm1")) $("knownKm1").classList.toggle("km-missing", k1 === null);
+    if ($("knownKm2")) $("knownKm2").classList.toggle("km-missing", k2 === null);
+}
+
+function bindKmInputs() {
+    ["knownKm", "knownKm1", "knownKm2", "knownKm3", "knownVin1", "knownVin2"].forEach((id) => {
+        const el = $(id);
+        if (!el || el.getAttribute("data-km-wired")) return;
+        el.setAttribute("data-km-wired", "1");
+        el.addEventListener("input", refreshKmReadout);
+        el.addEventListener("change", refreshKmReadout);
+    });
+}
+
+function syncPairKmFields(km1, km2) {
+    if (km1 !== null) {
+        fillKmField("knownKm1", km1);
+        fillKmField("knownKm", km1);
+    }
+    if (km2 !== null) fillKmField("knownKm2", km2);
+    refreshKmReadout();
 }
 
 function familyCountText() {
@@ -658,7 +783,15 @@ async function loadBIN(event) {
     }
     $("fileName").textContent = currentBIN.fileName;
     if ($("bin1Name")) $("bin1Name").textContent = currentBIN.fileName;
-    if ($("knownKm1") && $("knownKm").value) $("knownKm1").value = $("knownKm").value;
+    if (!kmFromField("knownKm1")) {
+        const guess = kmFromField("knownKm") || kmFromFileName(file.name);
+        if (guess !== null) fillKmField("knownKm1", guess);
+    }
+    if (!kmFromField("knownKm")) {
+        const guess = kmFromField("knownKm1") || kmFromFileName(file.name);
+        if (guess !== null) fillKmField("knownKm", guess);
+    }
+    refreshKmReadout();
     $("fileSize").textContent = currentBIN.fileSize;
     $("chipName").textContent = currentBIN.chip;
     $("chipSize").textContent = currentBIN.totalBytes + " Bytes";
@@ -677,7 +810,8 @@ async function loadBIN(event) {
         $("dnaScore").textContent = currentBIN.family.confidence + "%";
         $("dnaScoreCard").textContent = currentBIN.family.confidence + "%";
         if (currentBIN.family.decodedKm !== null) {
-            $("knownKm").value = String(currentBIN.family.decodedKm);
+            if (!kmFromField("knownKm")) fillKmField("knownKm", currentBIN.family.decodedKm);
+            if (!kmFromField("knownKm1")) fillKmField("knownKm1", currentBIN.family.decodedKm);
         }
         $("omegaCard").textContent = currentBIN.family.family.id + "\n" + currentBIN.family.family.status + "\n" + currentBIN.family.family.writeHow;
         $("omegaThink").textContent = "Familia de kernel reconocida al cargar.";
@@ -688,6 +822,10 @@ async function loadBIN(event) {
 
 function runAnalysis(extra) {
     if (!needBIN()) return;
+    if (!LabMode.is("CHK") && !LabMode.is("VIN") && OmegaKernel.compareBins[0]) {
+        startDeepAttack();
+        return;
+    }
     const km = knownKm();
     const hours = knownHours();
     const stayChk = LabMode.is("CHK");
@@ -803,6 +941,8 @@ function runRestore() {
 }
 
 function currentKmGuess() {
+    const pair = pairKm1();
+    if (pair !== null) return pair;
     if (knownKm() !== null) return knownKm();
     if (currentBIN && currentBIN.analysis && currentBIN.analysis.best && typeof currentBIN.analysis.best.value === "number") {
         return currentBIN.analysis.best.value;
@@ -1532,6 +1672,11 @@ async function loadBIN2(event) {
     }];
     if (third) OmegaKernel.compareBins.push(third);
     if ($("bin2Name")) $("bin2Name").textContent = file.name;
+    if (!kmFromField("knownKm2")) {
+        const guess = kmFromFileName(file.name);
+        if (guess !== null) fillKmField("knownKm2", guess);
+    }
+    refreshKmReadout();
     familyCountText();
     if (binCore.currentBIN) binCore.addLog("COMPARADOR", "BIN 2 cargado: " + file.name);
     refreshIdentity();
@@ -1559,6 +1704,10 @@ async function loadBIN3(event) {
         bytes: new Uint8Array(buffer)
     };
     if ($("bin3Name")) $("bin3Name").textContent = file.name;
+    if (!kmFromField("knownKm3")) {
+        const guess = kmFromFileName(file.name);
+        if (guess !== null) fillKmField("knownKm3", guess);
+    }
     familyCountText();
     showBin3Ask(false);
     if (binCore.currentBIN) binCore.addLog("COMPARADOR", "BIN 3 cargado: " + file.name + " · entorno extra para CRC/SUM");
@@ -1588,17 +1737,7 @@ async function loadSamplePair() {
 }
 
 function runPairAnalysis() {
-    if (!needBIN()) return;
-    if (!OmegaKernel.compareBins.length) {
-        alert("Elige también el BIN 2 para analizar el par.");
-        return;
-    }
-    if ($("knownKm1") && $("knownKm1").value) $("knownKm").value = $("knownKm1").value;
-    runAnalysis({ knownKm2: knownKm2(), knownKm3: knownKm3() });
-    setTimeout(function () {
-        showPairReport();
-        startDeepAttack();
-    }, 80);
+    startDeepAttack();
 }
 
 function clockText(ms) {
@@ -1625,11 +1764,15 @@ async function startDeepAttack() {
         alert("Carga BIN 1 y BIN 2. El ataque solo pica las líneas que cambian.");
         return;
     }
-    const km1 = knownKm();
-    const km2 = knownKm2();
+    refreshKmReadout();
+    const km1 = pairKm1();
+    const km2 = pairKm2();
     const km3 = knownKm3();
+    syncPairKmFields(km1, km2);
     if (km1 === null || km2 === null) {
-        alert("Pon KM 1 y KM 2. Sin eso el ataque no sabe qué valor es basura.");
+        if ($("knownKm1") && km1 === null) $("knownKm1").focus();
+        else if ($("knownKm2")) $("knownKm2").focus();
+        alert("No leí los kilometrajes.\n\nEscribe el KM del archivo 1 en KM 1 y el KM del archivo 2 en KM 2.\nAhora mismo veo KM 1=" + (km1 === null ? "vacío" : km1) + " y KM 2=" + (km2 === null ? "vacío" : km2) + ".");
         return;
     }
     if (OmegaKernel.compareBins[1] && km3 === null) {
@@ -1647,6 +1790,7 @@ async function startDeepAttack() {
         fill.style.width = "0%";
     }
     setStatus("CARGANDO", "busy");
+    if (status) status.textContent = "Usando KM 1 = " + km1 + " y KM 2 = " + km2 + ". Solo líneas que cambian.";
     const report = await DeepAttack.run({
         bytes: currentBIN.original,
         bytes2: OmegaKernel.compareBins[0].bytes,
@@ -1918,6 +2062,8 @@ function wireUI() {
     bindClick("pickBin3", () => $("fileInput3").click());
     bindClick("analyzePairBtn", runPairAnalysis);
     bindClick("attackBtn", startDeepAttack);
+    bindKmInputs();
+    refreshKmReadout();
     bindClick("binGenBtn", runGenerateBIN);
     bindClick("binGenBtnTop", runGenerateBIN);
     bindClick("generateBinBtn", runGenerateBIN);

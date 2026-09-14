@@ -1145,3 +1145,30 @@ html, body {
     padding: 8px 12px;
 }
 .bin3-ask.hidden { display: none; }
+.hex-note {
+    color: #064b6b;
+    font-size: 12px;
+    font-weight: 700;
+    margin: 0 0 8px;
+}
+.km-readout {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+}
+.km-readout.km-ok {
+    background: #c8f7d2;
+    border: 2px solid #128a3c;
+    color: #0b4d22;
+}
+.km-readout.km-bad {
+    background: #ffd6d6;
+    border: 2px solid #c1121f;
+    color: #7a0b12;
+}
+input.km-missing {
+    border: 2px solid #c1121f !important;
+    background: #ffe8e8 !important;
+}

@@ -413,10 +413,10 @@ const DeepAttack = {
         this.running = false;
         hits.sort((a, b) => (b.score - a.score) || (b.line - a.line));
         let discovered = [];
-        if (typeof DiscoveryManager !== "undefined" && this._ctx) {
+        if (!hits.length && typeof DiscoveryManager !== "undefined" && this._ctx) {
             const probe = [];
-            (lines || []).forEach((line) => {
-                [0, 1, 2, 4, 6, 8].forEach((off) => probe.push(line + off));
+            (lines || []).slice(0, 12).forEach((line) => {
+                [0, 1, 2, 4].forEach((off) => probe.push(line + off));
             });
             discovered = DiscoveryManager.discoverSync({
                 bytes: this._ctx.bytes,
