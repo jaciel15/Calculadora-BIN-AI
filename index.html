@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=auto1">
+    <link rel="stylesheet" href="style.css?v=ataque2">
 </head>
 
 <body>
@@ -104,6 +104,7 @@
             <button id="analyzePairBtn" class="action-btn green">ANALIZAR PAR</button>
             <button type="button" id="attackBtn" class="action-btn blue">ATAQUE 10 MIN</button>
             <button type="button" id="loadSamplePairBtn" class="action-btn yellow">CARGAR PAR 35000 / 150500</button>
+            <button type="button" id="loadTrackerBtn" class="action-btn blue">CARGAR 3 TRACKER Y ATACAR</button>
             <strong id="kmReadout" class="km-readout km-bad">Leídos → KM 1: —   KM 2: —</strong>
             <span class="bin3-ask">Escribe KM 1 y KM 2 y mira que salgan arriba en “Leídos”. Luego ATAQUE 10 MIN. No uses el ANALIZAR de arriba.</span>
         </div>
@@ -116,9 +117,13 @@
             <span id="needBin3Ask" class="bin3-ask hidden">Si el par no cierra CRC/SUM, sube un tercer BIN con otro KM. El ataque de 10 min usa el entorno de los tres.</span>
         </div>
         <input type="file" id="fileInput3" accept=".bin,.eep,.hex" hidden>
+        <div id="attackResult" class="attack-result hidden">
+            <canvas id="attackPosterMain" width="720" height="420"></canvas>
+            <button type="button" class="action-btn green" id="attackPosterMainSave">DESCARGAR IMAGEN DEL ATAQUE</button>
+        </div>
         <div class="help-recipe-bar">
             <label>CÓMO LO HAGO</label>
-            <textarea id="helpRecipe" rows="3" placeholder="Línea 0260 col 00 = KM ×10. Hacia 0000 baja de 1. La suma de esos 3 bytes va a la línea 0270. Si pasa de 255 aparece 01."></textarea>
+            <textarea id="helpRecipe" rows="3" placeholder="El ataque escribe aquí cómo encontró el KM: dirección, fórmula y checksum/CRC. Yamaha 0260 solo si el archivo es de 8192 bytes."></textarea>
             <button type="button" id="helpExampleBtn" class="action-btn">EJEMPLO</button>
         </div>
         <input type="file" id="fileInput2" accept=".bin,.eep,.hex" hidden>
@@ -604,28 +609,28 @@
 </div>
 <div id="attackToast" class="attack-toast hidden"></div>
 
-<script src="mark-book.js?v=auto1"></script>
-<script src="operation-registry.js?v=auto1"></script>
-<script src="expression-tree.js?v=auto1"></script>
-<script src="math-engine.js?v=auto1"></script>
-<script src="expression-generator.js?v=auto1"></script>
-<script src="fitness-engine.js?v=auto1"></script>
-<script src="validation-engine.js?v=auto1"></script>
-<script src="checksum-engine.js?v=auto1"></script>
-<script src="knowledge-base.js?v=auto1"></script>
-<script src="bin-world.js?v=auto1"></script>
-<script src="mind-engine.js?v=auto1"></script>
-<script src="hunters.js?v=auto1"></script>
-<script src="dna-discovery.js?v=auto1"></script>
-<script src="editor-upa.js?v=auto1"></script>
-<script src="write-machine.js?v=auto1"></script>
-<script src="bin-object.js?v=auto1"></script>
-<script src="family-library.js?v=auto1"></script>
-<script src="omega-kernel.js?v=auto1"></script>
-<script src="bin-core.js?v=auto1"></script>
-<script src="discovery-manager.js?v=auto1"></script>
-<script src="deep-attack.js?v=auto1"></script>
-<script src="app.js?v=auto1"></script>
+<script src="mark-book.js?v=ataque2"></script>
+<script src="operation-registry.js?v=ataque2"></script>
+<script src="expression-tree.js?v=ataque2"></script>
+<script src="math-engine.js?v=ataque2"></script>
+<script src="expression-generator.js?v=ataque2"></script>
+<script src="fitness-engine.js?v=ataque2"></script>
+<script src="validation-engine.js?v=ataque2"></script>
+<script src="checksum-engine.js?v=ataque2"></script>
+<script src="knowledge-base.js?v=ataque2"></script>
+<script src="bin-world.js?v=ataque2"></script>
+<script src="mind-engine.js?v=ataque2"></script>
+<script src="hunters.js?v=ataque2"></script>
+<script src="dna-discovery.js?v=ataque2"></script>
+<script src="editor-upa.js?v=ataque2"></script>
+<script src="write-machine.js?v=ataque2"></script>
+<script src="bin-object.js?v=ataque2"></script>
+<script src="family-library.js?v=ataque2"></script>
+<script src="omega-kernel.js?v=ataque2"></script>
+<script src="bin-core.js?v=ataque2"></script>
+<script src="discovery-manager.js?v=ataque2"></script>
+<script src="deep-attack.js?v=ataque2"></script>
+<script src="app.js?v=ataque2"></script>
 
 </body>
 </html>

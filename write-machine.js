@@ -24,8 +24,11 @@ const WriteMachine = {
 
     calcWindow(bytes, item) {
         const name = String(item.name || "SUM8").toUpperCase();
+        if (name.indexOf("CRC16") !== -1) return ChecksumEngine.crc16(bytes, item.start, item.end);
+        if (name.indexOf("CRC8") !== -1) return ChecksumEngine.crc8(bytes, item.start, item.end);
         if (name.indexOf("XOR") !== -1) return ChecksumEngine.xor8(bytes, item.start, item.end);
         if (name.indexOf("LRC") !== -1) return ChecksumEngine.lrc(bytes, item.start, item.end);
+        if (name.indexOf("COMP") !== -1) return (0x100 - ChecksumEngine.sum8(bytes, item.start, item.end)) & 0xFF;
         if ((item.size || 1) >= 2 || name.indexOf("SUM16") !== -1) return ChecksumEngine.sum16(bytes, item.start, item.end);
         return ChecksumEngine.sum8(bytes, item.start, item.end);
     },
@@ -74,7 +77,7 @@ const WriteMachine = {
             };
         }
         const width = best.width || 2;
-        const addrs = (best.copies && best.copies.length ? best.copies.slice() : [best.address]).sort((a, b) => a - b);
+        const addrs = (best.copies && best.copies.length ? best.copies.slice(0, 32) : [best.address]).sort((a, b) => a - b);
         const little = best.endian !== "BE";
         const decoded = addrs.map((addr) => {
             const raw = MathEngine.fromBytes(bytes, addr, width, little);
@@ -119,7 +122,7 @@ const WriteMachine = {
                     end: c.end,
                     storedAt: c.storedAt,
                     size: c.size || 1,
-                    endian: c.endian || "LE"
+                    endian: c.endian || best.checksumEndian || "LE"
                 });
             });
             (ctx.closed || []).forEach((cell) => {
@@ -155,8 +158,8 @@ const WriteMachine = {
                     start: best.address,
                     end: best.address + width,
                     storedAt: best.checksumAt,
-                    size: /16/.test(best.checksumName || "") ? 2 : 1,
-                    endian: "LE"
+                    size: best.checksumSize || (/16/.test(best.checksumName || "") ? 2 : 1),
+                    endian: best.checksumEndian || "LE"
                 });
             }
         }
@@ -165,7 +168,7 @@ const WriteMachine = {
             best.writable !== false &&
             ctx.truth &&
             (ctx.truth.status === "DEMOSTRADO" || ctx.truth.status === "LUGAR DEMOSTRADO" ||
-                best.fromWorld || best.fromClosed || best.fromPair || best.fromFamily)
+                best.fromWorld || best.fromClosed || best.fromPair || best.fromFamily || best.fromAttack)
         );
         const mirrors = (world && world.mirrors) ? world.mirrors : [];
         const machine = {

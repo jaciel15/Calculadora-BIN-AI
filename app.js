@@ -335,13 +335,71 @@ function describeOperation(hit) {
     if (!hit) return "Sin operación.";
     return "Valor " + hit.value + " → " + hit.formula + " → bytes " + hit.hex +
         " (" + (hit.endian || "") + " " + hit.width + "B) en " + hit.addressText +
-        " × " + (hit.copies ? hit.copies.length : 1) + " copias. " + (hit.writeHow || "");
+        " × " + (hit.copies ? hit.copies.length : 1) + " copias" +
+        (hit.checksumName ? " · " + hit.checksumName + " @" + padHex(hit.checksumAt || 0) : "") +
+        ". " + (hit.writeHow || "");
+}
+
+function attackPosterHtml(best) {
+    return "<div class=\"attack-poster-wrap\">" +
+        "<canvas id=\"attackPoster\" width=\"720\" height=\"420\"></canvas>" +
+        "<button type=\"button\" class=\"action-btn green\" id=\"attackPosterSave\">DESCARGAR IMAGEN</button>" +
+        "</div>";
+}
+
+function paintAttackPoster(canvasId, best) {
+    const canvas = typeof canvasId === "string" ? $(canvasId) : canvasId;
+    if (!canvas || !best || !canvas.getContext) return;
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.fillStyle = "#072033";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#00e5ff";
+    ctx.fillRect(0, 0, w, 8);
+    ctx.fillStyle = "#1b8a3a";
+    ctx.fillRect(0, h - 8, w, 8);
+    ctx.fillStyle = "#e8f7ff";
+    ctx.font = "bold 22px Segoe UI, Arial";
+    ctx.fillText("VELOCÍMETROS CDMX · ATAQUE", 28, 48);
+    ctx.fillStyle = "#69f0ae";
+    ctx.font = "bold 36px Segoe UI, Arial";
+    ctx.fillText("KM " + (best.value != null ? best.value : "—"), 28, 110);
+    ctx.fillStyle = "#b3e5fc";
+    ctx.font = "16px Segoe UI, Arial";
+    const lines = [
+        "Operación: " + (best.formula || "X") + "  →  " + (best.hex || "—") + "  (" + (best.endian || "") + " " + (best.width || "?") + "B)",
+        "Dirección: " + (best.addressText || padHex(best.address || 0)) + "   ·   copias: " + ((best.copies && best.copies.length) || 1),
+        "Checksum / CRC: " + (best.checksumName
+            ? best.checksumName + " @ " + padHex(best.checksumAt || 0) + (best.checksumEndian ? " " + best.checksumEndian : "")
+            : "no ligado (el KM se sostiene por copias)"),
+        "Algoritmo: " + (best.name || best.formula || "del par"),
+        best.fromSaved ? "Usó un algoritmo guardado que SÍ calzó en los bytes distintos." :
+            "Los algoritmos guardados que no calzaron se descartaron."
+    ];
+    lines.forEach((line, i) => ctx.fillText(line, 28, 160 + i * 36));
+    ctx.fillStyle = "#80deea";
+    ctx.font = "13px Segoe UI, Arial";
+    ctx.fillText("Solo se tocan esas copias y su SUM/CRC. No se pinta el archivo entero.", 28, 390);
+    const wrap = $("attackResult");
+    if (wrap) wrap.classList.remove("hidden");
+    const host = $("attackPosterMain");
+    if (host && host !== canvas) paintAttackPoster(host, best);
+}
+
+function downloadAttackPoster() {
+    const canvas = $("attackPoster") || $("attackPosterMain");
+    if (!canvas) return;
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = "ataque-km.png";
+    a.click();
 }
 
 function describeEdited(hit, newKm) {
     if (!hit || hit.writable === false) return "Esta familia no tiene operación de escritura demostrada.";
     if (newKm === "" || newKm === null) return "Escribe un nuevo KM para ver la operación editada.";
-    if (hit.familyId === "YAMAHA_R5F10") {
+    if (hit.familyId === "YAMAHA_R5F10" && currentBIN && currentBIN.original && currentBIN.original.length === 8192) {
         const pages = (hit.copies && hit.copies.length) ? hit.copies.length : 20;
         const raw = Number(newKm) * 10;
         const lo = raw & 0xFF;
@@ -356,7 +414,8 @@ function describeEdited(hit, newKm) {
     try {
         const encoded = EditorEngine.encodeValue(Number(newKm), hit);
         return "Nuevo KM " + newKm + " → " + hit.formula + " → " + MathEngine.hexBytes(encoded) +
-            " en " + (hit.copies || [hit.address]).length + " copias (" + (hit.endian || "") + ").";
+            " en " + (hit.copies || [hit.address]).length + " copias (" + (hit.endian || "") + ")" +
+            (hit.checksumName ? " · " + hit.checksumName + " @" + padHex(hit.checksumAt || 0) : "") + ".";
     } catch (error) {
         return "No se pudo calcular la operación editada.";
     }
@@ -941,7 +1000,10 @@ function runApply() {
         return;
     }
     lastSimulation = binCore.applyValue(value, kind);
-    if (!lastSimulation) return;
+    if (!lastSimulation) {
+        alert("No pude escribir. El ataque no selló una fórmula en los bytes que cambian, o la máquina está bloqueada.");
+        return;
+    }
     if ($("aiEdited") && currentBIN.analysis) {
         $("aiEdited").textContent = kind === "VIN"
             ? "VIN escrito en todas sus copias: " + value
@@ -983,10 +1045,12 @@ function currentKmGuess() {
 }
 
 function defaultFileLabel(newKm) {
-    const chip = currentBIN && currentBIN.chip ? String(currentBIN.chip) : "";
-    const text = ((currentBIN && currentBIN.analysis && currentBIN.analysis.best && currentBIN.analysis.best.familyId) || chip || "").toUpperCase();
-    const brand = /YAMAHA/.test(text) ? "YAMAHA" : (chip ? chip.replace(/[^\w]+/g, " ").trim() : "KM");
-    return (brand + " KM " + (newKm || "OK")).replace(/\s+/g, " ").trim();
+    const best = currentBIN && currentBIN.analysis && currentBIN.analysis.best;
+    if (best && best.familyId && /YAMAHA/.test(String(best.familyId)) && currentBIN.original && currentBIN.original.length === 8192) {
+        return "YAMAHA KM " + (newKm || "OK");
+    }
+    const op = best && best.formula ? String(best.formula).replace(/[^\w*+/]+/g, "") : "KM";
+    return ("KM " + (newKm || "OK") + " " + op).replace(/\s+/g, " ").trim();
 }
 
 function fileNameSafe(raw, km) {
@@ -1047,14 +1111,19 @@ function offerDetectedAlgorithm(title, extraHtml) {
     window._pendingAlgo = { title: title, extra: extraHtml || "", best: best };
     const near = related.slice(0, 3).map((r) => r.name + " (" + (r.formula || "") + ")").join(" · ");
     const html = (extraHtml || "") +
-        "<p class=\"gen-ask\">Detecté 1 algoritmo</p>" +
+        attackPosterHtml(best) +
+        "<p class=\"gen-ask\">Detecté 1 algoritmo en los bytes que cambian</p>" +
         "<p><strong>" + escapeText(best.name || best.formula) + "</strong><br>" +
         "Fórmula <strong>" + escapeText(best.formula || "X") + "</strong> · " +
         (best.width || "?") + "B " + escapeText(best.endian || "") +
         " @ " + escapeText(best.addressText || padHex(best.address || 0)) + "</p>" +
+        "<p>Checksum/CRC: <strong>" +
+        escapeText(best.checksumName ? (best.checksumName + " @ " + padHex(best.checksumAt || 0)) : "no ligado (solo copias)") +
+        "</strong></p>" +
+        "<p>Operación: " + escapeText(best.operation || describeOperation(best)) + "</p>" +
         (near
             ? "<p>Parecido a lo que ya tienes: " + escapeText(near) + "</p>"
-            : "<p>No vi uno igual guardado.</p>") +
+            : "<p>Ningún algoritmo guardado calzó; este se inventó del par.</p>") +
         "<p>Dime si es <strong>una nueva versión</strong> de uno que ya existe, o <strong>otro nuevo</strong>.</p>" +
         "<div class=\"gen-actions\">" +
         "<button type=\"button\" class=\"action-btn green\" id=\"algoVerBtn\">NUEVA VERSIÓN</button>" +
@@ -1062,11 +1131,13 @@ function offerDetectedAlgorithm(title, extraHtml) {
         "<button type=\"button\" class=\"action-btn\" id=\"algoSkipBtn\">AHORA NO</button>" +
         "</div>";
     openLab(title || "ALGORITMO DETECTADO", html);
+    paintAttackPoster("attackPoster", best);
     bindClick("algoVerBtn", showAlgoVersionForm);
     bindClick("algoNewBtn", showAlgoNewForm);
     bindClick("algoSkipBtn", function () {
         offerEditedFile(window._pendingAlgo.title, window._pendingAlgo.extra);
     });
+    bindClick("attackPosterSave", downloadAttackPoster);
     return true;
 }
 
@@ -1130,7 +1201,12 @@ function offerEditedFile(title, extraHtml) {
     const have = currentKmGuess();
     const html = (extraHtml || "") +
         "<p class=\"gen-ask\">¿Generar un archivo ya editado?</p>" +
-        "<p>Ahora el archivo tiene <strong>" + (have !== null ? have + " KM" : "un KM detectado") + "</strong>. Si pulsas SÍ, pones el nuevo KM y el nombre (ej. YAMAHA KM OK).</p>" +
+        "<p>Ahora el archivo tiene <strong>" + (have !== null ? have + " KM" : "un KM detectado") + "</strong>. " +
+        "Se escribe con <strong>" + escapeText((currentBIN.analysis.best.formula || "X")) + "</strong>" +
+        (currentBIN.analysis.best.checksumName
+            ? " y " + escapeText(currentBIN.analysis.best.checksumName)
+            : "") +
+        ". Si pulsas SÍ, pones el nuevo KM.</p>" +
         "<div class=\"gen-actions\">" +
         "<button type=\"button\" class=\"action-btn green\" id=\"genYesBtn\">SÍ</button>" +
         "<button type=\"button\" class=\"action-btn\" id=\"genNoBtn\">AHORA NO</button>" +
@@ -1161,7 +1237,8 @@ function showGenerateForm(haveKm) {
         "<label>NUEVO KM</label>" +
         "<input id=\"genNewKm\" type=\"text\" placeholder=\"Ej. 12000\">" +
         "<label>NOMBRE DEL ARCHIVO</label>" +
-        "<input id=\"genFileName\" type=\"text\" placeholder=\"YAMAHA KM OK\" value=\"YAMAHA KM OK\">" +
+        "<input id=\"genFileName\" type=\"text\" placeholder=\"KM OK\" value=\"" +
+        escapeText(defaultFileLabel(have)) + "\">" +
         "</div>" +
         "<button type=\"button\" class=\"action-btn green\" id=\"genMakeBtn\">CREAR ARCHIVO EDITADO</button>");
     bindClick("genMakeBtn", makeEditedFile);
@@ -1194,7 +1271,10 @@ function makeEditedFile() {
     if ($("newValue")) $("newValue").value = neu;
     if ($("ghostKm")) $("ghostKm").value = neu;
     runApply();
-    if (!lastSimulation) return;
+    if (!lastSimulation) {
+        alert("No pude crear el archivo. El ataque tiene que haber encontrado fórmula en los bytes que cambian.");
+        return;
+    }
     const bytes = binCore.generateBIN();
     if (!bytes) return;
     const name = fileNameSafe($("genFileName") && $("genFileName").value, neu);
@@ -1757,10 +1837,36 @@ async function loadSamplePair() {
         if ($("knownKm")) $("knownKm").value = "35000";
         if ($("knownKm1")) $("knownKm1").value = "35000";
         if ($("knownKm2")) $("knownKm2").value = "150500";
-        if ($("helpRecipe")) $("helpRecipe").value = R5F_RECIPE;
         runPairAnalysis();
     } catch (error) {
         alert("No pude cargar el par de ejemplo. Elige BIN 1 (35000 línea 260) y BIN 2 (150500) a mano.");
+    }
+}
+
+async function loadTrackerTriple() {
+    try {
+        const files = await Promise.all([
+            fetch("samples/tracker-km1-113171.bin"),
+            fetch("samples/tracker-km2-150000.bin"),
+            fetch("samples/tracker-km3-180000.bin")
+        ]);
+        if (files.some((f) => !f.ok)) throw new Error("sample");
+        const bufs = await Promise.all(files.map((f) => f.arrayBuffer()));
+        const f1 = new File([bufs[0]], "tracker-km1-113171.bin");
+        const f2 = new File([bufs[1]], "tracker-km2-150000.bin");
+        const f3 = new File([bufs[2]], "tracker-km3-180000.bin");
+        await loadBIN({ target: { files: [f1] } });
+        await loadBIN2({ target: { files: [f2] } });
+        OmegaKernel.compareBins[1] = { fileName: f3.name, bytes: new Uint8Array(bufs[2]) };
+        if ($("bin3Name")) $("bin3Name").textContent = f3.name;
+        fillKmField("knownKm1", 113171);
+        fillKmField("knownKm2", 150000);
+        fillKmField("knownKm3", 180000);
+        if ($("helpRecipe")) $("helpRecipe").value = "";
+        refreshKmReadout();
+        startDeepAttack();
+    } catch (error) {
+        alert("No pude cargar los 3 BIN de prueba. Elige BIN 1 / 2 / 3 a mano (KM 113171, 150000 y 180000) y pulsa ATAQUE 10 MIN.");
     }
 }
 
@@ -1879,6 +1985,7 @@ async function startDeepAttack() {
             };
         }
         currentBIN.analysis.best = report.best;
+        paintAttackPoster("attackPosterMain", report.best);
         if ($("helpRecipe")) $("helpRecipe").value = report.best.writeHow;
         if ($("aiHow")) $("aiHow").textContent = report.best.writeHow;
         if ($("aiAlgorithm")) $("aiAlgorithm").textContent = report.best.formula;
@@ -2076,6 +2183,7 @@ function wireUI() {
     bindClick("markAcceptBtn", acceptMarkLesson);
     bindClick("markSkipBtn", skipMarkLesson);
     bindClick("loadSamplePairBtn", loadSamplePair);
+    bindClick("loadTrackerBtn", loadTrackerTriple);
     bindClick("helpExampleBtn", () => {
         if ($("helpRecipe")) {
             $("helpRecipe").value = R5F_RECIPE;
@@ -2115,6 +2223,7 @@ function wireUI() {
     bindClick("pickBin3", () => $("fileInput3").click());
     bindClick("analyzePairBtn", runPairAnalysis);
     bindClick("attackBtn", startDeepAttack);
+    bindClick("attackPosterMainSave", downloadAttackPoster);
     bindKmInputs();
     refreshKmReadout();
     bindClick("binGenBtn", runGenerateBIN);

@@ -247,7 +247,7 @@ const DeepAttack = {
     },
 
     buildBest(hit) {
-        const copies = hit.copies && hit.copies.length ? hit.copies : [hit.addr];
+        const copies = (hit.copies && hit.copies.length ? hit.copies : [hit.addr]).slice(0, 32);
         return {
             fromPair: true,
             fromAttack: true,
@@ -255,6 +255,7 @@ const DeepAttack = {
             label: "KILOMETRAJE",
             name: hit.name || ("ATAQUE_" + String(hit.formula).replace(/\s+/g, "_")),
             fromKnown: !!hit.fromKnown,
+            fromSaved: !!hit.fromSaved,
             formula: hit.formula,
             width: hit.width,
             endian: hit.endian,
@@ -269,7 +270,11 @@ const DeepAttack = {
             representation: hit.formula + " · solo variación",
             writable: true,
             checksumAt: hit.checksum ? hit.checksum.storedAt : undefined,
-            checksumName: hit.checksum ? hit.checksum.name : undefined
+            checksumName: hit.checksum ? hit.checksum.name : undefined,
+            checksumEndian: hit.checksum ? hit.checksum.endian : undefined,
+            checksumSize: hit.checksum ? hit.checksum.size : undefined,
+            operation: (hit.formula || "X") + " · " + hit.width + "B " + (hit.endian || "LE") +
+                (hit.checksum ? " · " + hit.checksum.name + " @" + this.hex(hit.checksum.storedAt) : "")
         };
     },
 
@@ -282,7 +287,171 @@ const DeepAttack = {
     },
 
     isSolid(hit) {
-        return !!(hit && (hit.fromKnown || hit.checksum));
+        if (!hit || !hit.formula) return false;
+        const copies = hit.copies || [];
+        if (copies.length < 1 || copies.length > 32) return false;
+        if (hit.fromSaved && copies.length <= 32) return !!(hit.checksum || copies.length >= 2);
+        if (hit.fromKnown && hit.familyId && this._ctx && this.recipeFitsFile({ id: hit.familyId, familyId: hit.familyId }, this._ctx.bytes)) {
+            return copies.length <= 32;
+        }
+        if (hit.checksum && copies.length >= 1) return true;
+        return !!(hit.fromPair && copies.length >= 2);
+    },
+
+    diffBytes(a, others) {
+        const set = new Set();
+        (others || []).forEach((b) => {
+            if (!b) return;
+            const n = Math.min(a.length, b.length);
+            for (let i = 0; i < n; i++) {
+                if (a[i] !== b[i]) set.add(i);
+            }
+        });
+        return set;
+    },
+
+    checksumsNear(bytes, addr, width) {
+        const found = [];
+        if (!bytes || addr < 0) return found;
+        const page = addr & ~0x0F;
+        const spots = [];
+        for (let at = page; at < page + 16; at++) spots.push(at);
+        spots.push(addr + width);
+        spots.push(page + 16);
+        const fill = { 0x00: 1, 0xFF: 1, 0xEB: 1, 0xAA: 1 };
+        const tryPush = (name, storedAt, size, endian, calc) => {
+            if (storedAt < 0 || storedAt + size > bytes.length) return;
+            if (storedAt >= addr && storedAt < addr + width) return;
+            if (size === 1 && fill[bytes[storedAt]]) return;
+            const stored = MathEngine.fromBytes(bytes, storedAt, size, endian === "LE");
+            if (stored === calc) found.push({ name: name, storedAt: storedAt, endian: endian, value: calc, size: size });
+        };
+        const sum8 = ChecksumEngine.sum8(bytes, addr, addr + width);
+        const sum16 = ChecksumEngine.sum16(bytes, addr, addr + width);
+        const crc8 = ChecksumEngine.crc8(bytes, addr, addr + width);
+        const crc16 = ChecksumEngine.crc16(bytes, addr, addr + width);
+        let xor8 = 0;
+        for (let i = 0; i < width; i++) xor8 ^= bytes[addr + i];
+        const comp8 = (0x100 - sum8) & 0xFF;
+        spots.forEach((at) => {
+            tryPush("SUM8", at, 1, "LE", sum8);
+            tryPush("CRC8", at, 1, "LE", crc8);
+            tryPush("XOR8", at, 1, "LE", xor8);
+            tryPush("COMP8", at, 1, "LE", comp8);
+            tryPush("SUM16", at, 2, "BE", sum16);
+            tryPush("SUM16", at, 2, "LE", sum16);
+            tryPush("CRC16", at, 2, "BE", crc16);
+            tryPush("CRC16", at, 2, "LE", crc16);
+        });
+        return found;
+    },
+
+    checksumsThatMove(a, b, addr, width) {
+        const chk1 = this.checksumsNear(a, addr, width);
+        const chk2 = b ? this.checksumsNear(b, addr, width) : [];
+        if (!b) return chk1;
+        return chk1.filter((item) => chk2.some((other) =>
+            other.name === item.name &&
+            (other.storedAt & 0x0F) === (item.storedAt & 0x0F) &&
+            other.value !== item.value
+        ));
+    },
+
+    copiesFor(a, b, c, addr, width, little, diffs) {
+        const raw1 = this.read(a, addr, width, little);
+        const raw2 = b ? this.read(b, addr, width, little) : null;
+        const raw3 = c ? this.read(c, addr, width, little) : null;
+        if (raw1 === null) return [addr];
+        const off = addr & 0x0F;
+        const found = [];
+        for (let p = off; p + width <= a.length; p += 16) {
+            if (this.read(a, p, width, little) !== raw1) continue;
+            if (b && this.read(b, p, width, little) !== raw2) continue;
+            if (c && raw3 != null && this.read(c, p, width, little) !== raw3) continue;
+            found.push(p);
+        }
+        const onDiff = found.filter((p) => {
+            if (!diffs || !diffs.size) return true;
+            for (let i = 0; i < width; i++) if (diffs.has(p + i)) return true;
+            return false;
+        });
+        let copies = onDiff.length ? onDiff : [addr];
+        if (copies.length > 32) {
+            copies = copies.filter((p) => Math.abs(p - addr) <= 0x800).slice(0, 24);
+        }
+        if (copies.indexOf(addr) < 0) copies.unshift(addr);
+        return Array.from(new Set(copies)).slice(0, 32);
+    },
+
+    paintedDump(a, lines, diffs) {
+        const totalLines = Math.ceil(a.length / 16);
+        if ((lines || []).length > Math.max(120, totalLines * 0.12)) return true;
+        if (!diffs || diffs.size < 400) return false;
+        const offHit = new Array(16).fill(0);
+        diffs.forEach((i) => { offHit[i & 0x0F]++; });
+        const top = offHit.slice().sort((x, y) => y - x);
+        return top[0] + top[1] > diffs.size * 0.75;
+    },
+
+    trySavedAlgos(a, b, c, km1, km2, km3, diffs) {
+        const hits = [];
+        const recipes = this.knownRecipes();
+        recipes.forEach((code) => {
+            if (/YAMAHA_|ODYSSEY_/i.test(String(code.familyId || code.name || "")) && !this.recipeFitsFile(code, a)) return;
+            let pat1;
+            let pat2 = null;
+            let pat3 = null;
+            try {
+                pat1 = this.encodeRecipe(code, km1);
+                if (b && km2 != null) pat2 = this.encodeRecipe(code, km2);
+                if (c && km3 != null) pat3 = this.encodeRecipe(code, km3);
+            } catch (error) {
+                return;
+            }
+            let locs = MathEngine.findPattern(a, pat1).filter((addr) => {
+                if (diffs && diffs.size) {
+                    let touch = false;
+                    for (let i = 0; i < pat1.length; i++) if (diffs.has(addr + i)) touch = true;
+                    if (!touch) return false;
+                }
+                if (pat2 && !this.patternFits(b, addr, pat2)) return false;
+                if (pat3 && !this.patternFits(c, addr, pat3)) return false;
+                return true;
+            });
+            if (!locs.length) return;
+            if (locs.length > 32) {
+                locs = locs.filter((addr) => {
+                    for (let i = 0; i < pat1.length; i++) if (diffs && diffs.has(addr + i)) return true;
+                    return false;
+                });
+            }
+            if (!locs.length || locs.length > 32) return;
+            locs.forEach((addr) => {
+                const same = this.checksumsThatMove(a, b, addr, code.width)[0] || null;
+                const little = code.endian !== "BE" && code.endian !== "BCD";
+                const copies = this.copiesFor(a, b, c, addr, code.width, little, diffs);
+                hits.push({
+                    line: addr & ~0x0F,
+                    addr: addr,
+                    width: code.width,
+                    endian: code.endian,
+                    formula: code.formula,
+                    raw: this.read(a, addr, code.width, little),
+                    km: km1,
+                    hex: MathEngine.hexBytes(a.slice(addr, addr + code.width)),
+                    checksum: same,
+                    copies: copies,
+                    stair: copies.length,
+                    score: 92 + (same ? 8 : 0) + Math.min(copies.length, 8),
+                    familyId: code.familyId || "",
+                    fromSaved: true,
+                    fromKnown: !!code.familyId,
+                    fromPair: true,
+                    name: code.name
+                });
+            });
+        });
+        return hits;
     },
 
     fromDiscovery(hit) {
@@ -388,21 +557,8 @@ const DeepAttack = {
                 const match = self.matchKnown(raw1, raw2, raw3, km1, km2, km3, job) ||
                     self.matchMany([raw1, raw2, raw3], [km1, km2, km3]);
                 if (!match || !km1 || !raw1) return;
-                const chk1 = self.checksumsOnLine(a, job.line, job.addr, job.width);
-                const chk2 = self.checksumsOnLine(b, job.line, job.addr, job.width);
-                const chk3 = c ? self.checksumsOnLine(c, job.line, job.addr, job.width) : [];
-                let same = chk1.filter((item) => chk2.some((d) => self.sameChkSlot(item, d)));
-                if (chk3.length) same = same.filter((item) => chk3.some((d) => self.sameChkSlot(item, d)));
-                const copies = [];
-                for (let p = 0; p + job.width <= a.length; p += 0x20) {
-                    const r = self.read(a, p, job.width, job.en.little);
-                    if (r === null) break;
-                    if (p > 0 && Math.abs(r - self.read(a, p - 0x20, job.width, job.en.little)) > 8) {
-                        if (p > job.line) break;
-                    }
-                    if (a[p] !== 0xFF) copies.push(p);
-                    if (p > 0x400) break;
-                }
+                const same = self.checksumsThatMove(a, b, job.addr, job.width);
+                const copies = self.copiesFor(a, b, c, job.addr, job.width, job.en.little, self._diffs);
                 hits.push({
                     line: job.line,
                     addr: job.addr,
@@ -413,20 +569,21 @@ const DeepAttack = {
                     km: km1,
                     hex: MathEngine.hexBytes(a.slice(job.addr, job.addr + job.width)),
                     checksum: same[0] || null,
-                    copies: copies.length ? copies : [job.addr],
+                    copies: copies,
                     stair: copies.length,
-                    score: (match.fromKnown ? 97 : 90) + (same[0] ? 8 : 0) + (copies.length > 4 ? 2 : 0) + (c && km3 ? 4 : 0),
+                    score: (match.fromKnown ? 94 : 88) + (same[0] ? 8 : 0) + Math.min(copies.length, 10) + (c && km3 ? 4 : 0),
                     fromKnown: !!match.fromKnown,
-                    name: match.name,
-                    familyId: match.familyId
+                    fromPair: true,
+                    name: match.name || match.formula,
+                    familyId: match.familyId || ""
                 });
             };
 
             const startDiscovery = function () {
                 emit({ phase: "invent", line: lines[0] || 0 });
                 const probe = [];
-                (lines || []).slice(0, 24).forEach((line) => {
-                    [0, 1, 2, 4, 6, 8].forEach((off) => probe.push(line + off));
+                diffs.forEach((addr) => {
+                    if (probe.length < 400) probe.push(addr);
                 });
                 const takeDisc = function (results) {
                     if (settled) return;
@@ -477,30 +634,51 @@ const DeepAttack = {
             }
 
             self.timer = setTimeout(function begin() {
+                const diffs = self.diffBytes(a, [b, c]);
+                self._diffs = diffs;
                 lines = self.changedLinesMany(a, [b, c]);
-                const seeded = self.seedFromRecipes(a, b, c, km1, km2, km3, lines);
-                seeded.forEach((hit) => hits.push(hit));
-                if (hits.some((h) => self.isSolid(h))) {
-                    emit({
-                        found: true,
-                        phase: "known",
-                        formula: hits[0].formula,
-                        line: hits[0].line
+                emit({ phase: "scan", line: lines[0] || 0 });
+                if (self.paintedDump(a, lines, diffs)) {
+                    resolve({
+                        ok: false,
+                        message: "BIN 1 y BIN 2 cambian en casi todo el archivo (" +
+                            lines.length + " líneas). Eso no es un par de kilometraje: suele ser un dump ya pintado con el algoritmo viejo. Carga dos lecturas originales con KM distinto.",
+                        best: null,
+                        lines: lines.length,
+                        tested: 0,
+                        hits: []
                     });
+                    self.running = false;
+                    settled = true;
+                    return;
+                }
+                const saved = self.trySavedAlgos(a, b, c, km1, km2, km3, diffs);
+                saved.forEach((hit) => hits.push(hit));
+                const solidSaved = hits.find((h) => self.isSolid(h));
+                if (solidSaved) {
+                    emit({ found: true, phase: "known", formula: solidSaved.formula, line: solidSaved.line });
                     done(false);
                     return;
                 }
                 const widths = [2, 3, 4];
                 const endians = [{ id: "LE", little: true }, { id: "BE", little: false }];
-                const jobs = [];
-                lines.forEach((line) => {
-                    for (let off = 0; off <= 14; off++) {
-                        widths.forEach((width) => {
-                            if (off + width > 16) return;
-                            endians.forEach((en) => jobs.push({ line: line, addr: line + off, width: width, en: en }));
-                        });
-                    }
+                const jobMap = {};
+                diffs.forEach((addr) => {
+                    widths.forEach((width) => {
+                        const maxStart = addr;
+                        const minStart = Math.max(0, addr - width + 1);
+                        for (let start = minStart; start <= maxStart; start++) {
+                            if ((start & ~0x0F) !== (addr & ~0x0F)) continue;
+                            if (start + width > a.length) continue;
+                            endians.forEach((en) => {
+                                const key = start + "|" + width + "|" + en.id;
+                                if (jobMap[key]) return;
+                                jobMap[key] = { line: start & ~0x0F, addr: start, width: width, en: en };
+                            });
+                        }
+                    });
                 });
+                const jobs = Object.keys(jobMap).map((k) => jobMap[k]);
                 let ji = 0;
                 const tick = function () {
                     if (settled) return;
@@ -543,7 +721,8 @@ const DeepAttack = {
     finish(hits, lines, tested, stopped) {
         this.running = false;
         hits = (hits || []).slice().sort((a, b) => (b.score - a.score) || (b.line - a.line));
-        const best = hits[0] || null;
+        const solid = hits.filter((h) => this.isSolid(h));
+        const best = solid[0] || null;
         const report = {
             ok: !!best,
             stopped: stopped,
@@ -556,7 +735,7 @@ const DeepAttack = {
                     " con " + best.formula + (best.checksum ? " y " + best.checksum.name + " en " + this.hex(best.checksum.storedAt) : "") +
                     ". " + this.decodeHow(best)
                 : "TERMINÓ. Atacé " + (lines || []).length + " líneas que cambian (" + tested +
-                    " pruebas). No hay un KM limpio con los KM conocidos. Revisa KM 1 y KM 2."
+                    " pruebas). Ningún algoritmo guardado calzó en los bytes distintos, y no salió un KM limpio. Revisa KM 1 y KM 2."
         };
         report.discoveries = [];
         this.lastReport = report;

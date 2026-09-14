@@ -45,8 +45,12 @@ const EditorEngine = {
     },
 
     apply(bytes, hit, newValue) {
-        if ((hit.fromStair || hit.fromWorld) && hit.familyId !== "YAMAHA_R5F10") {
-            const written = FamilyLibrary.writeStair(new Uint8Array(bytes), hit, Number(newValue));
+        const copies = (hit.copies || [hit.address]).filter((addr) =>
+            addr >= 0 && addr + (hit.width || 2) <= bytes.length
+        ).slice(0, 32);
+        if (!copies.length) copies.push(hit.address || 0);
+        if ((hit.fromStair || hit.fromWorld) && hit.familyId !== "YAMAHA_R5F10" && copies.length <= 32) {
+            const written = FamilyLibrary.writeStair(new Uint8Array(bytes), Object.assign({}, hit, { copies: copies }), Number(newValue));
             return {
                 bytes: written.bytes,
                 encoded: written.encoded,
@@ -66,14 +70,33 @@ const EditorEngine = {
         }
         const encoded = this.encodeValue(Number(newValue), hit);
         const working = new Uint8Array(bytes);
-        (hit.copies || [hit.address]).forEach((addr) => {
+        copies.forEach((addr) => {
             working.set(encoded, addr);
         });
+        if (hit.checksumAt !== undefined && hit.checksumName) {
+            const size = hit.checksumSize || (/16/.test(hit.checksumName) ? 2 : 1);
+            const name = String(hit.checksumName).toUpperCase();
+            const little = hit.checksumEndian !== "BE";
+            copies.forEach((addr) => {
+                const at = (addr & ~0x0F) + (Number(hit.checksumAt) & 0x0F);
+                if (at < 0 || at + size > working.length) return;
+                let val = 0;
+                if (name.indexOf("CRC16") !== -1) val = ChecksumEngine.crc16(working, addr, addr + hit.width);
+                else if (name.indexOf("CRC8") !== -1) val = ChecksumEngine.crc8(working, addr, addr + hit.width);
+                else if (name.indexOf("XOR") !== -1) {
+                    for (let i = 0; i < hit.width; i++) val ^= working[addr + i];
+                } else if (name.indexOf("COMP") !== -1) {
+                    val = (0x100 - ChecksumEngine.sum8(working, addr, addr + hit.width)) & 0xFF;
+                } else if (name.indexOf("SUM16") !== -1) val = ChecksumEngine.sum16(working, addr, addr + hit.width);
+                else val = ChecksumEngine.sum8(working, addr, addr + hit.width);
+                working.set(MathEngine.toBytes(val, size, little), at);
+            });
+        }
         return {
             bytes: working,
             encoded,
             hex: MathEngine.hexBytes(encoded),
-            copies: (hit.copies || [hit.address]).length
+            copies: copies.length
         };
     },
 

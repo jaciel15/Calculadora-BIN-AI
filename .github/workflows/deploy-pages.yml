@@ -27,6 +27,8 @@ jobs:
           mkdir -p site
           cp -f index.html style.css .nojekyll site/
           cp -f *.js site/
+          mkdir -p site/samples
+          if ls samples/*.bin >/dev/null 2>&1; then cp -f samples/*.bin site/samples/; fi
           if [ -f MT09_TEST.bin ]; then cp -f MT09_TEST.bin site/; fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
