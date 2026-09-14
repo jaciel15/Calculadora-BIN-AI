@@ -372,11 +372,14 @@ body {
     white-space: pre;
     font-family: Consolas, "Courier New", monospace;
     font-size: 13px;
-    line-height: 1.55;
+    line-height: 20px;
     color: #1c1712;
     border-radius: 0 0 14px 14px;
     user-select: none;
 }
+.hex-spacer { position: relative; width: 100%; }
+.hex-window { position: absolute; left: 0; right: 0; }
+.hex-line { height: 20px; line-height: 20px; }
 
 .hex-addr { color: var(--gold); font-weight: 700; }
 

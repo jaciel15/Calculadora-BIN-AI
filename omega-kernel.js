@@ -477,7 +477,6 @@ const OmegaKernel = {
 
         const familyMatch = FamilyLibrary.identify(bytes);
         if (familyMatch) {
-            bin.chip = familyMatch.family.chip;
             this.add(evidence, "EEPROM STRUCTURE", "family", { id: familyMatch.family.id }, familyMatch.confidence, familyMatch.family.status);
             say("DNA MATCH", familyMatch.family.id + " · " + familyMatch.family.status);
             if (familyMatch.decodedKm !== null) {

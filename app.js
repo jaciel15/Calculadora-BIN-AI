@@ -93,58 +93,75 @@ function collectMarks() {
     return marks;
 }
 
+const HEX_STEP = 16;
+const HEX_LINE_H = 20;
+
+function hexLineHtml(bytes, i, marks, mode, addrW) {
+    let html = "<div class=\"hex-line\">";
+    html += "<span class=\"hex-addr\">" + padHex(i, addrW) + "</span> : ";
+    let ascii = "";
+    for (let j = 0; j < HEX_STEP; j++) {
+        if (i + j < bytes.length) {
+            const b = bytes[i + j];
+            const cls = marks[i + j] ? "hex-byte " + marks[i + j] : "hex-byte";
+            html += "<span class=\"" + cls + "\" data-addr=\"" + (i + j) + "\">" + padHex(b, 2) + "</span>";
+            html += (mode === "16-BIT" && j % 2 === 1 ? "  " : " ");
+            const ch = b >= 32 && b <= 126 ? String.fromCharCode(b) : ".";
+            const acls = marks[i + j] ? "hex-ascii " + marks[i + j] : "hex-ascii";
+            ascii += "<span class=\"" + acls + "\" data-addr=\"" + (i + j) + "\">" + ch.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</span>";
+        } else {
+            html += "   ";
+        }
+    }
+    html += " | " + ascii + "</div>";
+    return html;
+}
+
+function fillHexWindow(el) {
+    const bytes = el._hexBytes;
+    const marks = el._hexMarks || {};
+    const windowEl = el.querySelector(".hex-window");
+    if (!windowEl || !bytes) return;
+    const mode = $("hexMode") ? $("hexMode").value : "16-BIT";
+    const addrW = bytes.length > 0xFFFF ? 5 : 4;
+    const totalLines = Math.ceil(bytes.length / HEX_STEP);
+    const note = el.querySelector(".hex-note");
+    const noteH = note ? note.offsetHeight + 8 : 0;
+    const start = Math.max(0, Math.floor(Math.max(0, el.scrollTop - noteH) / HEX_LINE_H) - 8);
+    const viewH = el.clientHeight || 380;
+    const end = Math.min(totalLines, start + Math.ceil(viewH / HEX_LINE_H) + 16);
+    let html = "";
+    for (let line = start; line < end; line++) {
+        html += hexLineHtml(bytes, line * HEX_STEP, marks, mode, addrW);
+    }
+    windowEl.style.top = (start * HEX_LINE_H) + "px";
+    windowEl.innerHTML = html;
+}
+
 function paintHex(targetId, bytes, marks) {
     const el = $(targetId);
     if (!el || !bytes) return;
-    const mode = $("hexMode") ? $("hexMode").value : "16-BIT";
-    const step = 16;
-    const MAX_LINES = 180;
-    const focus = new Set();
-    if (OmegaKernel.compareBins[0]) {
-        const other = OmegaKernel.compareBins[0].bytes;
-        const n = Math.min(bytes.length, other.length);
-        for (let i = 0; i < n; i++) {
-            if (bytes[i] === other[i]) continue;
-            const line = i & ~0x0F;
-            focus.add(line);
-            if (line >= step) focus.add(line - step);
-            if (line + step < bytes.length) focus.add(line + step);
+    marks = marks || {};
+    const totalLines = Math.ceil(bytes.length / HEX_STEP);
+    const rebuilt = el._hexLen !== bytes.length || !el.querySelector(".hex-window");
+    el._hexBytes = bytes;
+    el._hexMarks = marks;
+    el._hexLen = bytes.length;
+    if (rebuilt) {
+        el.innerHTML = "<div class=\"hex-note\">Archivo completo · " + bytes.length + " bytes</div>" +
+            "<div class=\"hex-spacer\" style=\"height:" + (totalLines * HEX_LINE_H) + "px\"><div class=\"hex-window\"></div></div>";
+        if (!el.getAttribute("data-hex-scroll")) {
+            el.setAttribute("data-hex-scroll", "1");
+            el.addEventListener("scroll", function () { fillHexWindow(el); });
         }
+        el.scrollTop = 0;
+    } else {
+        const spacer = el.querySelector(".hex-spacer");
+        if (spacer) spacer.style.height = (totalLines * HEX_LINE_H) + "px";
+        const note = el.querySelector(".hex-note");
+        if (note) note.textContent = "Archivo completo · " + bytes.length + " bytes";
     }
-    const onlyDiff = focus.size > 0;
-    const totalLines = onlyDiff ? focus.size : Math.ceil(bytes.length / step);
-    let shown = 0;
-    let html = "";
-    if (onlyDiff) {
-        html += "<div class=\"hex-note\">Solo líneas que cambian (" +
-            Math.min(totalLines, MAX_LINES) + " de " + Math.ceil(bytes.length / step) +
-            "). El ataque no recorre el archivo entero.</div>";
-    }
-    for (let i = 0; i < bytes.length; i += step) {
-        if (onlyDiff && !focus.has(i)) continue;
-        if (shown >= MAX_LINES) {
-            html += "<div class=\"hex-note\">Hay más líneas. El ataque sigue trabajando solo la variación.</div>";
-            break;
-        }
-        shown++;
-        html += "<span class=\"hex-addr\">" + padHex(i, 4) + "</span> : ";
-        let ascii = "";
-        for (let j = 0; j < step; j++) {
-            if (i + j < bytes.length) {
-                const b = bytes[i + j];
-                const cls = marks[i + j] ? "hex-byte " + marks[i + j] : "hex-byte";
-                html += "<span class=\"" + cls + "\" data-addr=\"" + (i + j) + "\">" + padHex(b, 2) + "</span>";
-                html += (mode === "16-BIT" && j % 2 === 1 ? "  " : " ");
-                const ch = b >= 32 && b <= 126 ? String.fromCharCode(b) : ".";
-                const acls = marks[i + j] ? "hex-ascii " + marks[i + j] : "hex-ascii";
-                ascii += "<span class=\"" + acls + "\" data-addr=\"" + (i + j) + "\">" + ch.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</span>";
-            } else {
-                html += "   ";
-            }
-        }
-        html += " | " + ascii + "\n";
-    }
-    el.innerHTML = html;
+    fillHexWindow(el);
 }
 
 function bindHexOracle() {
@@ -725,8 +742,10 @@ function knownVin2() {
 }
 
 function scrollHexTo(addr) {
-    const el = document.querySelector("#hexViewer [data-addr=\"" + addr + "\"]");
-    if (el) el.scrollIntoView({ block: "center" });
+    const el = $("hexViewer");
+    if (!el || !Number.isFinite(addr)) return;
+    el.scrollTop = Math.floor(addr / HEX_STEP) * HEX_LINE_H;
+    fillHexWindow(el);
 }
 
 function renderVinAnalysis(analysis) {

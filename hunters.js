@@ -153,18 +153,8 @@ const Hunters = {
     },
 
     detectChip(size) {
-        const chips = {
-            256: "24C02",
-            512: "24C04",
-            1024: "24C08",
-            2048: "24C16",
-            4096: "24C32",
-            8192: "24C64",
-            16384: "24C128",
-            32768: "25LC256",
-            65536: "25LC512"
-        };
-        return chips[size] || "EEPROM " + size + "B";
+        const n = Number(size) || 0;
+        return "ARCHIVO COMPLETO · " + n + " B";
     }
 
 };

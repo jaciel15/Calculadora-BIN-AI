@@ -11,14 +11,13 @@ class BINCore {
         this.addLog("BIN CORE", "Archivo cargado: " + binObject.fileName + " (" + binObject.fileSize + " bytes)");
         const family = FamilyLibrary.identify(binObject.original);
         if (family) {
-            binObject.chip = family.family.chip;
             binObject.family = family;
             this.addLog("DNA MATCH", family.family.id + " · " + family.family.status);
             if (family.decodedKm !== null) {
                 this.addLog("FAMILY KERNEL", "KM leído: " + family.decodedKm);
             }
         } else {
-            this.addLog("EEPROM", "Chip estimado: " + binObject.chip);
+            this.addLog("ARCHIVO", "Cargado completo: " + binObject.totalBytes + " bytes");
         }
         return binObject;
     }
