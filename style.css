@@ -1103,7 +1103,18 @@ html, body {
     padding: 28px;
     box-shadow: var(--glow);
 }
-.attack-box h2 { margin: 0 0 10px; color: #0b6e99; }
+.attack-sim {
+    margin: 12px 0 0;
+    max-height: 220px;
+    overflow: auto;
+    background: #072033;
+    color: #c8fff0;
+    border: 1px solid #00b4e6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: pre-wrap;
+}
 .attack-bar {
     height: 18px;
     background: #d4deea;

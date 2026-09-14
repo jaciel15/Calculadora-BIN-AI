@@ -144,6 +144,7 @@ const DiscoveryManager = {
                 };
                 self.worker.onerror = function (error) {
                     emit("DISCOVERY_ERROR", { message: String(error.message || error) });
+                    finish([]);
                 };
                 self.worker.postMessage({ type: "DISCOVERY_START", payload: {
                     km1: config.km1,

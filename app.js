@@ -381,6 +381,7 @@ function paintAttackPoster(canvasId, best) {
         "Checksum / CRC: " + (best.checksumName
             ? best.checksumName + " @ " + padHex(best.checksumAt || 0) + (best.checksumEndian ? " " + best.checksumEndian : "")
             : "no ligado (el KM se sostiene por copias)"),
+        "VIN: " + (best.vin || "buscado en BIN 1/2/3"),
         "Algoritmo: " + (best.name || best.formula || "del par"),
         best.fromSaved ? "Usó un algoritmo guardado que SÍ calzó en los bytes distintos." :
             "Los algoritmos guardados que no calzaron se descartaron."
@@ -1899,6 +1900,21 @@ function clockText(ms) {
     return m + ":" + String(r).padStart(2, "0") + " / 10:00";
 }
 
+function fillAttackSim(info) {
+    const box = $("attackSim");
+    if (!box) return;
+    const vinLine = (info.vins || []).filter((v) => v.value && !/^P{8}/.test(v.value))
+        .map((v) => v.file + " " + v.value + (v.address != null ? " @" + padHex(v.address) : ""))
+        .slice(0, 4).join(" · ");
+    const sims = (info.sim || []).map((s) =>
+        "KM " + s.km + " → " + s.hex + " · " + s.copies + " copias · " + s.bytes + " bytes " + (s.ok ? "OK" : "REVISAR")
+    ).join("\n");
+    box.textContent = (vinLine ? "VIN: " + vinLine + "\n" : "") +
+        (info.phase === "sim" ? "SIMULADOR (el cerebro fabrica archivos de prueba)\n" : "") +
+        (sims || "Juntando hipótesis en los bytes que cambian…") +
+        (info.formula ? "\nFórmula en juego: " + info.formula : "");
+}
+
 function showAttackToast(text) {
     const box = $("attackToast");
     if (!box) {
@@ -1944,7 +1960,7 @@ async function startDeepAttack() {
         fill.style.width = "2%";
     }
     setStatus("CARGANDO", "busy");
-    if (status) status.textContent = "En carga. KM 1 = " + km1 + " · KM 2 = " + km2 + ". Si el KM sale claro, termina. Si no, espera hasta 10:00.";
+    if (status) status.textContent = "En carga. KM 1 = " + km1 + " · KM 2 = " + km2 + ". Simula 2 min, mínimo 5:00, si hace falta 10:00.";
     if (clock) clock.textContent = "0:00 / 10:00";
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     let report;
@@ -1959,24 +1975,17 @@ async function startDeepAttack() {
             onTick: function (info) {
                 if (fill) fill.style.width = info.pct.toFixed(1) + "%";
                 if (clock) clock.textContent = clockText(info.elapsed);
-                if (info.found) {
-                    if (fill) {
-                        fill.style.width = "100%";
-                        fill.classList.remove("busy");
-                        fill.classList.add("done");
-                    }
-                    setStatus("KM DETECTADO", "ok");
-                    if (status) status.textContent = "KM encontrado: " + (info.formula || "") + ". Listo para el archivo.";
-                    return;
-                }
+                fillAttackSim(info);
                 setStatus("CARGANDO", "busy");
                 if (status) {
-                    if (info.phase === "invent") {
-                        status.textContent = "Sigo en carga hasta 10 min. Inventando fórmula en las líneas que cambian…";
+                    if (info.phase === "sim") {
+                        status.textContent = "Simulando 2 min: fabrica archivos con la hipótesis y los muestra abajo.";
+                    } else if (info.phase === "invent") {
+                        status.textContent = "IA inventando fórmula. Mínimo 5:00, si hace falta hasta 10:00.";
                     } else {
-                        status.textContent = "En carga. Línea " + padHex(info.line || 0) + " · " +
-                            info.tested + " pruebas · " + info.hits + " hipótesis · " +
-                            info.lines + " líneas que cambian";
+                        status.textContent = "Atacando diffs · XOR por byte · VIN. Línea " +
+                            padHex(info.line || 0) + " · " + info.tested + " pruebas · " +
+                            info.hits + " hipótesis";
                     }
                 }
             }
@@ -2034,6 +2043,14 @@ async function startDeepAttack() {
     showBin3Ask(need3);
     const extra = "<p>" + report.message + "</p><p>Líneas distintas: " +
         report.lines + " · Pruebas: " + report.tested + "</p>" +
+        (report.vins && report.vins[0]
+            ? "<p>VIN: " + escapeText(report.vins.filter((v) => v.value && !/^P{8}/.test(v.value)).map((v) => v.value).join(" · ") || "no leí VIN") + "</p>"
+            : "") +
+        (report.sim && report.sim.length
+            ? "<p><strong>Simulador</strong></p><pre>" + report.sim.map((s) =>
+                "KM " + s.km + " → " + s.hex + " · " + s.copies + " copias · " + s.bytes + " bytes " + (s.ok ? "OK" : "REVISAR")
+            ).join("\n") + "</pre>"
+            : "") +
         (need3
             ? "<p><strong>Falta un tercer BIN</strong> con otro KM para cerrar CRC/SUM en un entorno distinto. Súbelo en BIN 3 y vuelve a ATAQUE 10 MIN. Si ya quieres el archivo, pulsa SÍ.</p>"
             : (OmegaKernel.compareBins[1]

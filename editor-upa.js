@@ -1,11 +1,34 @@
 const EditorEngine = {
 
     encodeValue(value, hit) {
-        if (hit.formula === "BCD") {
-            return MathEngine.toBCD(value, hit.width);
+        const formula = String(hit.formula || "X");
+        const xorSpec = this.parseXor(formula);
+        const base = xorSpec.base || formula;
+        let encoded;
+        if (base === "BCD") encoded = MathEngine.toBCD(value, hit.width);
+        else encoded = MathEngine.toBytes(this.applyFormula(value, base), hit.width, hit.endian !== "BE");
+        if (xorSpec.keys && xorSpec.keys.length) {
+            const out = new Uint8Array(encoded);
+            for (let i = 0; i < out.length; i++) out[i] ^= xorSpec.keys[i % xorSpec.keys.length];
+            return out;
         }
-        const numeric = this.applyFormula(value, hit.formula);
-        return MathEngine.toBytes(numeric, hit.width, hit.endian !== "BE");
+        return encoded;
+    },
+
+    parseXor(formula) {
+        const f = String(formula || "X");
+        let m = f.match(/^(.*?)\s+XORBYTES\s+([0-9A-F]{2}(?:-[0-9A-F]{2})*)$/i);
+        if (m) {
+            return {
+                base: m[1].trim() || "X",
+                keys: m[2].split("-").map((h) => parseInt(h, 16))
+            };
+        }
+        m = f.match(/^(.*?)\s+XORBYTE\s+([0-9A-F]{1,2})$/i);
+        if (m) {
+            return { base: m[1].trim() || "X", keys: [parseInt(m[2], 16)] };
+        }
+        return { base: f, keys: null };
     },
 
     applyFormula(value, formula) {
@@ -47,7 +70,7 @@ const EditorEngine = {
     apply(bytes, hit, newValue) {
         const copies = (hit.copies || [hit.address]).filter((addr) =>
             addr >= 0 && addr + (hit.width || 2) <= bytes.length
-        ).slice(0, 32);
+        ).slice(0, 64);
         if (!copies.length) copies.push(hit.address || 0);
         if ((hit.fromStair || hit.fromWorld) && hit.familyId !== "YAMAHA_R5F10" && copies.length <= 32) {
             const written = FamilyLibrary.writeStair(new Uint8Array(bytes), Object.assign({}, hit, { copies: copies }), Number(newValue));
@@ -77,13 +100,19 @@ const EditorEngine = {
             const size = hit.checksumSize || (/16/.test(hit.checksumName) ? 2 : 1);
             const name = String(hit.checksumName).toUpperCase();
             const little = hit.checksumEndian !== "BE";
+            const kmPage = (Number(hit.address) || copies[0] || 0) & ~0x0F;
+            const chkOff = Number(hit.checksumAt) - kmPage;
             copies.forEach((addr) => {
-                const at = (addr & ~0x0F) + (Number(hit.checksumAt) & 0x0F);
+                const at = (addr & ~0x0F) + chkOff;
                 if (at < 0 || at + size > working.length) return;
+                if (at >= addr && at < addr + (hit.width || 2)) return;
                 let val = 0;
-                if (name.indexOf("CRC16") !== -1) val = ChecksumEngine.crc16(working, addr, addr + hit.width);
+                if (name.indexOf("CRC16-IBM") !== -1) val = ChecksumEngine.crc16IBM(working, addr, addr + hit.width);
+                else if (name.indexOf("CRC16") !== -1) val = ChecksumEngine.crc16(working, addr, addr + hit.width);
                 else if (name.indexOf("CRC8") !== -1) val = ChecksumEngine.crc8(working, addr, addr + hit.width);
+                else if (name.indexOf("XOR16") !== -1) val = ChecksumEngine.xor16(working, addr, addr + hit.width);
                 else if (name.indexOf("XOR") !== -1) {
+                    val = 0;
                     for (let i = 0; i < hit.width; i++) val ^= working[addr + i];
                 } else if (name.indexOf("COMP") !== -1) {
                     val = (0x100 - ChecksumEngine.sum8(working, addr, addr + hit.width)) & 0xFF;

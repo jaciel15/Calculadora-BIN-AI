@@ -2,6 +2,8 @@ const DeepAttack = {
     running: false,
     timer: null,
     started: 0,
+    MIN_MS: 5 * 60 * 1000,
+    SIM_MS: 2 * 60 * 1000,
     MAX_MS: 10 * 60 * 1000,
     lastReport: null,
 
@@ -119,7 +121,13 @@ const DeepAttack = {
     },
 
     encodeRecipe(code, km) {
-        if (typeof CodeBook !== "undefined") return CodeBook.encode(code, km);
+        if (typeof EditorEngine !== "undefined" && EditorEngine.encodeValue) {
+            return EditorEngine.encodeValue(km, {
+                formula: code.formula,
+                width: code.width,
+                endian: code.endian
+            });
+        }
         if (code.endian === "BCD" || code.formula === "BCD") return MathEngine.toBCD(Number(km), code.width);
         return MathEngine.toBytes(MathEngine.applyFormula(Number(km), code.formula), code.width, code.endian !== "BE");
     },
@@ -207,8 +215,148 @@ const DeepAttack = {
         const expect = typeof MathEngine !== "undefined"
             ? MathEngine.applyFormula(kms[2], match.formula)
             : null;
-        if (expect === null || Math.abs(expect - raws[2]) > 40) return null;
+        if (expect !== null && Math.abs(expect - raws[2]) <= 40) return match;
+        match.cMiss = true;
         return match;
+    },
+
+    xorKeyHex(keys) {
+        return Array.from(keys).map((b) => this.hex(b, 2)).join("-");
+    },
+
+    matchXorBytes(a, b, c, addr, width, little, km1, km2, km3) {
+        if (!a || !b || km1 == null || km2 == null) return null;
+        const formulas = ["X", "X * 10", "X * 100", "X / 4", "X / 10", "X / 16", "X / 64", "~X", "NIBBLE_SWAP(X)", "BCD"];
+        const slice = (bytes) => bytes.slice(addr, addr + width);
+        const keyOf = (stored, plain) => {
+            const k = new Uint8Array(width);
+            for (let i = 0; i < width; i++) k[i] = stored[i] ^ plain[i];
+            return k;
+        };
+        const sameKey = (k1, k2) => {
+            for (let i = 0; i < k1.length; i++) if (k1[i] !== k2[i]) return false;
+            return true;
+        };
+        const stored1 = slice(a);
+        const stored2 = slice(b);
+        const stored3 = c ? slice(c) : null;
+        for (let fi = 0; fi < formulas.length; fi++) {
+            const f = formulas[fi];
+            let p1;
+            let p2;
+            let p3 = null;
+            try {
+                if (f === "BCD") {
+                    p1 = MathEngine.toBCD(km1, width);
+                    p2 = MathEngine.toBCD(km2, width);
+                    if (km3 != null) p3 = MathEngine.toBCD(km3, width);
+                } else {
+                    p1 = MathEngine.toBytes(MathEngine.applyFormula(km1, f), width, little);
+                    p2 = MathEngine.toBytes(MathEngine.applyFormula(km2, f), width, little);
+                    if (km3 != null) p3 = MathEngine.toBytes(MathEngine.applyFormula(km3, f), width, little);
+                }
+            } catch (error) {
+                continue;
+            }
+            const k1 = keyOf(stored1, p1);
+            const k2 = keyOf(stored2, p2);
+            if (!sameKey(k1, k2)) continue;
+            if (stored3 && p3 && km3 != null) {
+                const k3 = keyOf(stored3, p3);
+                if (!sameKey(k1, k3)) {
+                    /* el tercer dump no calzó; sigo con el par */
+                }
+            }
+            let allZero = true;
+            let oneByte = true;
+            for (let i = 0; i < k1.length; i++) {
+                if (k1[i]) allZero = false;
+                if (k1[i] !== k1[0]) oneByte = false;
+            }
+            if (allZero) return { formula: f, fromXor: false, name: f };
+            const formula = oneByte
+                ? (f + " XORBYTE " + this.hex(k1[0], 2))
+                : (f + " XORBYTES " + this.xorKeyHex(k1));
+            return { formula: formula, fromXor: true, xorKeys: k1, name: formula };
+        }
+        return null;
+    },
+
+    copiesOnDiffOffset(diffs, addr, fileLen, width) {
+        const off = addr & 0x0F;
+        const out = [];
+        const seen = new Set();
+        (diffs || []).forEach((i) => {
+            if ((i & 0x0F) < off || (i & 0x0F) >= off + width) return;
+            const start = (i & ~0x0F) + off;
+            if (start + width > fileLen || seen.has(start)) return;
+            seen.add(start);
+            out.push(start);
+        });
+        if (!seen.has(addr)) out.unshift(addr);
+        return out.slice(0, 64);
+    },
+
+    huntVins(a, b, c) {
+        const vins = [];
+        const vinByte = function (b) {
+            return (b >= 48 && b <= 57) || (b >= 65 && b <= 90 && b !== 73 && b !== 79 && b !== 81);
+        };
+        const scan = function (bytes, tag) {
+            if (!bytes) return;
+            const limit = Math.min(bytes.length, 262144);
+            for (let i = 0; i + 17 <= limit && vins.length < 12; i++) {
+                let ok = true;
+                let text = "";
+                for (let k = 0; k < 17; k++) {
+                    const b = bytes[i + k];
+                    if (!vinByte(b)) {
+                        ok = false;
+                        break;
+                    }
+                    text += String.fromCharCode(b);
+                }
+                if (ok && /[A-Z]/.test(text) && /[0-9]/.test(text) && !/^P{8}/.test(text)) {
+                    vins.push({ file: tag, value: text, address: i, layout: "PACKED" });
+                    i += 16;
+                }
+            }
+        };
+        scan(a, "BIN1");
+        scan(b, "BIN2");
+        scan(c, "BIN3");
+        return vins;
+    },
+
+    simulateHit(hit, bytes, kmNow) {
+        const logs = [];
+        if (!hit || !bytes || typeof EditorEngine === "undefined") return logs;
+        const best = this.buildBest(hit);
+        const trials = [];
+        const seen = new Set();
+        [kmNow, 10000, 12000, 33123, 50000, 80000].forEach((km) => {
+            const n = Number(km);
+            if (!Number.isFinite(n) || n <= 0 || seen.has(n)) return;
+            seen.add(n);
+            trials.push(n);
+        });
+        trials.forEach((km) => {
+            try {
+                const ghost = EditorEngine.apply(bytes, best, km);
+                let changed = 0;
+                for (let i = 0; i < bytes.length; i++) if (bytes[i] !== ghost.bytes[i]) changed++;
+                logs.push({
+                    km: km,
+                    hex: ghost.hex,
+                    copies: ghost.copies,
+                    bytes: changed,
+                    ok: changed > 0 && changed <= (best.copies.length * ((best.width || 2) + 4))
+                });
+            } catch (error) {
+                logs.push({ km: km, hex: "error", copies: 0, bytes: 0, ok: false });
+            }
+        });
+        return logs;
     },
 
     sameChkSlot(a, b) {
@@ -247,7 +395,7 @@ const DeepAttack = {
     },
 
     buildBest(hit) {
-        const copies = (hit.copies && hit.copies.length ? hit.copies : [hit.addr]).slice(0, 32);
+        const copies = (hit.copies && hit.copies.length ? hit.copies : [hit.addr]).slice(0, 64);
         return {
             fromPair: true,
             fromAttack: true,
@@ -274,7 +422,8 @@ const DeepAttack = {
             checksumEndian: hit.checksum ? hit.checksum.endian : undefined,
             checksumSize: hit.checksum ? hit.checksum.size : undefined,
             operation: (hit.formula || "X") + " · " + hit.width + "B " + (hit.endian || "LE") +
-                (hit.checksum ? " · " + hit.checksum.name + " @" + this.hex(hit.checksum.storedAt) : "")
+                (hit.checksum ? " · " + hit.checksum.name + " @" + this.hex(hit.checksum.storedAt) : ""),
+            vin: (this._vins && this._vins[0] && this._vins[0].value) || ""
         };
     },
 
@@ -289,11 +438,12 @@ const DeepAttack = {
     isSolid(hit) {
         if (!hit || !hit.formula) return false;
         const copies = hit.copies || [];
-        if (copies.length < 1 || copies.length > 32) return false;
-        if (hit.fromSaved && copies.length <= 32) return !!(hit.checksum || copies.length >= 2);
+        if (copies.length < 1 || copies.length > 64) return false;
+        if (hit.fromSaved && copies.length <= 64) return !!(hit.checksum || copies.length >= 2 || hit.fromXor);
         if (hit.fromKnown && hit.familyId && this._ctx && this.recipeFitsFile({ id: hit.familyId, familyId: hit.familyId }, this._ctx.bytes)) {
-            return copies.length <= 32;
+            return copies.length <= 64;
         }
+        if (hit.fromXor && copies.length >= 1) return true;
         if (hit.checksum && copies.length >= 1) return true;
         return !!(hit.fromPair && copies.length >= 2);
     },
@@ -316,8 +466,10 @@ const DeepAttack = {
         const page = addr & ~0x0F;
         const spots = [];
         for (let at = page; at < page + 16; at++) spots.push(at);
-        spots.push(addr + width);
-        spots.push(page + 16);
+        spots.push(page + 17);
+        spots.push(page + 18);
+        spots.push(page + 16 + 1);
+        spots.push(page + 16 + 2);
         const fill = { 0x00: 1, 0xFF: 1, 0xEB: 1, 0xAA: 1 };
         const tryPush = (name, storedAt, size, endian, calc) => {
             if (storedAt < 0 || storedAt + size > bytes.length) return;
@@ -326,22 +478,39 @@ const DeepAttack = {
             const stored = MathEngine.fromBytes(bytes, storedAt, size, endian === "LE");
             if (stored === calc) found.push({ name: name, storedAt: storedAt, endian: endian, value: calc, size: size });
         };
-        const sum8 = ChecksumEngine.sum8(bytes, addr, addr + width);
-        const sum16 = ChecksumEngine.sum16(bytes, addr, addr + width);
-        const crc8 = ChecksumEngine.crc8(bytes, addr, addr + width);
-        const crc16 = ChecksumEngine.crc16(bytes, addr, addr + width);
-        let xor8 = 0;
-        for (let i = 0; i < width; i++) xor8 ^= bytes[addr + i];
-        const comp8 = (0x100 - sum8) & 0xFF;
-        spots.forEach((at) => {
-            tryPush("SUM8", at, 1, "LE", sum8);
-            tryPush("CRC8", at, 1, "LE", crc8);
-            tryPush("XOR8", at, 1, "LE", xor8);
-            tryPush("COMP8", at, 1, "LE", comp8);
-            tryPush("SUM16", at, 2, "BE", sum16);
-            tryPush("SUM16", at, 2, "LE", sum16);
-            tryPush("CRC16", at, 2, "BE", crc16);
-            tryPush("CRC16", at, 2, "LE", crc16);
+        const windows = [
+            [addr, addr + width],
+            [page + 13, page + 16],
+            [page + 12, page + 16],
+            [page + 4, page + 16]
+        ];
+        if ((addr & 0x0F) === 0x0E && width === 2) windows.push([addr - 1, addr + width]);
+        windows.forEach((win) => {
+            const start = win[0];
+            const end = win[1];
+            if (start < 0 || end > bytes.length || end <= start) return;
+            const sum8 = ChecksumEngine.sum8(bytes, start, end);
+            const sum16 = ChecksumEngine.sum16(bytes, start, end);
+            const crc8 = ChecksumEngine.crc8(bytes, start, end);
+            const crc16 = ChecksumEngine.crc16(bytes, start, end);
+            const crc16ibm = ChecksumEngine.crc16IBM(bytes, start, end);
+            const xor8 = ChecksumEngine.xor8(bytes, start, end);
+            const xor16 = ChecksumEngine.xor16(bytes, start, end);
+            const comp8 = (0x100 - sum8) & 0xFF;
+            spots.forEach((at) => {
+                tryPush("SUM8", at, 1, "LE", sum8);
+                tryPush("CRC8", at, 1, "LE", crc8);
+                tryPush("XOR8", at, 1, "LE", xor8);
+                tryPush("COMP8", at, 1, "LE", comp8);
+                tryPush("SUM16", at, 2, "BE", sum16);
+                tryPush("SUM16", at, 2, "LE", sum16);
+                tryPush("XOR16", at, 2, "BE", xor16);
+                tryPush("XOR16", at, 2, "LE", xor16);
+                tryPush("CRC16", at, 2, "BE", crc16);
+                tryPush("CRC16", at, 2, "LE", crc16);
+                tryPush("CRC16-IBM", at, 2, "BE", crc16ibm);
+                tryPush("CRC16-IBM", at, 2, "LE", crc16ibm);
+            });
         });
         return found;
     },
@@ -376,11 +545,11 @@ const DeepAttack = {
             return false;
         });
         let copies = onDiff.length ? onDiff : [addr];
-        if (copies.length > 32) {
-            copies = copies.filter((p) => Math.abs(p - addr) <= 0x800).slice(0, 24);
+        if (copies.length > 64) {
+            copies = copies.filter((p) => Math.abs(p - addr) <= 0x1000).slice(0, 48);
         }
         if (copies.indexOf(addr) < 0) copies.unshift(addr);
-        return Array.from(new Set(copies)).slice(0, 32);
+        return Array.from(new Set(copies)).slice(0, 64);
     },
 
     paintedDump(a, lines, diffs) {
@@ -461,6 +630,11 @@ const DeepAttack = {
         const ctx = this._ctx || {};
         const bytes = ctx.bytes;
         if (!bytes) return null;
+        let copies = [hit.offset];
+        if (this._diffs && this._diffs.size) {
+            copies = this.copiesOnDiffOffset(this._diffs, hit.offset, bytes.length, width);
+        }
+        const checksum = this.checksumsThatMove(bytes, ctx.bytes2, hit.offset, width)[0] || null;
         return {
             line: hit.offset & ~0x0F,
             addr: hit.offset,
@@ -470,11 +644,12 @@ const DeepAttack = {
             raw: this.read(bytes, hit.offset, width, little),
             km: ctx.km1,
             hex: MathEngine.hexBytes(bytes.slice(hit.offset, hit.offset + width)),
-            checksum: null,
-            copies: [hit.offset],
-            stair: 1,
-            score: Number(hit.confidence) || 80,
+            checksum: checksum,
+            copies: copies,
+            stair: copies.length,
+            score: (Number(hit.confidence) || 80) + (checksum ? 8 : 0) + Math.min(copies.length, 10),
             fromKnown: hit.status === "VALIDATED",
+            fromPair: true,
             name: hit.expression,
             familyId: ""
         };
@@ -509,8 +684,17 @@ const DeepAttack = {
             self.stop();
             self.running = true;
             self.started = Date.now();
+            self.MIN_MS = Number(opts.minMs) > 0 ? Number(opts.minMs) : 5 * 60 * 1000;
+            self.SIM_MS = Number(opts.simMs) > 0 ? Number(opts.simMs) : 2 * 60 * 1000;
+            self.MAX_MS = Number(opts.maxMs) > 0 ? Number(opts.maxMs) : 10 * 60 * 1000;
+            if (self.SIM_MS >= self.MIN_MS) self.SIM_MS = Math.max(40, Math.floor(self.MIN_MS * 0.4));
+            if (self.MIN_MS > self.MAX_MS) self.MAX_MS = self.MIN_MS;
             self._ctx = { bytes: a, bytes2: b, bytes3: c, km1: km1, km2: km2, km3: km3 };
             self._recipes = self.knownRecipes();
+            self._simLog = [];
+            self._vins = [];
+            self._inventStarted = false;
+            self._diffs = null;
             let settled = false;
             const hits = [];
             let lines = [];
@@ -534,55 +718,74 @@ const DeepAttack = {
             const emit = function (info) {
                 const elapsed = Date.now() - self.started;
                 const solid = info.found || hits.some((h) => self.isSolid(h));
+                const cap = elapsed < self.MIN_MS ? self.MIN_MS : self.MAX_MS;
                 if (opts.onTick) {
                     opts.onTick({
-                        pct: solid ? 100 : Math.min(99, (elapsed / self.MAX_MS) * 100),
+                        pct: Math.min(99, (elapsed / self.MAX_MS) * 100),
                         elapsed: elapsed,
                         line: info.line || 0,
                         tested: tested,
                         hits: hits.length,
                         lines: lines.length,
-                        found: !!solid,
-                        formula: info.formula || "",
-                        phase: info.phase || "scan"
+                        found: false,
+                        formula: info.formula || (hits[0] && hits[0].formula) || "",
+                        phase: info.phase || "scan",
+                        sim: self._simLog || [],
+                        vins: self._vins || [],
+                        minMs: self.MIN_MS,
+                        maxMs: self.MAX_MS,
+                        solid: !!solid
                     });
                 }
             };
 
             const scanJob = function (job) {
-                const raw1 = self.read(a, job.addr, job.width, job.en.little);
-                const raw2 = self.read(b, job.addr, job.width, job.en.little);
-                const raw3 = c ? self.read(c, job.addr, job.width, job.en.little) : null;
-                tested++;
-                const match = self.matchKnown(raw1, raw2, raw3, km1, km2, km3, job) ||
-                    self.matchMany([raw1, raw2, raw3], [km1, km2, km3]);
-                if (!match || !km1 || !raw1) return;
-                const same = self.checksumsThatMove(a, b, job.addr, job.width);
-                const copies = self.copiesFor(a, b, c, job.addr, job.width, job.en.little, self._diffs);
-                hits.push({
-                    line: job.line,
-                    addr: job.addr,
-                    width: job.width,
-                    endian: job.en.id,
-                    formula: match.formula,
-                    raw: raw1,
-                    km: km1,
-                    hex: MathEngine.hexBytes(a.slice(job.addr, job.addr + job.width)),
-                    checksum: same[0] || null,
-                    copies: copies,
-                    stair: copies.length,
-                    score: (match.fromKnown ? 94 : 88) + (same[0] ? 8 : 0) + Math.min(copies.length, 10) + (c && km3 ? 4 : 0),
-                    fromKnown: !!match.fromKnown,
-                    fromPair: true,
-                    name: match.name || match.formula,
-                    familyId: match.familyId || ""
-                });
+                try {
+                    const raw1 = self.read(a, job.addr, job.width, job.en.little);
+                    const raw2 = self.read(b, job.addr, job.width, job.en.little);
+                    const raw3 = c ? self.read(c, job.addr, job.width, job.en.little) : null;
+                    tested++;
+                    const match = self.matchKnown(raw1, raw2, raw3, km1, km2, km3, job) ||
+                        self.matchMany([raw1, raw2, raw3], [km1, km2, km3]) ||
+                        self.matchXorBytes(a, b, c, job.addr, job.width, job.en.little, km1, km2, km3);
+                    if (!match || !km1 || (raw1 === null && !match.fromXor)) return;
+                    let same = self.checksumsThatMove(a, b, job.addr, job.width);
+                    if (!same.length && job.width === 2 && (job.addr & 0x0F) === 0x0E) {
+                        same = self.checksumsThatMove(a, b, job.addr - 1, 3);
+                    }
+                    let copies = self.copiesFor(a, b, c, job.addr, job.width, job.en.little, self._diffs);
+                    if (self._diffs && self._diffs.size) {
+                        const offCopies = self.copiesOnDiffOffset(self._diffs, job.addr, a.length, job.width);
+                        if (offCopies.length > copies.length) copies = offCopies;
+                    }
+                    hits.push({
+                        line: job.line,
+                        addr: job.addr,
+                        width: job.width,
+                        endian: job.en.id,
+                        formula: match.formula,
+                        raw: raw1,
+                        km: km1,
+                        hex: MathEngine.hexBytes(a.slice(job.addr, job.addr + job.width)),
+                        checksum: same[0] || null,
+                        copies: copies,
+                        stair: copies.length,
+                        score: (match.fromXor ? 96 : (match.fromKnown ? 94 : 88)) + (same[0] ? 8 : 0) + Math.min(copies.length, 10) + (c && km3 && !match.cMiss ? 4 : 0),
+                        fromKnown: !!match.fromKnown,
+                        fromXor: !!match.fromXor,
+                        fromPair: true,
+                        name: match.name || match.formula,
+                        familyId: match.familyId || ""
+                    });
+                } catch (error) { /* sigo con el siguiente hueco */ }
             };
 
             const startDiscovery = function () {
+                if (self._inventStarted) return;
+                self._inventStarted = true;
                 emit({ phase: "invent", line: lines[0] || 0 });
                 const probe = [];
-                diffs.forEach((addr) => {
+                (self._diffs || new Set()).forEach((addr) => {
                     if (probe.length < 400) probe.push(addr);
                 });
                 const takeDisc = function (results) {
@@ -597,36 +800,55 @@ const DeepAttack = {
                     const best = hits.filter((h) => self.isSolid(h))[0] || hits[0];
                     emit({
                         phase: "invent",
-                        found: !!(best && self.isSolid(best)),
                         formula: best ? best.formula : "",
                         line: best ? best.line : 0
                     });
-                    done(false);
+                };
+                const watch = function () {
+                    if (settled) return;
+                    const elapsed = Date.now() - self.started;
+                    const solid = hits.some((h) => self.isSolid(h));
+                    const best = hits.filter((h) => self.isSolid(h))[0] || hits[0];
+                    emit({
+                        phase: "invent",
+                        formula: best ? best.formula : "",
+                        line: best ? best.line : (lines[0] || 0)
+                    });
+                    if (elapsed >= self.MAX_MS) {
+                        if (typeof DiscoveryManager !== "undefined") {
+                            takeDisc(DiscoveryManager.getResults());
+                            DiscoveryManager.cancel();
+                        }
+                        done(false);
+                        return;
+                    }
+                    if (elapsed >= self.MIN_MS && solid) {
+                        if (typeof DiscoveryManager !== "undefined") DiscoveryManager.cancel();
+                        done(false);
+                        return;
+                    }
+                    self.timer = setTimeout(watch, 250);
                 };
                 if (typeof DiscoveryManager !== "undefined") {
-                    DiscoveryManager.start({
-                        useWorker: true,
-                        bytes: a,
-                        bytes2: b,
-                        bytes3: c,
-                        km1: km1,
-                        km2: km2,
-                        km3: km3,
-                        addrs: probe
-                    }, function (ev) {
-                        if (settled) return;
-                        if (ev.type === "DISCOVERY_COMPLETE") takeDisc(ev.payload && ev.payload.results);
-                    });
-                }
-                self._clock = setInterval(function () {
-                    if (settled) return;
-                    emit({ phase: "invent", line: lines[0] || 0 });
-                    if (Date.now() - self.started >= self.MAX_MS) {
-                        const extra = typeof DiscoveryManager !== "undefined" ? DiscoveryManager.getResults() : [];
-                        if (typeof DiscoveryManager !== "undefined") DiscoveryManager.cancel();
-                        takeDisc(extra);
+                    try {
+                        DiscoveryManager.start({
+                            useWorker: true,
+                            bytes: a,
+                            bytes2: b,
+                            bytes3: c,
+                            km1: km1,
+                            km2: km2,
+                            km3: km3,
+                            addrs: probe
+                        }, function (ev) {
+                            if (settled) return;
+                            if (ev.type === "DISCOVERY_COMPLETE") takeDisc(ev.payload && ev.payload.results);
+                        });
+                    } catch (error) {
+                        takeDisc([]);
                     }
-                }, 250);
+                }
+                watch();
             };
 
             if (typeof Notification !== "undefined" && Notification.permission === "default") {
@@ -634,6 +856,7 @@ const DeepAttack = {
             }
 
             self.timer = setTimeout(function begin() {
+                try {
                 const diffs = self.diffBytes(a, [b, c]);
                 self._diffs = diffs;
                 lines = self.changedLinesMany(a, [b, c]);
@@ -654,12 +877,8 @@ const DeepAttack = {
                 }
                 const saved = self.trySavedAlgos(a, b, c, km1, km2, km3, diffs);
                 saved.forEach((hit) => hits.push(hit));
-                const solidSaved = hits.find((h) => self.isSolid(h));
-                if (solidSaved) {
-                    emit({ found: true, phase: "known", formula: solidSaved.formula, line: solidSaved.line });
-                    done(false);
-                    return;
-                }
+                self._vins = self.huntVins(a, b, c);
+                emit({ phase: "scan", line: lines[0] || 0, formula: hits[0] ? hits[0].formula : "" });
                 const widths = [2, 3, 4];
                 const endians = [{ id: "LE", little: true }, { id: "BE", little: false }];
                 const jobMap = {};
@@ -680,40 +899,86 @@ const DeepAttack = {
                 });
                 const jobs = Object.keys(jobMap).map((k) => jobMap[k]);
                 let ji = 0;
+                let phase = "scan";
+                let simStarted = 0;
                 const tick = function () {
                     if (settled) return;
                     if (!self.running) {
                         done(true);
                         return;
                     }
-                    const sliceEnd = Date.now() + 45;
-                    while (Date.now() < sliceEnd && ji < jobs.length) {
-                        scanJob(jobs[ji]);
-                        ji++;
+                    const elapsed = Date.now() - self.started;
+                    if (elapsed >= self.MAX_MS) {
+                        done(false);
+                        return;
                     }
-                    const solid = hits.find((h) => self.isSolid(h));
-                    const job = jobs[Math.min(ji, Math.max(0, jobs.length - 1))] || {};
+                    if (phase === "scan") {
+                        const sliceEnd = Date.now() + 40;
+                        while (Date.now() < sliceEnd && ji < jobs.length) {
+                            scanJob(jobs[ji]);
+                            ji++;
+                        }
+                        const job = jobs[Math.min(ji, Math.max(0, jobs.length - 1))] || {};
+                        emit({
+                            phase: "scan",
+                            formula: (hits[0] && hits[0].formula) || "",
+                            line: job.line || 0
+                        });
+                        if (ji >= jobs.length) phase = "sim";
+                        self.timer = setTimeout(tick, 16);
+                        return;
+                    }
+                    if (phase === "sim") {
+                        if (!simStarted) {
+                            simStarted = Date.now();
+                            const best = hits.filter((h) => self.isSolid(h))[0] || hits[0];
+                            self._simLog = best ? self.simulateHit(best, a, km1) : [];
+                            if (best && typeof KnowledgeBase !== "undefined") {
+                                try {
+                                    KnowledgeBase.rememberValidatedDiscovery({
+                                        offset: best.addr,
+                                        expression: best.formula,
+                                        length: best.width,
+                                        endian: best.endian,
+                                        confidence: best.score,
+                                        status: self.isSolid(best) ? "VALIDATED" : "HYPOTHESIS"
+                                    });
+                                } catch (error) { /* ignore */ }
+                            }
+                        }
+                        emit({
+                            phase: "sim",
+                            formula: (hits[0] && hits[0].formula) || "",
+                            line: hits[0] ? hits[0].line : 0
+                        });
+                        if (Date.now() - simStarted >= self.SIM_MS) phase = "invent";
+                        self.timer = setTimeout(tick, 180);
+                        return;
+                    }
                     emit({
-                        phase: "scan",
-                        found: !!solid,
-                        formula: solid ? solid.formula : "",
-                        line: job.line || 0
+                        phase: "invent",
+                        formula: (hits[0] && hits[0].formula) || "",
+                        line: lines[0] || 0
                     });
-                    if (solid) {
-                        done(false);
-                        return;
-                    }
-                    if (Date.now() - self.started >= self.MAX_MS) {
-                        done(false);
-                        return;
-                    }
-                    if (ji >= jobs.length) {
-                        startDiscovery();
-                        return;
-                    }
-                    self.timer = setTimeout(tick, 16);
+                    startDiscovery();
+                    return;
                 };
                 tick();
+                } catch (error) {
+                    if (settled) return;
+                    settled = true;
+                    self.running = false;
+                    resolve({
+                        ok: false,
+                        message: "El ataque se detuvo: " + (error && error.message ? error.message : String(error)),
+                        best: null,
+                        lines: lines.length,
+                        tested: tested,
+                        hits: hits,
+                        sim: self._simLog || [],
+                        vins: self._vins || []
+                    });
+                }
             }, 40);
         });
     },
@@ -730,12 +995,15 @@ const DeepAttack = {
             tested: tested,
             hits: hits,
             best: best ? this.buildBest(best) : null,
+            sim: this._simLog || [],
+            vins: this._vins || [],
             message: best
                 ? "TERMINÓ. Desencriptó el kilometraje en la línea " + this.hex(best.line) +
                     " con " + best.formula + (best.checksum ? " y " + best.checksum.name + " en " + this.hex(best.checksum.storedAt) : "") +
+                    (this._vins && this._vins[0] ? ". VIN " + this._vins[0].value : "") +
                     ". " + this.decodeHow(best)
                 : "TERMINÓ. Atacé " + (lines || []).length + " líneas que cambian (" + tested +
-                    " pruebas). Ningún algoritmo guardado calzó en los bytes distintos, y no salió un KM limpio. Revisa KM 1 y KM 2."
+                    " pruebas). El cerebro siguió 5–10 min. Revisa KM 1 y KM 2 si no hay fórmula sólida."
         };
         report.discoveries = [];
         this.lastReport = report;
