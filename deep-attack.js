@@ -42,6 +42,7 @@ const DeepAttack = {
 
     matchPair(raw1, raw2, km1, km2) {
         if (raw1 === null || raw2 === null || !km1 || !km2) return null;
+        if (Number(km1) !== Number(km2) && raw1 === raw2) return null;
         const slack = 40;
         const n = Math.round(raw1 / km1);
         if (n >= 1 && n <= 1000000 && Math.abs(raw1 - km1 * n) <= slack && Math.abs(raw2 - km2 * n) <= slack) {
@@ -238,7 +239,7 @@ const DeepAttack = {
         return {
             fromPair: true,
             fromAttack: true,
-            familyId: hit.familyId || "YAMAHA_R5F10",
+            familyId: hit.familyId || "",
             label: "KILOMETRAJE",
             name: hit.name || ("ATAQUE_" + String(hit.formula).replace(/\s+/g, "_")),
             fromKnown: !!hit.fromKnown,
@@ -268,11 +269,45 @@ const DeepAttack = {
         } catch (error) { /* ignore */ }
     },
 
+    isSolid(hit) {
+        return !!(hit && (hit.fromKnown || hit.checksum));
+    },
+
+    fromDiscovery(hit) {
+        if (!hit || hit.offset == null) return null;
+        const little = /LITTLE|^LE$/i.test(String(hit.endian || ""));
+        const width = Number(hit.length) || 2;
+        const ctx = this._ctx || {};
+        const bytes = ctx.bytes;
+        if (!bytes) return null;
+        return {
+            line: hit.offset & ~0x0F,
+            addr: hit.offset,
+            width: width,
+            endian: little ? "LE" : "BE",
+            formula: hit.expression,
+            raw: this.read(bytes, hit.offset, width, little),
+            km: ctx.km1,
+            hex: MathEngine.hexBytes(bytes.slice(hit.offset, hit.offset + width)),
+            checksum: null,
+            copies: [hit.offset],
+            stair: 1,
+            score: Number(hit.confidence) || 80,
+            fromKnown: hit.status === "VALIDATED",
+            name: hit.expression,
+            familyId: ""
+        };
+    },
+
     stop() {
         this.running = false;
         if (this.timer) {
             clearTimeout(this.timer);
             this.timer = null;
+        }
+        if (this._clock) {
+            clearInterval(this._clock);
+            this._clock = null;
         }
         if (typeof DiscoveryManager !== "undefined") DiscoveryManager.cancel();
     },
@@ -295,162 +330,223 @@ const DeepAttack = {
             self.started = Date.now();
             self._ctx = { bytes: a, bytes2: b, bytes3: c, km1: km1, km2: km2, km3: km3 };
             self._recipes = self.knownRecipes();
-            const lines = self.changedLinesMany(a, [b, c]);
-            const seeded = self.seedFromRecipes(a, b, c, km1, km2, km3, lines);
-            if (seeded.length) {
-                if (opts.onTick) {
-                    opts.onTick({
-                        pct: 100,
-                        elapsed: 0,
-                        line: seeded[0].line,
-                        tested: self._recipes.length,
-                        hits: seeded.length,
-                        lines: lines.length,
-                        found: true,
-                        formula: seeded[0].formula
-                    });
-                }
-                resolve(self.finish(seeded, lines, self._recipes.length, false));
-                return;
-            }
-            const widths = [2, 3, 4];
-            const endians = [{ id: "LE", little: true }, { id: "BE", little: false }];
-            const jobs = [];
-            lines.forEach((line) => {
-                for (let off = 0; off <= 14; off++) {
-                    widths.forEach((width) => {
-                        if (off + width > 16) return;
-                        endians.forEach((en) => jobs.push({ line: line, addr: line + off, width: width, en: en }));
-                    });
-                }
-            });
+            let settled = false;
             const hits = [];
-            let ji = 0;
+            let lines = [];
             let tested = 0;
 
-            const tick = function () {
-                if (!self.running) {
-                    resolve(self.finish(hits, lines, tested, true));
-                    return;
+            const done = function (stopped) {
+                if (settled) return;
+                settled = true;
+                if (self._clock) {
+                    clearInterval(self._clock);
+                    self._clock = null;
                 }
+                if (self.timer) {
+                    clearTimeout(self.timer);
+                    self.timer = null;
+                }
+                self.running = false;
+                resolve(self.finish(hits, lines, tested, !!stopped));
+            };
+
+            const emit = function (info) {
                 const elapsed = Date.now() - self.started;
-                const sliceEnd = Date.now() + 45;
-                while (Date.now() < sliceEnd && ji < jobs.length) {
-                    const job = jobs[ji];
-                    const raw1 = self.read(a, job.addr, job.width, job.en.little);
-                    const raw2 = self.read(b, job.addr, job.width, job.en.little);
-                    const raw3 = c ? self.read(c, job.addr, job.width, job.en.little) : null;
-                    tested++;
-                    const match = self.matchKnown(raw1, raw2, raw3, km1, km2, km3, job) ||
-                        self.matchMany([raw1, raw2, raw3], [km1, km2, km3]);
-                    if (match && km1 && raw1) {
-                        const chk1 = self.checksumsOnLine(a, job.line, job.addr, job.width);
-                        const chk2 = self.checksumsOnLine(b, job.line, job.addr, job.width);
-                        const chk3 = c ? self.checksumsOnLine(c, job.line, job.addr, job.width) : [];
-                        let same = chk1.filter((item) => chk2.some((d) => self.sameChkSlot(item, d)));
-                        if (chk3.length) same = same.filter((item) => chk3.some((d) => self.sameChkSlot(item, d)));
-                        const copies = [];
-                        for (let p = 0; p + job.width <= a.length; p += 0x20) {
-                            const r = self.read(a, p, job.width, job.en.little);
-                            if (r === null) break;
-                            if (p > 0 && Math.abs(r - self.read(a, p - 0x20, job.width, job.en.little)) > 8) {
-                                if (p > job.line) break;
-                            }
-                            if (a[p] !== 0xFF) copies.push(p);
-                            if (p > 0x400) break;
-                        }
-                        hits.push({
-                            line: job.line,
-                            addr: job.addr,
-                            width: job.width,
-                            endian: job.en.id,
-                            formula: match.formula,
-                            raw: raw1,
-                            km: km1,
-                            hex: MathEngine.hexBytes(a.slice(job.addr, job.addr + job.width)),
-                            checksum: same[0] || chk1[0] || null,
-                            copies: copies.length ? copies : [job.addr],
-                            stair: copies.length,
-                            score: (match.fromKnown ? 97 : 90) + (same[0] ? 8 : 0) + (copies.length > 4 ? 2 : 0) + (c && km3 ? 4 : 0),
-                            fromKnown: !!match.fromKnown,
-                            name: match.name,
-                            familyId: match.familyId
-                        });
-                    }
-                    ji++;
-                }
-                const found = hits.length > 0;
-                const pct = found
-                    ? 100
-                    : Math.min(99, jobs.length ? (ji / jobs.length) * 100 : (elapsed / self.MAX_MS) * 100);
+                const solid = info.found || hits.some((h) => self.isSolid(h));
                 if (opts.onTick) {
                     opts.onTick({
-                        pct: pct,
+                        pct: solid ? 100 : Math.min(99, (elapsed / self.MAX_MS) * 100),
                         elapsed: elapsed,
-                        line: jobs[Math.min(ji, Math.max(0, jobs.length - 1))] ? jobs[Math.min(ji, Math.max(0, jobs.length - 1))].line : (lines[0] || 0),
+                        line: info.line || 0,
                         tested: tested,
                         hits: hits.length,
                         lines: lines.length,
-                        found: found,
-                        formula: found ? hits[hits.length - 1].formula : ""
+                        found: !!solid,
+                        formula: info.formula || "",
+                        phase: info.phase || "scan"
                     });
                 }
-                if (found || elapsed >= self.MAX_MS || ji >= jobs.length) {
-                    resolve(self.finish(hits, lines, tested, false));
-                    return;
+            };
+
+            const scanJob = function (job) {
+                const raw1 = self.read(a, job.addr, job.width, job.en.little);
+                const raw2 = self.read(b, job.addr, job.width, job.en.little);
+                const raw3 = c ? self.read(c, job.addr, job.width, job.en.little) : null;
+                tested++;
+                const match = self.matchKnown(raw1, raw2, raw3, km1, km2, km3, job) ||
+                    self.matchMany([raw1, raw2, raw3], [km1, km2, km3]);
+                if (!match || !km1 || !raw1) return;
+                const chk1 = self.checksumsOnLine(a, job.line, job.addr, job.width);
+                const chk2 = self.checksumsOnLine(b, job.line, job.addr, job.width);
+                const chk3 = c ? self.checksumsOnLine(c, job.line, job.addr, job.width) : [];
+                let same = chk1.filter((item) => chk2.some((d) => self.sameChkSlot(item, d)));
+                if (chk3.length) same = same.filter((item) => chk3.some((d) => self.sameChkSlot(item, d)));
+                const copies = [];
+                for (let p = 0; p + job.width <= a.length; p += 0x20) {
+                    const r = self.read(a, p, job.width, job.en.little);
+                    if (r === null) break;
+                    if (p > 0 && Math.abs(r - self.read(a, p - 0x20, job.width, job.en.little)) > 8) {
+                        if (p > job.line) break;
+                    }
+                    if (a[p] !== 0xFF) copies.push(p);
+                    if (p > 0x400) break;
                 }
-                self.timer = setTimeout(tick, 16);
+                hits.push({
+                    line: job.line,
+                    addr: job.addr,
+                    width: job.width,
+                    endian: job.en.id,
+                    formula: match.formula,
+                    raw: raw1,
+                    km: km1,
+                    hex: MathEngine.hexBytes(a.slice(job.addr, job.addr + job.width)),
+                    checksum: same[0] || null,
+                    copies: copies.length ? copies : [job.addr],
+                    stair: copies.length,
+                    score: (match.fromKnown ? 97 : 90) + (same[0] ? 8 : 0) + (copies.length > 4 ? 2 : 0) + (c && km3 ? 4 : 0),
+                    fromKnown: !!match.fromKnown,
+                    name: match.name,
+                    familyId: match.familyId
+                });
+            };
+
+            const startDiscovery = function () {
+                emit({ phase: "invent", line: lines[0] || 0 });
+                const probe = [];
+                (lines || []).slice(0, 24).forEach((line) => {
+                    [0, 1, 2, 4, 6, 8].forEach((off) => probe.push(line + off));
+                });
+                const takeDisc = function (results) {
+                    if (settled) return;
+                    (results || []).forEach((row) => {
+                        const hit = self.fromDiscovery(row);
+                        if (hit) hits.push(hit);
+                    });
+                    if (typeof KnowledgeBase !== "undefined") {
+                        (results || []).forEach((hit) => KnowledgeBase.rememberValidatedDiscovery(hit));
+                    }
+                    const best = hits.filter((h) => self.isSolid(h))[0] || hits[0];
+                    emit({
+                        phase: "invent",
+                        found: !!(best && self.isSolid(best)),
+                        formula: best ? best.formula : "",
+                        line: best ? best.line : 0
+                    });
+                    done(false);
+                };
+                if (typeof DiscoveryManager !== "undefined") {
+                    DiscoveryManager.start({
+                        useWorker: true,
+                        bytes: a,
+                        bytes2: b,
+                        bytes3: c,
+                        km1: km1,
+                        km2: km2,
+                        km3: km3,
+                        addrs: probe
+                    }, function (ev) {
+                        if (settled) return;
+                        if (ev.type === "DISCOVERY_COMPLETE") takeDisc(ev.payload && ev.payload.results);
+                    });
+                }
+                self._clock = setInterval(function () {
+                    if (settled) return;
+                    emit({ phase: "invent", line: lines[0] || 0 });
+                    if (Date.now() - self.started >= self.MAX_MS) {
+                        const extra = typeof DiscoveryManager !== "undefined" ? DiscoveryManager.getResults() : [];
+                        if (typeof DiscoveryManager !== "undefined") DiscoveryManager.cancel();
+                        takeDisc(extra);
+                    }
+                }, 250);
             };
 
             if (typeof Notification !== "undefined" && Notification.permission === "default") {
                 Notification.requestPermission().catch(function () { /* ignore */ });
             }
-            self.timer = setTimeout(tick, 20);
+
+            self.timer = setTimeout(function begin() {
+                lines = self.changedLinesMany(a, [b, c]);
+                const seeded = self.seedFromRecipes(a, b, c, km1, km2, km3, lines);
+                seeded.forEach((hit) => hits.push(hit));
+                if (hits.some((h) => self.isSolid(h))) {
+                    emit({
+                        found: true,
+                        phase: "known",
+                        formula: hits[0].formula,
+                        line: hits[0].line
+                    });
+                    done(false);
+                    return;
+                }
+                const widths = [2, 3, 4];
+                const endians = [{ id: "LE", little: true }, { id: "BE", little: false }];
+                const jobs = [];
+                lines.forEach((line) => {
+                    for (let off = 0; off <= 14; off++) {
+                        widths.forEach((width) => {
+                            if (off + width > 16) return;
+                            endians.forEach((en) => jobs.push({ line: line, addr: line + off, width: width, en: en }));
+                        });
+                    }
+                });
+                let ji = 0;
+                const tick = function () {
+                    if (settled) return;
+                    if (!self.running) {
+                        done(true);
+                        return;
+                    }
+                    const sliceEnd = Date.now() + 45;
+                    while (Date.now() < sliceEnd && ji < jobs.length) {
+                        scanJob(jobs[ji]);
+                        ji++;
+                    }
+                    const solid = hits.find((h) => self.isSolid(h));
+                    const job = jobs[Math.min(ji, Math.max(0, jobs.length - 1))] || {};
+                    emit({
+                        phase: "scan",
+                        found: !!solid,
+                        formula: solid ? solid.formula : "",
+                        line: job.line || 0
+                    });
+                    if (solid) {
+                        done(false);
+                        return;
+                    }
+                    if (Date.now() - self.started >= self.MAX_MS) {
+                        done(false);
+                        return;
+                    }
+                    if (ji >= jobs.length) {
+                        startDiscovery();
+                        return;
+                    }
+                    self.timer = setTimeout(tick, 16);
+                };
+                tick();
+            }, 40);
         });
     },
 
     finish(hits, lines, tested, stopped) {
         this.running = false;
-        hits.sort((a, b) => (b.score - a.score) || (b.line - a.line));
-        let discovered = [];
-        if (!hits.length && typeof DiscoveryManager !== "undefined" && this._ctx) {
-            const probe = [];
-            (lines || []).slice(0, 12).forEach((line) => {
-                [0, 1, 2, 4].forEach((off) => probe.push(line + off));
-            });
-            discovered = DiscoveryManager.discoverSync({
-                bytes: this._ctx.bytes,
-                bytes2: this._ctx.bytes2,
-                bytes3: this._ctx.bytes3,
-                km1: this._ctx.km1,
-                km2: this._ctx.km2,
-                km3: this._ctx.km3,
-                addrs: probe
-            });
-            if (typeof KnowledgeBase !== "undefined") {
-                discovered.forEach((hit) => KnowledgeBase.rememberValidatedDiscovery(hit));
-            }
-        }
+        hits = (hits || []).slice().sort((a, b) => (b.score - a.score) || (b.line - a.line));
         const best = hits[0] || null;
-        const top = discovered[0];
-        const extra = top
-            ? " Motor V1: " + top.expression + " · " + top.status + " · " + top.confidence + "% · " + (top.evidence || "")
-            : "";
         const report = {
             ok: !!best,
             stopped: stopped,
-            lines: lines.length,
+            lines: (lines || []).length,
             tested: tested,
             hits: hits,
             best: best ? this.buildBest(best) : null,
             message: best
                 ? "TERMINÓ. Desencriptó el kilometraje en la línea " + this.hex(best.line) +
                     " con " + best.formula + (best.checksum ? " y " + best.checksum.name + " en " + this.hex(best.checksum.storedAt) : "") +
-                    ". " + this.decodeHow(best) + extra
-                : "TERMINÓ. Atacé " + lines.length + " líneas que cambian (" + tested +
-                    " pruebas). No hay un KM limpio con los KM conocidos. Revisa KM 1 y KM 2." + extra
+                    ". " + this.decodeHow(best)
+                : "TERMINÓ. Atacé " + (lines || []).length + " líneas que cambian (" + tested +
+                    " pruebas). No hay un KM limpio con los KM conocidos. Revisa KM 1 y KM 2."
         };
-        report.discoveries = discovered;
+        report.discoveries = [];
         this.lastReport = report;
         this.notify("VELOCÍMETROS CDMX", report.message);
         return report;

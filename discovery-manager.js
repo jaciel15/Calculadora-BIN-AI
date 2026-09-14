@@ -129,8 +129,13 @@ const DiscoveryManager = {
             self.lastResults = results || [];
             emit("DISCOVERY_COMPLETE", { results: self.lastResults });
         };
-        try {
-            if (typeof Worker !== "undefined" && config && config.useWorker) {
+        if (config && config.useWorker) {
+            if (typeof Worker === "undefined") {
+                emit("DISCOVERY_ERROR", { message: "Worker no disponible" });
+                finish([]);
+                return;
+            }
+            try {
                 self.worker = new Worker("discovery-worker.js");
                 self.worker.onmessage = function (event) {
                     const msg = event.data || {};
@@ -139,7 +144,6 @@ const DiscoveryManager = {
                 };
                 self.worker.onerror = function (error) {
                     emit("DISCOVERY_ERROR", { message: String(error.message || error) });
-                    finish([]);
                 };
                 self.worker.postMessage({ type: "DISCOVERY_START", payload: {
                     km1: config.km1,
@@ -151,9 +155,11 @@ const DiscoveryManager = {
                     bytes3: Array.from(config.bytes3 || [])
                 } });
                 return;
+            } catch (error) {
+                emit("DISCOVERY_ERROR", { message: "Worker no disponible, sigo en el hilo." });
+                finish([]);
+                return;
             }
-        } catch (error) {
-            emit("DISCOVERY_ERROR", { message: "Worker no disponible, sigo en el hilo." });
         }
         const results = this.discoverSync(config);
         results.forEach((hit, i) => emit("DISCOVERY_PROGRESS", { pct: ((i + 1) / Math.max(1, results.length)) * 100, hit: hit }));

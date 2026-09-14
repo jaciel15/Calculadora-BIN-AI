@@ -1760,6 +1760,7 @@ function showAttackToast(text) {
 
 async function startDeepAttack() {
     if (!needBIN()) return;
+    if (startDeepAttack.busy || DeepAttack.running) return;
     if (!OmegaKernel.compareBins[0]) {
         alert("Carga BIN 1 y BIN 2. El ataque solo pica las líneas que cambian.");
         return;
@@ -1779,6 +1780,7 @@ async function startDeepAttack() {
         alert("Cargaste BIN 3. Pon su KM 3 para verificar CRC/SUM en ese entorno.");
         return;
     }
+    startDeepAttack.busy = true;
     const overlay = $("attackOverlay");
     const fill = $("attackFill");
     const status = $("attackStatus");
@@ -1787,39 +1789,50 @@ async function startDeepAttack() {
     if (fill) {
         fill.classList.remove("done");
         fill.classList.add("busy");
-        fill.style.width = "0%";
+        fill.style.width = "2%";
     }
     setStatus("CARGANDO", "busy");
-    if (status) status.textContent = "Usando KM 1 = " + km1 + " y KM 2 = " + km2 + ". Solo líneas que cambian.";
-    const report = await DeepAttack.run({
-        bytes: currentBIN.original,
-        bytes2: OmegaKernel.compareBins[0].bytes,
-        bytes3: OmegaKernel.compareBins[1] ? OmegaKernel.compareBins[1].bytes : null,
-        km1: km1,
-        km2: km2,
-        km3: km3,
-        onTick: function (info) {
-            if (fill) fill.style.width = info.pct.toFixed(1) + "%";
-            if (clock) clock.textContent = clockText(info.elapsed);
-            if (info.found) {
-                if (fill) {
-                    fill.style.width = "100%";
-                    fill.classList.remove("busy");
-                    fill.classList.add("done");
+    if (status) status.textContent = "En carga. KM 1 = " + km1 + " · KM 2 = " + km2 + ". Si el KM sale claro, termina. Si no, espera hasta 10:00.";
+    if (clock) clock.textContent = "0:00 / 10:00";
+    await new Promise(function (resolve) { setTimeout(resolve, 50); });
+    let report;
+    try {
+        report = await DeepAttack.run({
+            bytes: currentBIN.original,
+            bytes2: OmegaKernel.compareBins[0].bytes,
+            bytes3: OmegaKernel.compareBins[1] ? OmegaKernel.compareBins[1].bytes : null,
+            km1: km1,
+            km2: km2,
+            km3: km3,
+            onTick: function (info) {
+                if (fill) fill.style.width = info.pct.toFixed(1) + "%";
+                if (clock) clock.textContent = clockText(info.elapsed);
+                if (info.found) {
+                    if (fill) {
+                        fill.style.width = "100%";
+                        fill.classList.remove("busy");
+                        fill.classList.add("done");
+                    }
+                    setStatus("KM DETECTADO", "ok");
+                    if (status) status.textContent = "KM encontrado: " + (info.formula || "") + ". Listo para el archivo.";
+                    return;
                 }
-                setStatus("KM DETECTADO", "ok");
-                if (status) status.textContent = "KM encontrado: " + (info.formula || "") + " · ya terminó.";
-                return;
+                setStatus("CARGANDO", "busy");
+                if (status) {
+                    if (info.phase === "invent") {
+                        status.textContent = "Sigo en carga hasta 10 min. Inventando fórmula en las líneas que cambian…";
+                    } else {
+                        status.textContent = "En carga. Línea " + padHex(info.line || 0) + " · " +
+                            info.tested + " pruebas · " + info.hits + " hipótesis · " +
+                            info.lines + " líneas que cambian";
+                    }
+                }
             }
-            setStatus("CARGANDO", "busy");
-            if (status) {
-                status.textContent = "Línea " + padHex(info.line || 0) + " · " +
-                    info.tested + " pruebas · " + info.hits + " hipótesis · " +
-                    info.lines + " líneas que cambian · " +
-                    (OmegaKernel.compareBins[1] ? "3 BIN" : "2 BIN");
-            }
-        }
-    });
+        });
+    } finally {
+        startDeepAttack.busy = false;
+    }
+    if (!report) report = { ok: false, message: "El ataque no respondió.", best: null, lines: 0, tested: 0 };
     if (fill) {
         fill.style.width = "100%";
         fill.classList.remove("busy");
