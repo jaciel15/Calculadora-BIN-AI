@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=ataque2">
+    <link rel="stylesheet" href="style.css?v=carga1">
 </head>
 
 <body>
@@ -55,8 +55,8 @@
 
     <main class="content">
 
-        <input type="file" id="fileInput" accept=".bin,.eep,.hex" hidden>
-        <input type="file" id="compareInput" accept=".bin,.eep,.hex" multiple hidden>
+        <input type="file" id="fileInput" accept="*/*,.bin,.eep,.hex,.s19,.srec,.mot" hidden>
+        <input type="file" id="compareInput" accept="*/*,.bin,.eep,.hex,.s19,.srec,.mot" multiple hidden>
 
         <div class="mode-bar" id="modeBar">
             <span class="mode-label">TRABAJAR EN</span>
@@ -116,7 +116,8 @@
             <input id="knownKm3" type="text" placeholder="KM archivo 3">
             <span id="needBin3Ask" class="bin3-ask hidden">Si el par no cierra CRC/SUM, sube un tercer BIN con otro KM. El ataque de 10 min usa el entorno de los tres.</span>
         </div>
-        <input type="file" id="fileInput3" accept=".bin,.eep,.hex" hidden>
+        <input type="file" id="fileInput3" accept="*/*,.bin,.eep,.hex,.s19,.srec,.mot" hidden>
+        <p id="loadCompleteBar" class="load-complete-bar hidden">Sube BIN 1, 2 y 3. Deben entrar completos, con el tamaño real del dump.</p>
         <div id="attackResult" class="attack-result hidden">
             <canvas id="attackPosterMain" width="720" height="420"></canvas>
             <button type="button" class="action-btn green" id="attackPosterMainSave">DESCARGAR IMAGEN DEL ATAQUE</button>
@@ -126,7 +127,7 @@
             <textarea id="helpRecipe" rows="3" placeholder="El ataque escribe aquí cómo encontró el KM: dirección, fórmula y checksum/CRC. Yamaha 0260 solo si el archivo es de 8192 bytes."></textarea>
             <button type="button" id="helpExampleBtn" class="action-btn">EJEMPLO</button>
         </div>
-        <input type="file" id="fileInput2" accept=".bin,.eep,.hex" hidden>
+        <input type="file" id="fileInput2" accept="*/*,.bin,.eep,.hex,.s19,.srec,.mot" hidden>
 
         <div id="vinStrip" class="vin-strip">
             <div id="vinBox1" class="vin-box">
@@ -609,28 +610,28 @@
 </div>
 <div id="attackToast" class="attack-toast hidden"></div>
 
-<script src="mark-book.js?v=ataque2"></script>
-<script src="operation-registry.js?v=ataque2"></script>
-<script src="expression-tree.js?v=ataque2"></script>
-<script src="math-engine.js?v=ataque2"></script>
-<script src="expression-generator.js?v=ataque2"></script>
-<script src="fitness-engine.js?v=ataque2"></script>
-<script src="validation-engine.js?v=ataque2"></script>
-<script src="checksum-engine.js?v=ataque2"></script>
-<script src="knowledge-base.js?v=ataque2"></script>
-<script src="bin-world.js?v=ataque2"></script>
-<script src="mind-engine.js?v=ataque2"></script>
-<script src="hunters.js?v=ataque2"></script>
-<script src="dna-discovery.js?v=ataque2"></script>
-<script src="editor-upa.js?v=ataque2"></script>
-<script src="write-machine.js?v=ataque2"></script>
-<script src="bin-object.js?v=ataque2"></script>
-<script src="family-library.js?v=ataque2"></script>
-<script src="omega-kernel.js?v=ataque2"></script>
-<script src="bin-core.js?v=ataque2"></script>
-<script src="discovery-manager.js?v=ataque2"></script>
-<script src="deep-attack.js?v=ataque2"></script>
-<script src="app.js?v=ataque2"></script>
+<script src="mark-book.js?v=carga1"></script>
+<script src="operation-registry.js?v=carga1"></script>
+<script src="expression-tree.js?v=carga1"></script>
+<script src="math-engine.js?v=carga1"></script>
+<script src="expression-generator.js?v=carga1"></script>
+<script src="fitness-engine.js?v=carga1"></script>
+<script src="validation-engine.js?v=carga1"></script>
+<script src="checksum-engine.js?v=carga1"></script>
+<script src="knowledge-base.js?v=carga1"></script>
+<script src="bin-world.js?v=carga1"></script>
+<script src="mind-engine.js?v=carga1"></script>
+<script src="hunters.js?v=carga1"></script>
+<script src="dna-discovery.js?v=carga1"></script>
+<script src="editor-upa.js?v=carga1"></script>
+<script src="write-machine.js?v=carga1"></script>
+<script src="bin-object.js?v=carga1"></script>
+<script src="family-library.js?v=carga1"></script>
+<script src="omega-kernel.js?v=carga1"></script>
+<script src="bin-core.js?v=carga1"></script>
+<script src="discovery-manager.js?v=carga1"></script>
+<script src="deep-attack.js?v=carga1"></script>
+<script src="app.js?v=carga1"></script>
 
 </body>
 </html>

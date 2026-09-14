@@ -8,7 +8,9 @@ class BINCore {
     load(binObject) {
         this.currentBIN = binObject;
         this.log = [];
-        this.addLog("BIN CORE", "Archivo cargado: " + binObject.fileName + " (" + binObject.fileSize + " bytes)");
+        this.addLog("BIN CORE", "Archivo cargado: " + binObject.fileName + " (" + binObject.totalBytes + " bytes" +
+            (binObject.diskSize && binObject.diskSize !== binObject.totalBytes ? ", disco " + binObject.diskSize + " B" : "") +
+            (binObject.complete === false ? " · INCOMPLETO" : " · COMPLETO") + ")");
         const family = FamilyLibrary.identify(binObject.original);
         if (family) {
             binObject.family = family;

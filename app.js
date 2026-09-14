@@ -123,7 +123,7 @@ function fillHexWindow(el) {
     const windowEl = el.querySelector(".hex-window");
     if (!windowEl || !bytes) return;
     const mode = $("hexMode") ? $("hexMode").value : "16-BIT";
-    const addrW = bytes.length > 0xFFFF ? 5 : 4;
+    const addrW = Math.max(4, (Math.max(0, bytes.length - 1)).toString(16).length);
     const totalLines = Math.ceil(bytes.length / HEX_STEP);
     const note = el.querySelector(".hex-note");
     const noteH = note ? note.offsetHeight + 8 : 0;
@@ -183,11 +183,19 @@ function showHEX(bytes) {
     const view = bytes || (currentBIN ? currentBIN.working : null);
     if (view) {
         paintHex("hexViewer", view, marks);
-        if ($("hexLabel1") && currentBIN) $("hexLabel1").textContent = "BIN 1 · " + currentBIN.fileName;
+        if ($("hexLabel1") && currentBIN) {
+            $("hexLabel1").textContent = DumpLoader.label(currentBIN.fileName, currentBIN.totalBytes, currentBIN.complete !== false);
+        }
     }
     if (OmegaKernel.compareBins[0]) {
         paintHex("hexViewer2", OmegaKernel.compareBins[0].bytes, marks);
-        if ($("hexLabel2")) $("hexLabel2").textContent = "BIN 2 · " + OmegaKernel.compareBins[0].fileName;
+        if ($("hexLabel2")) {
+            $("hexLabel2").textContent = DumpLoader.label(
+                OmegaKernel.compareBins[0].fileName,
+                OmegaKernel.compareBins[0].bytes.length,
+                OmegaKernel.compareBins[0].complete !== false
+            );
+        }
     } else if ($("hexViewer2")) {
         $("hexViewer2").innerHTML = "Carga el BIN 2. Lo que cambia se marca naranja (variación). Los demás colores los pones tú.";
         if ($("hexLabel2")) $("hexLabel2").textContent = "BIN 2";
@@ -846,12 +854,44 @@ function needBIN() {
     return false;
 }
 
+function dumpSlotLabel(slot, dump) {
+    const el = $("bin" + slot + "Name");
+    if (!el || !dump) return;
+    el.textContent = DumpLoader.label(dump.fileName, dump.loaded || (dump.bytes && dump.bytes.length) || 0, dump.complete !== false);
+}
+
+function showLoadedSize(dump) {
+    if (!dump) return;
+    if ($("fileSize")) $("fileSize").textContent = dump.loaded;
+    if ($("chipSize")) {
+        $("chipSize").textContent = dump.loaded + " Bytes" + (dump.complete ? " · COMPLETO" : " · REVISAR");
+    }
+    if ($("footerSize")) $("footerSize").textContent = dump.loaded + " bytes";
+    if ($("loadCompleteBar")) {
+        $("loadCompleteBar").textContent = dump.note || ("Cargado: " + dump.loaded + " bytes");
+        $("loadCompleteBar").classList.toggle("load-bad", dump.complete === false);
+        $("loadCompleteBar").classList.remove("hidden");
+    }
+}
+
+function resetFileInput(input) {
+    if (input) input.value = "";
+}
+
+async function ingestDump(file) {
+    const dump = await DumpLoader.readFile(file);
+    if (!dump.complete && dump.format === "BIN") {
+        alert("El archivo no se leyó entero.\nDisco: " + dump.diskSize + " B\nLeídos: " + dump.loaded + " B\nVuelve a subirlo.");
+    }
+    return dump;
+}
+
 async function loadBIN(event) {
-    const file = event.target.files[0];
+    const file = event.target && event.target.files ? event.target.files[0] : null;
     if (!file) return;
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    currentBIN = new BINObject(file, bytes);
+    const dump = await ingestDump(file);
+    resetFileInput(event.target);
+    currentBIN = new BINObject(file, dump.bytes, dump);
     binCore.load(currentBIN);
     lastGhost = null;
     lastSimulation = null;
@@ -863,7 +903,7 @@ async function loadBIN(event) {
         $("helpRecipe").value = "";
     }
     $("fileName").textContent = currentBIN.fileName;
-    if ($("bin1Name")) $("bin1Name").textContent = currentBIN.fileName;
+    dumpSlotLabel(1, dump);
     if (!kmFromField("knownKm1")) {
         const guess = kmFromFileName(file.name);
         if (guess !== null) fillKmField("knownKm1", guess);
@@ -873,11 +913,9 @@ async function loadBIN(event) {
         if (guess !== null) fillKmField("knownKm", guess);
     }
     refreshKmReadout();
-    $("fileSize").textContent = currentBIN.fileSize;
+    showLoadedSize(dump);
     $("chipName").textContent = currentBIN.chip;
-    $("chipSize").textContent = currentBIN.totalBytes + " Bytes";
     $("footerFile").textContent = currentBIN.fileName;
-    $("footerSize").textContent = currentBIN.fileSize + " bytes";
     $("footerChip").textContent = currentBIN.chip;
     refreshIdentity();
     showHEX(currentBIN.working);
@@ -900,9 +938,9 @@ async function loadBIN(event) {
             $("helpRecipe").value = R5F_RECIPE;
         }
     }
-    setStatus("CARGADO", true);
+    setStatus(dump.complete ? "COMPLETO" : "INCOMPLETO", dump.complete);
     if (!currentBIN.family && $("omegaThink")) {
-        $("omegaThink").textContent = "Archivo completo cargado. No uso Yamaha 35000. Con BIN 2 y KM 1 / KM 2, ATAQUE 10 MIN descifra solo lo que cambia.";
+        $("omegaThink").textContent = dump.note + " No recorto a un chip. Con BIN 2 y KM 1 / KM 2, ATAQUE 10 MIN descifra solo lo que cambia.";
     }
     addLogRows();
 }
@@ -1757,36 +1795,58 @@ async function loadCompare(event) {
     const files = Array.from(event.target.files || []);
     OmegaKernel.compareBins = [];
     for (let i = 0; i < files.length; i++) {
-        const buffer = await files[i].arrayBuffer();
+        const dump = await ingestDump(files[i]);
         OmegaKernel.compareBins.push({
-            fileName: files[i].name,
-            bytes: new Uint8Array(buffer)
+            fileName: dump.fileName,
+            bytes: dump.bytes,
+            diskSize: dump.diskSize,
+            complete: dump.complete,
+            format: dump.format
         });
     }
-    if (files[0] && $("bin2Name")) $("bin2Name").textContent = files[0].name;
+    resetFileInput(event.target);
+    if (OmegaKernel.compareBins[0]) dumpSlotLabel(2, {
+        fileName: OmegaKernel.compareBins[0].fileName,
+        loaded: OmegaKernel.compareBins[0].bytes.length,
+        complete: OmegaKernel.compareBins[0].complete
+    });
+    if (OmegaKernel.compareBins[1]) dumpSlotLabel(3, {
+        fileName: OmegaKernel.compareBins[1].fileName,
+        loaded: OmegaKernel.compareBins[1].bytes.length,
+        complete: OmegaKernel.compareBins[1].complete
+    });
     $("familyCount").textContent = "Familia: " + (1 + OmegaKernel.compareBins.length) + " BIN";
-    binCore.addLog("GENOME", OmegaKernel.compareBins.length + " BIN de familia cargados");
+    binCore.addLog("GENOME", OmegaKernel.compareBins.length + " BIN de familia cargados completos");
+    if (currentBIN) showHEX(currentBIN.working);
     addLogRows();
 }
 
 async function loadBIN2(event) {
-    const file = event.target.files[0];
+    const file = event.target && event.target.files ? event.target.files[0] : null;
     if (!file) return;
-    const buffer = await file.arrayBuffer();
+    const dump = await ingestDump(file);
+    resetFileInput(event.target);
     const third = OmegaKernel.compareBins[1] || null;
     OmegaKernel.compareBins = [{
-        fileName: file.name,
-        bytes: new Uint8Array(buffer)
+        fileName: dump.fileName,
+        bytes: dump.bytes,
+        diskSize: dump.diskSize,
+        complete: dump.complete,
+        format: dump.format
     }];
     if (third) OmegaKernel.compareBins.push(third);
-    if ($("bin2Name")) $("bin2Name").textContent = file.name;
+    dumpSlotLabel(2, dump);
+    if (currentBIN && currentBIN.totalBytes !== dump.loaded) {
+        alert("BIN 1 mide " + currentBIN.totalBytes + " bytes y BIN 2 mide " + dump.loaded +
+            " bytes. Los dos se cargaron completos. El ataque solo compara hasta el más corto.");
+    }
     if (!kmFromField("knownKm2")) {
         const guess = kmFromFileName(file.name);
         if (guess !== null) fillKmField("knownKm2", guess);
     }
     refreshKmReadout();
     familyCountText();
-    if (binCore.currentBIN) binCore.addLog("COMPARADOR", "BIN 2 cargado: " + file.name);
+    if (binCore.currentBIN) binCore.addLog("COMPARADOR", dump.note + " BIN 2: " + dump.fileName);
     refreshIdentity();
     if (currentBIN) {
         const preview = MindEngine.classifyDiffs(currentBIN.original, OmegaKernel.compareBins[0].bytes, {
@@ -1800,25 +1860,30 @@ async function loadBIN2(event) {
 }
 
 async function loadBIN3(event) {
-    const file = event.target.files[0];
+    const file = event.target && event.target.files ? event.target.files[0] : null;
     if (!file) return;
     if (!OmegaKernel.compareBins[0]) {
         alert("Primero carga BIN 1 y BIN 2. El tercero confirma CRC/SUM en otro entorno.");
         return;
     }
-    const buffer = await file.arrayBuffer();
+    const dump = await ingestDump(file);
+    resetFileInput(event.target);
     OmegaKernel.compareBins[1] = {
-        fileName: file.name,
-        bytes: new Uint8Array(buffer)
+        fileName: dump.fileName,
+        bytes: dump.bytes,
+        diskSize: dump.diskSize,
+        complete: dump.complete,
+        format: dump.format
     };
-    if ($("bin3Name")) $("bin3Name").textContent = file.name;
+    dumpSlotLabel(3, dump);
     if (!kmFromField("knownKm3")) {
         const guess = kmFromFileName(file.name);
         if (guess !== null) fillKmField("knownKm3", guess);
     }
     familyCountText();
     showBin3Ask(false);
-    if (binCore.currentBIN) binCore.addLog("COMPARADOR", "BIN 3 cargado: " + file.name + " · entorno extra para CRC/SUM");
+    if (binCore.currentBIN) binCore.addLog("COMPARADOR", dump.note + " BIN 3: " + dump.fileName);
+    if (currentBIN) showHEX(currentBIN.working);
     addLogRows();
     if (knownKm3() !== null) startDeepAttack();
 }
@@ -1857,8 +1922,14 @@ async function loadTrackerTriple() {
         const f3 = new File([bufs[2]], "tracker-km3-180000.bin");
         await loadBIN({ target: { files: [f1] } });
         await loadBIN2({ target: { files: [f2] } });
-        OmegaKernel.compareBins[1] = { fileName: f3.name, bytes: new Uint8Array(bufs[2]) };
-        if ($("bin3Name")) $("bin3Name").textContent = f3.name;
+        OmegaKernel.compareBins[1] = {
+            fileName: f3.name,
+            bytes: new Uint8Array(bufs[2]),
+            diskSize: bufs[2].byteLength,
+            complete: true,
+            format: "BIN"
+        };
+        dumpSlotLabel(3, { fileName: f3.name, loaded: bufs[2].byteLength, complete: true });
         fillKmField("knownKm1", 113171);
         fillKmField("knownKm2", 150000);
         fillKmField("knownKm3", 180000);
@@ -2155,8 +2226,27 @@ function closeProject() {
     lastGhost = null;
     if ($("hexViewer")) $("hexViewer").innerHTML = "";
     if ($("hexViewer2")) $("hexViewer2").innerHTML = "";
+    if ($("loadCompleteBar")) $("loadCompleteBar").classList.add("hidden");
     if (typeof MarkBook !== "undefined") MarkBook.clear();
     setStatus("LISTO", true);
+}
+
+function bindDumpDrop() {
+    const zone = document.querySelector(".content") || document.body;
+    if (!zone || zone.getAttribute("data-drop")) return;
+    zone.setAttribute("data-drop", "1");
+    zone.addEventListener("dragover", function (event) {
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    });
+    zone.addEventListener("drop", async function (event) {
+        event.preventDefault();
+        const files = Array.from((event.dataTransfer && event.dataTransfer.files) || []);
+        if (!files.length) return;
+        if (files[0]) await loadBIN({ target: { files: [files[0]] } });
+        if (files[1]) await loadBIN2({ target: { files: [files[1]] } });
+        if (files[2]) await loadBIN3({ target: { files: [files[2]] } });
+    });
 }
 
 function wireUI() {
@@ -2166,6 +2256,7 @@ function wireUI() {
     if ($("compareInput")) $("compareInput").addEventListener("change", loadCompare);
     if ($("fileInput2")) $("fileInput2").addEventListener("change", loadBIN2);
     if ($("fileInput3")) $("fileInput3").addEventListener("change", loadBIN3);
+    bindDumpDrop();
 
     bindClick("analyzeBtn", () => runAnalysis({ offerFile: true }));
     bindClick("analyzeBtnTop", () => runAnalysis({ offerFile: true }));
