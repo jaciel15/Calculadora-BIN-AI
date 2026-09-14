@@ -1828,7 +1828,15 @@ async function startDeepAttack() {
     setStatus("LISTO", "ok");
     await new Promise(function (resolve) { setTimeout(resolve, 900); });
     if (overlay) overlay.classList.add("hidden");
-    if (report.best && currentBIN.analysis) {
+    if (report.best) {
+        if (!currentBIN.analysis) {
+            currentBIN.analysis = {
+                mileageHits: [],
+                checksums: [],
+                counters: [],
+                omega: {}
+            };
+        }
         currentBIN.analysis.best = report.best;
         if ($("helpRecipe")) $("helpRecipe").value = report.best.writeHow;
         if ($("aiHow")) $("aiHow").textContent = report.best.writeHow;
@@ -1865,7 +1873,11 @@ async function startDeepAttack() {
             : (OmegaKernel.compareBins[1]
                 ? "<p>Trabajó con 3 BIN. CRC/SUM se contrastó en tres entornos.</p>"
                 : ""));
-    if (!offerDetectedAlgorithm("ATAQUE TERMINÓ", extra)) {
+    if (report.best) {
+        if (!offerDetectedAlgorithm("ATAQUE TERMINÓ", extra)) {
+            offerEditedFile("ATAQUE TERMINÓ", extra);
+        }
+    } else {
         openLab("ATAQUE TERMINÓ", extra);
     }
 }
