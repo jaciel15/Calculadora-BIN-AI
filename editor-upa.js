@@ -54,7 +54,8 @@ const EditorEngine = {
                 copies: written.count
             };
         }
-        if (hit.familyId === "YAMAHA_R5F10") {
+        if (hit.familyId === "YAMAHA_R5F10" && bytes.length === 8192 &&
+            typeof FamilyLibrary !== "undefined" && FamilyLibrary.detectR5F(bytes)) {
             const written = FamilyLibrary.writeR5FRing(new Uint8Array(bytes), hit.address, Number(newValue));
             return {
                 bytes: written.bytes,

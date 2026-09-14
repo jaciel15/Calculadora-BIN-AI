@@ -179,6 +179,22 @@ const CodeBook = {
         return null;
     },
 
+    fitsFile(code, bytes) {
+        if (!code || !bytes) return true;
+        const id = String(code.id || code.familyId || code.name || "");
+        const how = String(code.recipe || code.writeHow || "");
+        if (/R5F10/i.test(id) || /anillo 32B/i.test(id) || /0260/.test(how)) {
+            return bytes.length === 8192 && typeof FamilyLibrary !== "undefined" && !!FamilyLibrary.detectR5F(bytes);
+        }
+        if (/YAMAHA_MT09|MT-09 93C86/i.test(id)) {
+            return bytes.length === 2048 && typeof FamilyLibrary !== "undefined" && !!FamilyLibrary.detectYamaha(bytes);
+        }
+        if (/ODYSSEY/i.test(id)) {
+            return typeof FamilyLibrary !== "undefined" && !!FamilyLibrary.detectOdyssey(bytes);
+        }
+        return true;
+    },
+
     hunt(bytes, knownKm, bytes2, km2) {
         if (knownKm === null || knownKm === undefined || !bytes) return [];
         const index = MathEngine.indexFile(bytes);
@@ -200,6 +216,7 @@ const CodeBook = {
             });
         }
         codes.forEach((code) => {
+            if (!this.fitsFile(code, bytes)) return;
             let pattern;
             try {
                 pattern = this.encode(code, knownKm);
@@ -238,7 +255,7 @@ const CodeBook = {
                 fromPair: pair,
                 label: "KILOMETRAJE",
                 name: code.id,
-                familyId: code.id,
+                familyId: /YAMAHA_|ODYSSEY_/i.test(String(code.id || "")) ? code.id : "",
                 formula: code.formula,
                 width: code.width,
                 endian: code.endian,

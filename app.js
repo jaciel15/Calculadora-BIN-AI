@@ -582,7 +582,7 @@ function renderAnalysis(analysis) {
     refreshIdentity();
     renderDiffTable(analysis.omega ? analysis.omega.diffWorld : null);
     showHEX(currentBIN.working);
-    if (analysis.best && analysis.best.familyId === "YAMAHA_R5F10" && $("helpRecipe")) {
+    if (analysis.best && analysis.best.familyId === "YAMAHA_R5F10" && currentBIN.original && currentBIN.original.length === 8192 && $("helpRecipe")) {
         $("helpRecipe").value = R5F_RECIPE;
     }
     addLogRows();
@@ -800,13 +800,16 @@ async function loadBIN(event) {
         MarkBook.clear();
         MarkBook.revealed = false;
     }
+    if ($("helpRecipe") && !(currentBIN.family && currentBIN.family.family && currentBIN.family.family.id === "YAMAHA_R5F10")) {
+        $("helpRecipe").value = "";
+    }
     $("fileName").textContent = currentBIN.fileName;
     if ($("bin1Name")) $("bin1Name").textContent = currentBIN.fileName;
     if (!kmFromField("knownKm1")) {
-        const guess = kmFromField("knownKm") || kmFromFileName(file.name);
+        const guess = kmFromFileName(file.name);
         if (guess !== null) fillKmField("knownKm1", guess);
     }
-    if (!kmFromField("knownKm")) {
+    if (!kmFromField("knownKm") || kmFromField("knownKm") === 35000) {
         const guess = kmFromField("knownKm1") || kmFromFileName(file.name);
         if (guess !== null) fillKmField("knownKm", guess);
     }
@@ -834,8 +837,14 @@ async function loadBIN(event) {
         }
         $("omegaCard").textContent = currentBIN.family.family.id + "\n" + currentBIN.family.family.status + "\n" + currentBIN.family.family.writeHow;
         $("omegaThink").textContent = "Familia de kernel reconocida al cargar.";
+        if (currentBIN.family.family.id === "YAMAHA_R5F10" && $("helpRecipe")) {
+            $("helpRecipe").value = R5F_RECIPE;
+        }
     }
     setStatus("CARGADO", true);
+    if (!currentBIN.family && $("omegaThink")) {
+        $("omegaThink").textContent = "Archivo completo cargado. No uso Yamaha 35000. Con BIN 2 y KM 1 / KM 2, ATAQUE 10 MIN descifra solo lo que cambia.";
+    }
     addLogRows();
 }
 

@@ -70,29 +70,41 @@ const DeepAttack = {
         return null;
     },
 
+    recipeFitsFile(item, bytes) {
+        if (typeof CodeBook !== "undefined" && CodeBook.fitsFile) return CodeBook.fitsFile(item, bytes);
+        return true;
+    },
+
     knownRecipes() {
         const out = [];
         const seen = new Set();
+        const bytes = this._ctx && this._ctx.bytes;
         const push = (item) => {
             if (!item || !item.formula || item.formula === "FINO") return;
             if (typeof KnowledgeBase !== "undefined" && KnowledgeBase.isHidden(item)) return;
+            if (bytes && !this.recipeFitsFile(item, bytes)) return;
             const width = Number(item.width || item.length) || 0;
             if (width < 2 || width > 4) return;
             const endian = item.endian === "BE" || item.endian === "BIG_ENDIAN" ? "BE"
                 : (item.endian === "BCD" ? "BCD" : "LE");
-            const key = String(item.formula) + "|" + width + "|" + endian;
+            const familyId = item.familyId || item.id || item.codeId || "";
+            const familyLocked = /YAMAHA_|ODYSSEY_/i.test(String(familyId));
+            const key = String(item.formula) + "|" + width + "|" + endian + (familyLocked ? "|" + familyId : "");
             if (seen.has(key)) return;
             seen.add(key);
             out.push({
                 name: item.name || item.id || item.expression || key,
-                familyId: item.familyId || item.id || item.codeId || "",
+                familyId: familyLocked ? familyId : "",
                 formula: item.formula,
                 width: width,
                 endian: endian,
                 chk: item.chk || (item.checksums && item.checksums[0] && item.checksums[0].name) || ""
             });
         };
-        if (typeof CodeBook !== "undefined") CodeBook.list().forEach(push);
+        if (typeof CodeBook !== "undefined") {
+            CodeBook.list().filter((c) => !/YAMAHA_|ODYSSEY_/i.test(c.id)).forEach(push);
+            CodeBook.list().filter((c) => /YAMAHA_|ODYSSEY_/i.test(c.id)).forEach(push);
+        }
         if (typeof KnowledgeBase !== "undefined") {
             const db = KnowledgeBase.load();
             (db.algorithms || []).forEach(push);
@@ -159,9 +171,9 @@ const DeepAttack = {
                     checksum: chk1[0] || null,
                     copies: locs,
                     stair: locs.length,
-                    score: 97 + (chk1[0] ? 2 : 0),
-                    familyId: code.familyId,
-                    fromKnown: true,
+                    score: (/YAMAHA_|ODYSSEY_/i.test(String(code.familyId)) ? 97 : 86) + (chk1[0] ? 2 : 0),
+                    familyId: /YAMAHA_|ODYSSEY_/i.test(String(code.familyId)) ? code.familyId : "",
+                    fromKnown: /YAMAHA_|ODYSSEY_/i.test(String(code.familyId)),
                     name: code.name
                 });
             });
