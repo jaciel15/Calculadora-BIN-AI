@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=carga1">
+    <link rel="stylesheet" href="style.css?v=ataque3">
 </head>
 
 <body>
@@ -103,10 +103,8 @@
             <input id="knownVin2" type="text" maxlength="17" placeholder="VIN archivo 2">
             <button id="analyzePairBtn" class="action-btn green">ANALIZAR PAR</button>
             <button type="button" id="attackBtn" class="action-btn blue">ATAQUE 10 MIN</button>
-            <button type="button" id="loadSamplePairBtn" class="action-btn yellow">CARGAR PAR 35000 / 150500</button>
-            <button type="button" id="loadTrackerBtn" class="action-btn blue">CARGAR 3 TRACKER Y ATACAR</button>
             <strong id="kmReadout" class="km-readout km-bad">Leídos → KM 1: —   KM 2: —</strong>
-            <span class="bin3-ask">Escribe KM 1 y KM 2 y mira que salgan arriba en “Leídos”. Luego ATAQUE 10 MIN. No uses el ANALIZAR de arriba.</span>
+            <span class="bin3-ask">Carga BIN 1 y BIN 2, escribe KM 1 y KM 2, y pulsa ATAQUE 10 MIN. Ese ataque descifra el código.</span>
         </div>
         <div class="known-bar pair-bar" id="bin3Bar">
             <label>BIN 3</label>
@@ -124,8 +122,7 @@
         </div>
         <div class="help-recipe-bar">
             <label>CÓMO LO HAGO</label>
-            <textarea id="helpRecipe" rows="3" placeholder="El ataque escribe aquí cómo encontró el KM: dirección, fórmula y checksum/CRC. Yamaha 0260 solo si el archivo es de 8192 bytes."></textarea>
-            <button type="button" id="helpExampleBtn" class="action-btn">EJEMPLO</button>
+            <textarea id="helpRecipe" rows="3" placeholder="El ATAQUE 10 MIN escribe aquí cómo descifró el KM: dirección, fórmula y checksum/CRC."></textarea>
         </div>
         <input type="file" id="fileInput2" accept="*/*,.bin,.eep,.hex,.s19,.srec,.mot" hidden>
 
@@ -610,28 +607,28 @@
 </div>
 <div id="attackToast" class="attack-toast hidden"></div>
 
-<script src="mark-book.js?v=carga1"></script>
-<script src="operation-registry.js?v=carga1"></script>
-<script src="expression-tree.js?v=carga1"></script>
-<script src="math-engine.js?v=carga1"></script>
-<script src="expression-generator.js?v=carga1"></script>
-<script src="fitness-engine.js?v=carga1"></script>
-<script src="validation-engine.js?v=carga1"></script>
-<script src="checksum-engine.js?v=carga1"></script>
-<script src="knowledge-base.js?v=carga1"></script>
-<script src="bin-world.js?v=carga1"></script>
-<script src="mind-engine.js?v=carga1"></script>
-<script src="hunters.js?v=carga1"></script>
-<script src="dna-discovery.js?v=carga1"></script>
-<script src="editor-upa.js?v=carga1"></script>
-<script src="write-machine.js?v=carga1"></script>
-<script src="bin-object.js?v=carga1"></script>
-<script src="family-library.js?v=carga1"></script>
-<script src="omega-kernel.js?v=carga1"></script>
-<script src="bin-core.js?v=carga1"></script>
-<script src="discovery-manager.js?v=carga1"></script>
-<script src="deep-attack.js?v=carga1"></script>
-<script src="app.js?v=carga1"></script>
+<script src="mark-book.js?v=ataque3"></script>
+<script src="operation-registry.js?v=ataque3"></script>
+<script src="expression-tree.js?v=ataque3"></script>
+<script src="math-engine.js?v=ataque3"></script>
+<script src="expression-generator.js?v=ataque3"></script>
+<script src="fitness-engine.js?v=ataque3"></script>
+<script src="validation-engine.js?v=ataque3"></script>
+<script src="checksum-engine.js?v=ataque3"></script>
+<script src="knowledge-base.js?v=ataque3"></script>
+<script src="bin-world.js?v=ataque3"></script>
+<script src="mind-engine.js?v=ataque3"></script>
+<script src="hunters.js?v=ataque3"></script>
+<script src="dna-discovery.js?v=ataque3"></script>
+<script src="editor-upa.js?v=ataque3"></script>
+<script src="write-machine.js?v=ataque3"></script>
+<script src="bin-object.js?v=ataque3"></script>
+<script src="family-library.js?v=ataque3"></script>
+<script src="omega-kernel.js?v=ataque3"></script>
+<script src="bin-core.js?v=ataque3"></script>
+<script src="discovery-manager.js?v=ataque3"></script>
+<script src="deep-attack.js?v=ataque3"></script>
+<script src="app.js?v=ataque3"></script>
 
 </body>
 </html>

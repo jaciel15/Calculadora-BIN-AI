@@ -1888,59 +1888,6 @@ async function loadBIN3(event) {
     if (knownKm3() !== null) startDeepAttack();
 }
 
-async function loadSamplePair() {
-    try {
-        const [one, two] = await Promise.all([
-            fetch("samples/35000-line-260.bin"),
-            fetch("samples/150500-pair.bin")
-        ]);
-        if (!one.ok || !two.ok) throw new Error("sample");
-        const f1 = new File([await one.arrayBuffer()], "35000 line 260 final.bin.bin");
-        const f2 = new File([await two.arrayBuffer()], "150500_KM_Org.NISSAN.EDITADO.bin");
-        await loadBIN({ target: { files: [f1] } });
-        await loadBIN2({ target: { files: [f2] } });
-        if ($("knownKm")) $("knownKm").value = "35000";
-        if ($("knownKm1")) $("knownKm1").value = "35000";
-        if ($("knownKm2")) $("knownKm2").value = "150500";
-        runPairAnalysis();
-    } catch (error) {
-        alert("No pude cargar el par de ejemplo. Elige BIN 1 (35000 línea 260) y BIN 2 (150500) a mano.");
-    }
-}
-
-async function loadTrackerTriple() {
-    try {
-        const files = await Promise.all([
-            fetch("samples/tracker-km1-113171.bin"),
-            fetch("samples/tracker-km2-150000.bin"),
-            fetch("samples/tracker-km3-180000.bin")
-        ]);
-        if (files.some((f) => !f.ok)) throw new Error("sample");
-        const bufs = await Promise.all(files.map((f) => f.arrayBuffer()));
-        const f1 = new File([bufs[0]], "tracker-km1-113171.bin");
-        const f2 = new File([bufs[1]], "tracker-km2-150000.bin");
-        const f3 = new File([bufs[2]], "tracker-km3-180000.bin");
-        await loadBIN({ target: { files: [f1] } });
-        await loadBIN2({ target: { files: [f2] } });
-        OmegaKernel.compareBins[1] = {
-            fileName: f3.name,
-            bytes: new Uint8Array(bufs[2]),
-            diskSize: bufs[2].byteLength,
-            complete: true,
-            format: "BIN"
-        };
-        dumpSlotLabel(3, { fileName: f3.name, loaded: bufs[2].byteLength, complete: true });
-        fillKmField("knownKm1", 113171);
-        fillKmField("knownKm2", 150000);
-        fillKmField("knownKm3", 180000);
-        if ($("helpRecipe")) $("helpRecipe").value = "";
-        refreshKmReadout();
-        startDeepAttack();
-    } catch (error) {
-        alert("No pude cargar los 3 BIN de prueba. Elige BIN 1 / 2 / 3 a mano (KM 113171, 150000 y 180000) y pulsa ATAQUE 10 MIN.");
-    }
-}
-
 function runPairAnalysis() {
     startDeepAttack();
 }
@@ -2273,14 +2220,6 @@ function wireUI() {
     if ($("brainInput")) $("brainInput").addEventListener("change", importBrain);
     bindClick("markAcceptBtn", acceptMarkLesson);
     bindClick("markSkipBtn", skipMarkLesson);
-    bindClick("loadSamplePairBtn", loadSamplePair);
-    bindClick("loadTrackerBtn", loadTrackerTriple);
-    bindClick("helpExampleBtn", () => {
-        if ($("helpRecipe")) {
-            $("helpRecipe").value = R5F_RECIPE;
-            if (typeof MarkBook !== "undefined") MarkBook.persist();
-        }
-    });
     if ($("helpRecipe")) {
         const saveRecipe = () => { if (typeof MarkBook !== "undefined") MarkBook.persist(); };
         $("helpRecipe").addEventListener("change", saveRecipe);
