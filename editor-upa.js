@@ -93,9 +93,19 @@ const EditorEngine = {
         }
         const encoded = this.encodeValue(Number(newValue), hit);
         const working = new Uint8Array(bytes);
-        copies.forEach((addr) => {
-            working.set(encoded, addr);
-        });
+        if (hit.scatter && hit.scatter.length) {
+            hit.scatter.forEach((slot) => {
+                const at = Number(slot.addr);
+                const part = Number(slot.part);
+                if (at < 0 || at >= working.length) return;
+                if (part < 0 || part >= encoded.length) return;
+                working[at] = encoded[part];
+            });
+        } else {
+            copies.forEach((addr) => {
+                working.set(encoded, addr);
+            });
+        }
         if (hit.checksumAt !== undefined && hit.checksumName) {
             const size = hit.checksumSize || (/16/.test(hit.checksumName) ? 2 : 1);
             const name = String(hit.checksumName).toUpperCase();

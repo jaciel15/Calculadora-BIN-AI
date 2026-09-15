@@ -355,7 +355,11 @@ const DeepAttack = {
                     hex: ghost.hex,
                     copies: ghost.copies,
                     bytes: changed,
-                    ok: changed > 0 && changed <= (best.copies.length * ((best.width || 2) + 4))
+                    ok: changed > 0 && changed <= Math.max(
+                        best.copies.length * ((best.width || 2) + 4),
+                        (best.scatter && best.scatter.length ? best.scatter.length + 24 : 0),
+                        24
+                    )
                 });
             } catch (error) {
                 logs.push({ km: km, hex: "error", copies: 0, bytes: 0, ok: false });
@@ -398,7 +402,10 @@ const DeepAttack = {
         } else {
             bits.push("Aún no ligó SUM/CRC de ese KM.");
         }
-        bits.push("No toqué el resto del archivo: solo las líneas que cambian.");
+        if (hit.scatter && hit.scatter.length) {
+            bits.push("BIN 1 original vs BIN 2 editado: el KM se igualó en " + hit.scatter.length +
+                " bytes y no toqué lo que se queda igual (ni lo que hay que dejar).");
+        }
         return bits.join(" ");
     },
 
@@ -431,6 +438,8 @@ const DeepAttack = {
             checksumSize: hit.checksum ? hit.checksum.size : undefined,
             checksumStart: hit.checksum && hit.checksum.start != null ? hit.checksum.start : undefined,
             checksumEnd: hit.checksum && hit.checksum.end != null ? hit.checksum.end : undefined,
+            scatter: hit.scatter && hit.scatter.length ? hit.scatter.slice(0, 96) : undefined,
+            equalize: !!hit.equalize,
             operation: (hit.formula || "X") + " · " + hit.width + "B " + (hit.endian || "LE") +
                 (hit.checksum ? " · " + hit.checksum.name + " @" + this.hex(hit.checksum.storedAt) : ""),
             vin: (this._vins && this._vins[0] && this._vins[0].value) || ""
@@ -456,6 +465,7 @@ const DeepAttack = {
             return copies.length <= 64;
         }
         if (hit.fromXor && copies.length >= 1) return true;
+        if (hit.scatter && hit.scatter.length >= 4) return true;
         if (hit.checksum && copies.length >= 1) return true;
         return !!(hit.fromPair && copies.length >= 2);
     },
@@ -653,6 +663,41 @@ const DeepAttack = {
         if (chk) {
             hit.checksum = chk;
             hit.score = (hit.score || 80) + 10;
+        }
+        return hit;
+    },
+
+    learnScatter(hit, a, b, c, km1, km2, km3) {
+        if (!hit || !a || !b || !this._diffs || !this._diffs.size) return hit;
+        if (typeof EditorEngine === "undefined" || !EditorEngine.encodeValue) return hit;
+        let e1;
+        let e2;
+        let e3 = null;
+        try {
+            e1 = EditorEngine.encodeValue(km1, { formula: hit.formula, width: hit.width, endian: hit.endian });
+            e2 = EditorEngine.encodeValue(km2, { formula: hit.formula, width: hit.width, endian: hit.endian });
+            if (c && km3 != null) e3 = EditorEngine.encodeValue(km3, { formula: hit.formula, width: hit.width, endian: hit.endian });
+        } catch (error) {
+            return hit;
+        }
+        if (!e1 || !e2) return hit;
+        const map = [];
+        this._diffs.forEach((i) => {
+            for (let k = 0; k < e1.length; k++) {
+                if (a[i] !== e1[k] || b[i] !== e2[k]) continue;
+                if (e3 && c[i] !== e3[k]) continue;
+                map.push({ addr: i, part: k });
+                break;
+            }
+        });
+        if (map.length >= 4 && map.length >= this._diffs.size * 0.45) {
+            hit.scatter = map;
+            hit.equalize = true;
+            hit.score = (hit.score || 80) + 14;
+            if (hit.checksum && map.some((s) => s.addr === hit.checksum.storedAt ||
+                (hit.checksum.storedAt != null && s.addr === hit.checksum.storedAt + 1))) {
+                hit.checksum = null;
+            }
         }
         return hit;
     },
@@ -1366,6 +1411,7 @@ const DeepAttack = {
                         while (Date.now() < sliceEnd && self._chkI < self._chkList.length) {
                             const row = self._chkList[self._chkI];
                             if (!row.checksum || !row.checksum.name) self.attachChecksum(row, a, b, c);
+                            self.learnScatter(row, a, b, c, km1, km2, km3);
                             self._chkI++;
                         }
                         const linked = hits.filter((h) => h.checksum && h.checksum.name).length;
