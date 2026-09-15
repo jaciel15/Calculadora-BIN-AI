@@ -274,7 +274,8 @@ const WriteMachine = {
                 slots: machine.slots.length
             };
         }
-        if (!machine.locked) {
+        const proven = !!(hit && (hit.fromAttack || hit.fromPair || hit.fromFamily || hit.fromClosed || hit.fromWorld));
+        if (!machine.locked && !proven) {
             return {
                 blocked: true,
                 reason: "La máquina no está sellada. Analiza hasta DEMOSTRADO.",
@@ -287,8 +288,16 @@ const WriteMachine = {
         }
         const km = Number(newKm);
         if (!Number.isFinite(km)) return null;
-        const applied = EditorEngine.apply(bytes, hit, km);
-        const working = applied.bytes;
+        let applied = EditorEngine.apply(bytes, hit, km);
+        let working = applied.bytes;
+        let diffs = this.diffs(bytes, working);
+        if (!diffs.length && hit && hit.scatter && hit.scatter.length) {
+            const full = Object.assign({}, hit);
+            delete full.scatter;
+            applied = EditorEngine.apply(bytes, full, km);
+            working = applied.bytes;
+            diffs = this.diffs(bytes, working);
+        }
         const repaired = this.repair(machine, working);
         const proved = this.prove(machine, working);
         if (!proved.ok) {

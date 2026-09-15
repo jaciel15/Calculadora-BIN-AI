@@ -1,6 +1,7 @@
 let currentBIN = null;
 let lastSimulation = null;
 let lastGhost = null;
+let lastProven = null;
 
 const LabMode = {
     current: "KM",
@@ -1076,6 +1077,51 @@ function runRestore() {
     addLogRows();
 }
 
+function rememberProven(best, size) {
+    if (!best || best.writable === false || !best.formula) return;
+    try {
+        lastProven = {
+            size: Number(size) || 0,
+            best: JSON.parse(JSON.stringify(best))
+        };
+    } catch (error) {
+        lastProven = { size: Number(size) || 0, best: best };
+    }
+}
+
+function adoptProvenIfNeeded() {
+    if (!currentBIN || !currentBIN.original || !lastProven || !lastProven.best) return false;
+    if (lastProven.size && currentBIN.original.length !== lastProven.size) return false;
+    currentBIN.analysis = currentBIN.analysis || {
+        mileageHits: [],
+        checksums: [],
+        counters: [],
+        omega: {}
+    };
+    if (!currentBIN.analysis.best || !currentBIN.analysis.best.formula) {
+        currentBIN.analysis.best = JSON.parse(JSON.stringify(lastProven.best));
+    }
+    const best = currentBIN.analysis.best;
+    if (typeof WriteMachine !== "undefined") {
+        currentBIN.analysis.omega = currentBIN.analysis.omega || {};
+        if (!currentBIN.analysis.omega.machine || !currentBIN.analysis.omega.machine.locked) {
+            currentBIN.analysis.omega.machine = WriteMachine.seal(currentBIN.original, {
+                best: best,
+                truth: { status: "DEMOSTRADO", confidence: best.confidence }
+            });
+        }
+    }
+    return !!(best && best.formula);
+}
+
+function countByteDiffs(a, b) {
+    if (!a || !b) return 0;
+    const n = Math.min(a.length, b.length);
+    let d = 0;
+    for (let i = 0; i < n; i++) if (a[i] !== b[i]) d++;
+    return d;
+}
+
 function currentKmGuess() {
     const pair = pairKm1();
     if (pair !== null) return pair;
@@ -1265,7 +1311,9 @@ function offerEditedFile(title, extraHtml) {
 
 function showGenerateForm(haveKm) {
     if (!needBIN()) return;
+    adoptProvenIfNeeded();
     if (!currentBIN.analysis) runAnalysis();
+    adoptProvenIfNeeded();
     if (!currentBIN.analysis || !currentBIN.analysis.best) {
         alert("Primero analiza o termina el ataque. Sin fórmula no se edita el archivo.");
         return;
@@ -1304,7 +1352,12 @@ function showGenerateForm(haveKm) {
 }
 
 function makeEditedFile() {
-    if (!needBIN() || !currentBIN.analysis) return;
+    if (!needBIN()) return;
+    adoptProvenIfNeeded();
+    if (!currentBIN.analysis || !currentBIN.analysis.best) {
+        alert("Primero analiza o termina el ataque. Sin fórmula no se edita el archivo.");
+        return;
+    }
     const have = $("genHaveKm") ? $("genHaveKm").value.replace(/[^\d]/g, "") : "";
     const neu = $("genNewKm") ? $("genNewKm").value.replace(/[^\d]/g, "") : "";
     if (!neu) {
@@ -1318,7 +1371,31 @@ function makeEditedFile() {
     if ($("ghostKm")) $("ghostKm").value = neu;
     runApply();
     if (!lastSimulation) {
+        const hit = currentBIN.analysis.best;
+        if (hit && hit.scatter) {
+            const full = Object.assign({}, hit);
+            delete full.scatter;
+            currentBIN.analysis.best = full;
+            runApply();
+            currentBIN.analysis.best = hit;
+        }
+    }
+    if (!lastSimulation) {
         alert("No pude crear el archivo. El ataque tiene que haber encontrado fórmula en los bytes que cambian.");
+        return;
+    }
+    let changed = countByteDiffs(currentBIN.original, lastSimulation.applied && lastSimulation.applied.bytes);
+    if (!changed && currentBIN.analysis.best && currentBIN.analysis.best.scatter) {
+        const hit = currentBIN.analysis.best;
+        const full = Object.assign({}, hit);
+        delete full.scatter;
+        currentBIN.analysis.best = full;
+        runApply();
+        currentBIN.analysis.best = hit;
+        changed = countByteDiffs(currentBIN.original, lastSimulation.applied && lastSimulation.applied.bytes);
+    }
+    if (!changed) {
+        alert("El archivo salió igual al original. El KM nuevo no se escribió. Vuelve a correr ATAQUE 10 MIN con BIN 1 original, BIN 2 editado y sus KM, y luego pon el KM nuevo.");
         return;
     }
     const bytes = binCore.generateBIN();
@@ -1326,8 +1403,8 @@ function makeEditedFile() {
     const name = fileNameSafe($("genFileName") && $("genFileName").value, neu);
     downloadBlob(name, [bytes], "application/octet-stream");
     $("labModal").classList.remove("open");
-    showAttackToast("Archivo listo: " + name);
-    if (typeof binCore !== "undefined") binCore.addLog("BIN GENERATOR", "Archivo editado " + name + " · " + have + " → " + neu + " KM");
+    showAttackToast("Archivo editado: " + name + " · " + changed + " bytes");
+    if (typeof binCore !== "undefined") binCore.addLog("BIN GENERATOR", "Archivo editado " + name + " · " + have + " → " + neu + " KM · " + changed + " bytes");
     addLogRows();
 }
 
@@ -2074,6 +2151,7 @@ async function startDeepAttack() {
             });
             renderMachine(currentBIN.analysis.omega.machine);
         }
+        rememberProven(report.best, currentBIN.original.length);
     }
     showAttackToast(report.message);
     if (typeof binCore !== "undefined") binCore.addLog("ATAQUE 10 MIN", report.message);

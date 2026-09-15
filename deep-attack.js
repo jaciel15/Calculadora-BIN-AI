@@ -833,10 +833,8 @@ const DeepAttack = {
             if (!ok) return;
             if (b[i] !== e2[0]) return;
             for (let k = 0; k < width; k++) {
-                if (this._diffs.has(i + k) || a[i + k] !== b[i + k]) {
-                    map.push({ addr: i + k, part: k });
-                    used.add(i + k);
-                }
+                map.push({ addr: i + k, part: k });
+                used.add(i + k);
             }
         });
         diffs.forEach((i) => {
