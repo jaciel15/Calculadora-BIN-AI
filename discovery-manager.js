@@ -76,10 +76,10 @@ const DiscoveryManager = {
                 if (dataset.length < 2) return;
                 const trees = ExpressionGenerator.generate({
                     samples: dataset,
-                    maximumDepth: 3,
-                    maximumCandidates: 280,
-                    timeout: 600,
-                    beamWidth: 32
+                    maximumDepth: config.maximumDepth || 3,
+                    maximumCandidates: config.maximumCandidates || 280,
+                    timeout: config.timeout || 600,
+                    beamWidth: config.beamWidth || 32
                 });
                 trees.forEach((tree) => {
                     const fit = FitnessEngine.evaluate(tree, dataset);
@@ -153,7 +153,10 @@ const DiscoveryManager = {
                     addrs: config.addrs,
                     bytes: Array.from(config.bytes || []),
                     bytes2: Array.from(config.bytes2 || []),
-                    bytes3: Array.from(config.bytes3 || [])
+                    bytes3: Array.from(config.bytes3 || []),
+                    maximumCandidates: config.maximumCandidates,
+                    maximumDepth: config.maximumDepth,
+                    timeout: config.timeout
                 } });
                 return;
             } catch (error) {

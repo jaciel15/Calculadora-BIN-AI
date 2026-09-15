@@ -29,7 +29,10 @@ self.onmessage = function (event) {
             km1: p.km1,
             km2: p.km2,
             km3: p.km3,
-            addrs: p.addrs || []
+            addrs: p.addrs || [],
+            maximumCandidates: p.maximumCandidates,
+            maximumDepth: p.maximumDepth,
+            timeout: p.timeout
         });
         if (cancelled) {
             self.postMessage({ type: "DISCOVERY_CANCELLED", payload: {} });

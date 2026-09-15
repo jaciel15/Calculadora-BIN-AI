@@ -1913,7 +1913,9 @@ function fillAttackSim(info) {
         "KM " + s.km + " → " + s.hex + " · " + s.copies + " copias · " + s.bytes + " bytes " + (s.ok ? "OK" : "REVISAR")
     ).join("\n");
     box.textContent = (vinLine ? "VIN: " + vinLine + "\n" : "") +
+        (info.help && info.help.length ? "AYUDA: " + info.help.join(" · ") + "\n" : "") +
         (info.skipped && info.skipped.length ? "Algoritmos que no calzaron (sigo): " + info.skipped.join(", ") + "\n" : "") +
+        (info.phase === "help" ? "Pensando tu ayuda (colores, complemento, CÓMO LO HAGO)…\n" : "") +
         (info.phase === "sim" ? "SIMULADOR (el cerebro fabrica archivos de prueba)\n" : "") +
         (info.phase === "saved" ? "Probando algoritmos guardados uno por uno. Si no calzan, los descarto y sigo.\n" : "") +
         (info.phase === "chk" ? "KM hallado. Ligando SUM/CRC de esa misma zona…\n" : "") +
@@ -1985,7 +1987,9 @@ async function startDeepAttack() {
                 fillAttackSim(info);
                 setStatus("CARGANDO", "busy");
                 if (status) {
-                    if (info.phase === "saved") {
+                    if (info.phase === "help") {
+                        status.textContent = "Leyendo tu ayuda y pensando más sobre esas pistas.";
+                    } else if (info.phase === "saved") {
                         status.textContent = "Probando algoritmos guardados. Si no calzan, los descarto y sigo.";
                     } else if (info.phase === "chk") {
                         status.textContent = "Ya hay KM. Buscando su checksum o CRC en las páginas de al lado.";
@@ -2063,6 +2067,9 @@ async function startDeepAttack() {
             ? "<p><strong>Simulador</strong></p><pre>" + report.sim.map((s) =>
                 "KM " + s.km + " → " + s.hex + " · " + s.copies + " copias · " + s.bytes + " bytes " + (s.ok ? "OK" : "REVISAR")
             ).join("\n") + "</pre>"
+            : "") +
+        (report.help && report.help.length
+            ? "<p>Ayuda que analizó: " + escapeText(report.help.join(" · ")) + "</p>"
             : "") +
         (report.skipped && report.skipped.length
             ? "<p>Algoritmos guardados que no calzaron y se descartaron: " +

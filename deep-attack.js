@@ -228,7 +228,10 @@ const DeepAttack = {
 
     matchXorBytes(a, b, c, addr, width, little, km1, km2, km3) {
         if (!a || !b || km1 == null || km2 == null) return null;
-        const formulas = ["X", "X * 10", "X * 100", "X / 4", "X / 10", "X / 16", "X / 64", "~X", "NIBBLE_SWAP(X)", "BCD"];
+        const formulas = ["X", "X * 10", "X * 100", "X / 4", "X / 10", "X / 16", "X / 64", "X * 4", "X * 64", "~X", "NIBBLE_SWAP(X)", "BCD"];
+        if (this._help && this._help.formula && formulas.indexOf(this._help.formula) < 0) {
+            formulas.unshift(this._help.formula.replace(/\s+XORBYTES?\s+.*/i, "").trim() || "X");
+        }
         const slice = (bytes) => bytes.slice(addr, addr + width);
         const keyOf = (stored, plain) => {
             const k = new Uint8Array(width);
@@ -447,6 +450,7 @@ const DeepAttack = {
         const copies = hit.copies || [];
         if (copies.length < 1 || copies.length > 64) return false;
         if (hit.fromUser && copies.length >= 1) return true;
+        if (hit.fromHelp && copies.length >= 1) return true;
         if (hit.fromSaved && copies.length <= 64) return !!(hit.checksum || copies.length >= 2 || hit.fromXor);
         if (hit.fromKnown && hit.familyId && this._ctx && this.recipeFitsFile({ id: hit.familyId, familyId: hit.familyId }, this._ctx.bytes)) {
             return copies.length <= 64;
@@ -708,6 +712,143 @@ const DeepAttack = {
         return out;
     },
 
+    kmFields() {
+        const fields = [];
+        const seen = new Set();
+        const push = (start, width) => {
+            const w = Math.min(4, Math.max(2, Number(width) || 2));
+            const key = start + "|" + w;
+            if (start < 0 || seen.has(key)) return;
+            seen.add(key);
+            fields.push({ start: start, width: w });
+        };
+        if (typeof MarkBook === "undefined") return fields;
+        ["KM", "HINT"].forEach((kind) => {
+            const ranges = (MarkBook.exclusiveRanges ? MarkBook.exclusiveRanges(kind) : []).concat(MarkBook.lessonRanges(kind) || []);
+            ranges.forEach((range) => {
+                const size = (range.end - range.start + 1) || range.size || 1;
+                if (size >= 2 && size <= 4) push(range.start, size);
+                else {
+                    push(range.start, 2);
+                    push(range.start, 3);
+                }
+            });
+        });
+        return fields;
+    },
+
+    readHelp() {
+        const addrs = this.markAddrs();
+        const notes = [];
+        let formula = null;
+        let width = null;
+        let endian = null;
+        let chk = null;
+        let text = "";
+        if (typeof MarkBook !== "undefined") {
+            const rec = MarkBook.recipe();
+            text = rec.raw || MarkBook.recipeText() || "";
+            formula = rec.formula || null;
+            width = rec.width || null;
+            endian = rec.endian || null;
+            chk = rec.chk || null;
+            if (rec.note) notes.push(rec.note);
+            if (MarkBook.hasHelp()) notes.push("Hay colores o texto de ayuda");
+        }
+        const raw = String(text);
+        const low = raw.toLowerCase();
+        if (!formula) {
+            if (/x\s*\/\s*4|entre\s*4/.test(low)) formula = "X / 4";
+            else if (/x\s*\*\s*10|x\s*10/.test(low)) formula = "X * 10";
+            else if (/xorbytes\s+/i.test(raw)) formula = "X XORBYTES " + (raw.match(/xorbytes\s+([0-9A-Fa-f\-]{5,})/i) || [])[1];
+        }
+        (raw.match(/0x[0-9A-Fa-f]{3,6}\b|\b[0-9A-Fa-f]{4}\b/g) || []).forEach((h) => {
+            const n = parseInt(String(h).replace(/^0x/i, ""), 16);
+            if (Number.isFinite(n) && n >= 0 && n < 0x200000 && addrs.indexOf(n) < 0) addrs.push(n);
+        });
+        this.kmFields().forEach((f) => {
+            if (addrs.indexOf(f.start) < 0) addrs.push(f.start);
+        });
+        if (formula) notes.push("Fórmula que me dijiste: " + formula);
+        if (width) notes.push(width + " bytes");
+        if (endian) notes.push(endian);
+        if (chk) notes.push("Checksum " + chk);
+        if (addrs.length) notes.push(addrs.length + " direcciones de tu ayuda");
+        if (!notes.length) notes.push("Sin ayuda extra: pienso solo con los diffs");
+        return {
+            addrs: addrs,
+            fields: this.kmFields(),
+            formula: formula,
+            width: width,
+            endian: endian,
+            chk: chk,
+            text: raw,
+            notes: notes
+        };
+    },
+
+    hitsFromHelp(a, b, c, km1, km2, km3) {
+        const hits = [];
+        const help = this._help || this.readHelp();
+        const starts = [];
+        (help.fields || []).forEach((f) => starts.push(f));
+        (help.addrs || []).forEach((addr) => {
+            const widths = help.width ? [help.width, 2, 3, 4] : [2, 3, 4];
+            widths.forEach((w) => starts.push({ start: addr, width: w }));
+        });
+        const formulas = [];
+        if (help.formula) formulas.push(help.formula);
+        ["X", "X / 4", "X * 10", "X * 100", "X / 10", "X * 4"].forEach((f) => {
+            if (formulas.indexOf(f) < 0) formulas.push(f);
+        });
+        const endians = help.endian === "BE"
+            ? [{ id: "BE", little: false }, { id: "LE", little: true }]
+            : [{ id: "LE", little: true }, { id: "BE", little: false }];
+        const seen = new Set();
+        starts.slice(0, 96).forEach((field) => {
+            endians.forEach((en) => {
+                formulas.forEach((formula) => {
+                    const key = field.start + "|" + field.width + "|" + en.id + "|" + formula;
+                    if (seen.has(key) || field.start + field.width > a.length) return;
+                    seen.add(key);
+                    let pat1;
+                    let pat2;
+                    try {
+                        pat1 = this.encodeRecipe({ formula: formula, width: field.width, endian: en.id }, km1);
+                        pat2 = b && km2 != null ? this.encodeRecipe({ formula: formula, width: field.width, endian: en.id }, km2) : null;
+                    } catch (error) {
+                        return;
+                    }
+                    if (!this.patternFits(a, field.start, pat1)) return;
+                    if (pat2 && !this.patternFits(b, field.start, pat2)) return;
+                    const copies = this._diffs && this._diffs.size
+                        ? this.copiesOnDiffOffset(this._diffs, field.start, a.length, field.width)
+                        : [field.start];
+                    const row = {
+                        line: field.start & ~0x0F,
+                        addr: field.start,
+                        width: field.width,
+                        endian: en.id,
+                        formula: formula,
+                        raw: this.read(a, field.start, field.width, en.little),
+                        km: km1,
+                        hex: MathEngine.hexBytes(a.slice(field.start, field.start + field.width)),
+                        checksum: this.userChecksum(field.start, field.width),
+                        copies: copies,
+                        stair: copies.length,
+                        score: 99 + (help.formula === formula ? 4 : 0),
+                        fromHelp: true,
+                        fromPair: true,
+                        name: "AYUDA_" + formula
+                    };
+                    this.attachChecksum(row, a, b, c);
+                    hits.push(row);
+                });
+            });
+        });
+        return hits;
+    },
+
     userChecksum(addr, width) {
         if (typeof MarkBook === "undefined") return null;
         const stores = [];
@@ -727,7 +868,9 @@ const DeepAttack = {
             !(s.start >= addr && s.start < addr + width)
         ) || stores[0];
         if (!near) return null;
-        const name = near.kind === "COMP" ? "COMP8" : (near.kind === "CRC" ? "CRC16" : "SUM8");
+        const name = (this._help && this._help.chk)
+            ? this._help.chk
+            : (near.kind === "COMP" ? "COMP8" : (near.kind === "CRC" ? "CRC16" : "SUM8"));
         return {
             name: name,
             storedAt: near.start,
@@ -915,6 +1058,7 @@ const DeepAttack = {
             self._inventStarted = false;
             self._diffs = null;
             self._skipped = [];
+            self._help = null;
             self._chkI = null;
             self._chkList = [];
             self._ctx = { bytes: a, bytes2: b, bytes3: c, km1: km1, km2: km2, km3: km3 };
@@ -961,6 +1105,7 @@ const DeepAttack = {
                         sim: self._simLog || [],
                         vins: self._vins || [],
                         skipped: (self._skipped || []).slice(-8),
+                        help: (self._help && self._help.notes) || [],
                         minMs: self.MIN_MS,
                         maxMs: cap,
                         hardMs: self.HARD_MS,
@@ -1019,8 +1164,12 @@ const DeepAttack = {
                 self._inventStarted = true;
                 emit({ phase: "invent", line: lines[0] || 0 });
                 const probe = [];
+                ((self._help && self._help.addrs) || []).forEach((addr) => {
+                    if (probe.indexOf(addr) < 0) probe.push(addr);
+                });
+                const cap = probe.length ? 800 : 400;
                 (self._diffs || new Set()).forEach((addr) => {
-                    if (probe.length < 400) probe.push(addr);
+                    if (probe.length < cap) probe.push(addr);
                 });
                 const takeDisc = function (results) {
                     if (settled) return;
@@ -1073,7 +1222,10 @@ const DeepAttack = {
                             km1: km1,
                             km2: km2,
                             km3: km3,
-                            addrs: probe
+                            addrs: probe,
+                            maximumCandidates: self._help && self._help.addrs && self._help.addrs.length ? 480 : 320,
+                            maximumDepth: self._help && self._help.formula ? 4 : 3,
+                            timeout: 900
                         }, function (ev) {
                             if (settled) return;
                             if (ev.type === "DISCOVERY_COMPLETE") takeDisc(ev.payload && ev.payload.results);
@@ -1110,11 +1262,12 @@ const DeepAttack = {
                     return;
                 }
                 self._vins = self.huntVins(a, b, c);
-                emit({ phase: "saved", line: lines[0] || 0 });
+                self._help = self.readHelp();
+                emit({ phase: "help", line: lines[0] || 0 });
                 const widths = [2, 3, 4];
                 const endians = [{ id: "LE", little: true }, { id: "BE", little: false }];
                 const jobMap = {};
-                const markSet = new Set(self.markAddrs());
+                const markSet = new Set((self._help.addrs || []).concat(self.markAddrs()));
                 const addJobAddr = function (addr) {
                     widths.forEach((width) => {
                         const maxStart = addr;
@@ -1142,7 +1295,7 @@ const DeepAttack = {
                 const recipes = self._recipes || [];
                 let ri = 0;
                 let ji = 0;
-                let phase = "saved";
+                let phase = "help";
                 let simStarted = 0;
                 const tick = function () {
                     if (settled) return;
@@ -1153,6 +1306,19 @@ const DeepAttack = {
                     const elapsed = Date.now() - self.started;
                     if (elapsed >= self.HARD_MS) {
                         done(false);
+                        return;
+                    }
+                    if (phase === "help") {
+                        try {
+                            self.hitsFromHelp(a, b, c, km1, km2, km3).forEach((hit) => hits.push(hit));
+                        } catch (error) { /* sigo pensando sin esa ayuda */ }
+                        emit({
+                            phase: "help",
+                            formula: (hits[0] && hits[0].formula) || (self._help && self._help.formula) || "",
+                            line: lines[0] || 0
+                        });
+                        phase = "saved";
+                        self.timer = setTimeout(tick, 16);
                         return;
                     }
                     if (phase === "saved") {
@@ -1287,6 +1453,7 @@ const DeepAttack = {
             sim: this._simLog || [],
             vins: this._vins || [],
             skipped: this._skipped || [],
+            help: (this._help && this._help.notes) || [],
             message: best
                 ? "TERMINÓ. Desencriptó el kilometraje en la línea " + this.hex(best.line) +
                     " con " + best.formula +
