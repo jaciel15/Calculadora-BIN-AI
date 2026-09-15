@@ -545,14 +545,71 @@ body {
     height: 16px;
     accent-color: #1e5a9c;
 }
-.ai-reply {
+.help-how-btn {
+    min-width: 90px;
+    padding: 8px 10px;
+    border: 1px solid #1e5a9c;
+    border-radius: 8px;
+    background: #1e5a9c;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+}
+.help-how-btn:hover { background: #163a6b; }
+.ai-chat {
     margin: 0 0 12px;
     padding: 10px 12px;
     border: 1px solid #8eb8e8;
     border-radius: 12px;
     background: #eef6ff;
+}
+.ai-chat-log {
+    max-height: 120px;
+    overflow: auto;
+    font-size: 12px;
+    line-height: 1.4;
     color: #163a6b;
+    margin: 0 0 8px;
+}
+.ai-line { margin: 0 0 4px; }
+.ai-line.ai-ia { font-weight: 650; }
+.ai-line.ai-yo { color: #3a332b; }
+.ai-ask {
+    margin: 0 0 8px;
     font-size: 13px;
+    font-weight: 700;
+    color: #163a6b;
+    line-height: 1.45;
+}
+.ai-chat-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 8px;
+}
+.ai-yesno {
+    border: 1px solid #1e5a9c;
+    background: #fff;
+    color: #163a6b;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: 800;
+    font-size: 12px;
+    cursor: pointer;
+}
+.ai-yesno:hover { background: #dcebff; }
+.ai-yesno.ai-go {
+    background: #1e5a9c;
+    color: #fff;
+}
+.ai-reply {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #163a6b;
+    font-size: 12px;
     font-weight: 650;
     line-height: 1.45;
 }

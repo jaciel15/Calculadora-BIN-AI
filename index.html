@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=mente8">
+    <link rel="stylesheet" href="style.css?v=mente9">
 </head>
 
 <body>
@@ -121,14 +121,18 @@
             <button type="button" class="action-btn green" id="attackPosterMainSave">DESCARGAR IMAGEN DEL ATAQUE</button>
         </div>
         <div class="help-recipe-bar">
-            <label>CÓMO LO HAGO</label>
-            <textarea id="helpRecipe" rows="3" placeholder="Tu ayuda: p. ej. X / 4, bytes invertidos, XORBYTE AA, CRC16, 2C4D. Pinta KM en rojo. El ataque lee esto y te responde."></textarea>
+            <button type="button" id="helpHowBtn" class="help-how-btn">CÓMO LO HAGO</button>
+            <textarea id="helpRecipe" rows="3" placeholder="Pulsa CÓMO LO HAGO. La IA te pregunta el color del KM, si hay SUM/CRC (Sí o No) y si los bytes van invertidos."></textarea>
             <label class="hint-invert">
                 <input type="checkbox" id="hintInvertBytes">
                 Tal vez bytes invertidos
             </label>
         </div>
-        <div id="aiReply" class="ai-reply">La IA te responde aquí después de ATAQUE: si los bytes iban al revés, la fórmula y las otras hipótesis.</div>
+        <div id="aiChat" class="ai-chat">
+            <div id="aiChatLog" class="ai-chat-log"></div>
+            <p id="aiReply" class="ai-ask">Pulsa CÓMO LO HAGO. Te pregunto el color del KM, si hay SUM/CRC (Sí o No) y si los bytes van invertidos. Al final te digo: empezamos el ataque.</p>
+            <div id="aiChatBtns" class="ai-chat-btns"></div>
+        </div>
         <input type="file" id="fileInput2" accept="*/*,.bin,.eep,.hex,.s19,.srec,.mot" hidden>
 
         <div id="vinStrip" class="vin-strip">
@@ -613,28 +617,29 @@
 </div>
 <div id="attackToast" class="attack-toast hidden"></div>
 
-<script src="mark-book.js?v=mente8"></script>
-<script src="operation-registry.js?v=mente8"></script>
-<script src="expression-tree.js?v=mente8"></script>
-<script src="math-engine.js?v=mente8"></script>
-<script src="expression-generator.js?v=mente8"></script>
-<script src="fitness-engine.js?v=mente8"></script>
-<script src="validation-engine.js?v=mente8"></script>
-<script src="checksum-engine.js?v=mente8"></script>
-<script src="knowledge-base.js?v=mente8"></script>
-<script src="bin-world.js?v=mente8"></script>
-<script src="mind-engine.js?v=mente8"></script>
-<script src="hunters.js?v=mente8"></script>
-<script src="dna-discovery.js?v=mente8"></script>
-<script src="editor-upa.js?v=mente8"></script>
-<script src="write-machine.js?v=mente8"></script>
-<script src="bin-object.js?v=mente8"></script>
-<script src="family-library.js?v=mente8"></script>
-<script src="omega-kernel.js?v=mente8"></script>
-<script src="bin-core.js?v=mente8"></script>
-<script src="discovery-manager.js?v=mente8"></script>
-<script src="deep-attack.js?v=mente8"></script>
-<script src="app.js?v=mente8"></script>
+<script src="mark-book.js?v=mente9"></script>
+<script src="operation-registry.js?v=mente9"></script>
+<script src="expression-tree.js?v=mente9"></script>
+<script src="math-engine.js?v=mente9"></script>
+<script src="expression-generator.js?v=mente9"></script>
+<script src="fitness-engine.js?v=mente9"></script>
+<script src="validation-engine.js?v=mente9"></script>
+<script src="checksum-engine.js?v=mente9"></script>
+<script src="knowledge-base.js?v=mente9"></script>
+<script src="bin-world.js?v=mente9"></script>
+<script src="mind-engine.js?v=mente9"></script>
+<script src="hunters.js?v=mente9"></script>
+<script src="dna-discovery.js?v=mente9"></script>
+<script src="editor-upa.js?v=mente9"></script>
+<script src="write-machine.js?v=mente9"></script>
+<script src="bin-object.js?v=mente9"></script>
+<script src="family-library.js?v=mente9"></script>
+<script src="omega-kernel.js?v=mente9"></script>
+<script src="bin-core.js?v=mente9"></script>
+<script src="discovery-manager.js?v=mente9"></script>
+<script src="ai-coach.js?v=mente9"></script>
+<script src="deep-attack.js?v=mente9"></script>
+<script src="app.js?v=mente9"></script>
 
 </body>
 </html>

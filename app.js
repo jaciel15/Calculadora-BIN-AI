@@ -1493,6 +1493,7 @@ function acceptMarkLesson() {
         alert(result.message);
         return;
     }
+    if (typeof AiCoach !== "undefined") AiCoach.onAccepted(result.kinds || []);
     if (currentBIN) showHEX(currentBIN.working || currentBIN.original);
     setStatus(result.message, true);
     if (result.analyze && currentBIN) runAnalysis();
@@ -2025,6 +2026,7 @@ async function startDeepAttack() {
     if (overlay) overlay.classList.add("hidden");
     if ($("aiReply")) $("aiReply").textContent = report.reply || report.message;
     if ($("omegaThink")) $("omegaThink").textContent = report.reply || report.message;
+    if (typeof AiCoach !== "undefined") AiCoach.hearAttack(report.reply || report.message);
     if (report.best) {
         if (!currentBIN.analysis) {
             currentBIN.analysis = {
@@ -2306,6 +2308,7 @@ function wireUI() {
     bindClick("pickBin3", () => $("fileInput3").click());
     bindClick("analyzePairBtn", runPairAnalysis);
     bindClick("attackBtn", startDeepAttack);
+    if (typeof AiCoach !== "undefined") AiCoach.bind();
     bindClick("attackPosterMainSave", downloadAttackPoster);
     bindKmInputs();
     refreshKmReadout();

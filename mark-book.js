@@ -375,6 +375,7 @@ const MarkBook = {
         return {
             ok: true,
             step: this.guideStep,
+            kinds: kinds,
             analyze: false,
             message: "Guardado: " + bits.join(" · ") + ". Color quitado. Ahora pinta " +
                 (this.kinds[next] ? this.kinds[next].label : next) + " o pulsa ANALIZAR."
