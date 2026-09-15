@@ -409,6 +409,11 @@ function downloadAttackPoster() {
 function describeEdited(hit, newKm) {
     if (!hit || hit.writable === false) return "Esta familia no tiene operación de escritura demostrada.";
     if (newKm === "" || newKm === null) return "Escribe un nuevo KM para ver la operación editada.";
+    if (hit.familyId === "YAMAHA_93C_YNS") {
+        const addr = hit.address || 0;
+        return "Nuevo KM " + newKm + " → anillo YNS 64 B en " + padHex(addr) + "-" + padHex(addr + 63) +
+            ". Nibble mezclado + XOR en palabras impares. No se toca CRC aparte (no hay).";
+    }
     if (hit.familyId === "YAMAHA_R5F10" && currentBIN && currentBIN.original && currentBIN.original.length === 8192) {
         const pages = (hit.copies && hit.copies.length) ? hit.copies.length : 20;
         const raw = Number(newKm) * 10;
@@ -651,6 +656,11 @@ function renderAnalysis(analysis) {
     refreshIdentity();
     renderDiffTable(analysis.omega ? analysis.omega.diffWorld : null);
     showHEX(currentBIN.working);
+    if (analysis.best && analysis.best.familyId === "YAMAHA_93C_YNS") {
+        if (typeof AiCoach !== "undefined") {
+            AiCoach.notice("family", "Yamaha YNS: el KM está en un anillo de 64 bytes. No es X ni X×10. No hay CRC aparte; las palabras impares van XOR FFFF.");
+        }
+    }
     if (analysis.best && analysis.best.familyId === "YAMAHA_R5F10" && currentBIN.original && currentBIN.original.length === 8192) {
         if (typeof AiCoach !== "undefined") AiCoach.notice("family", R5F_RECIPE);
         else if ($("helpRecipe")) $("helpRecipe").value = R5F_RECIPE;
@@ -1138,7 +1148,7 @@ function currentKmGuess() {
 
 function defaultFileLabel(newKm) {
     const best = currentBIN && currentBIN.analysis && currentBIN.analysis.best;
-    if (best && best.familyId && /YAMAHA/.test(String(best.familyId)) && currentBIN.original && currentBIN.original.length === 8192) {
+    if (best && best.familyId && /YAMAHA/.test(String(best.familyId))) {
         return "YAMAHA KM " + (newKm || "OK");
     }
     const op = best && best.formula ? String(best.formula).replace(/[^\w*+/]+/g, "") : "KM";

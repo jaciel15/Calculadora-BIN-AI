@@ -72,7 +72,7 @@ const EditorEngine = {
             addr >= 0 && addr + (hit.width || 2) <= bytes.length
         ).slice(0, 64);
         if (!copies.length) copies.push(hit.address || 0);
-        if ((hit.fromStair || hit.fromWorld) && hit.familyId !== "YAMAHA_R5F10" && copies.length <= 32) {
+        if ((hit.fromStair || hit.fromWorld) && hit.familyId !== "YAMAHA_R5F10" && hit.familyId !== "YAMAHA_93C_YNS" && copies.length <= 32) {
             const written = FamilyLibrary.writeStair(new Uint8Array(bytes), Object.assign({}, hit, { copies: copies }), Number(newValue));
             return {
                 bytes: written.bytes,
@@ -88,6 +88,15 @@ const EditorEngine = {
                 bytes: written.bytes,
                 encoded: written.encoded,
                 hex: MathEngine.hexBytes(written.encoded),
+                copies: written.count
+            };
+        }
+        if (hit.familyId === "YAMAHA_93C_YNS" && typeof FamilyLibrary !== "undefined" && FamilyLibrary.writeYnsRing) {
+            const written = FamilyLibrary.writeYnsRing(new Uint8Array(bytes), hit, Number(newValue));
+            return {
+                bytes: written.bytes,
+                encoded: written.encoded,
+                hex: MathEngine.hexBytes(written.encoded.slice(0, 8)),
                 copies: written.count
             };
         }
@@ -247,6 +256,54 @@ const EditorEngine = {
         }
     },
 
+    writeYnsPascal(lines, start, endian) {
+        const be = endian !== "LE";
+        lines.push("  { Yamaha YNS 93C: anillo 32 palabras @ " + this.hexConst(start) + " }");
+        lines.push("  if Km <= 31 then Exit;");
+        lines.push("  Var11 := ((Km - 31) mod 32) * 2;");
+        lines.push("  Var10 := (Km - 31) div 32;");
+        lines.push("  Var15 := Var10 + 1;");
+        lines.push("  Encoded := Var10;");
+        lines.push("  case (Encoded and $F) of");
+        lines.push("    0: Encoded := (Encoded and $FFF0) + $0; 1: Encoded := (Encoded and $FFF0) + $7;");
+        lines.push("    2: Encoded := (Encoded and $FFF0) + $C; 3: Encoded := (Encoded and $FFF0) + $B;");
+        lines.push("    4: Encoded := (Encoded and $FFF0) + $6; 5: Encoded := (Encoded and $FFF0) + $1;");
+        lines.push("    6: Encoded := (Encoded and $FFF0) + $A; 7: Encoded := (Encoded and $FFF0) + $D;");
+        lines.push("    8: Encoded := (Encoded and $FFF0) + $3; 9: Encoded := (Encoded and $FFF0) + $4;");
+        lines.push("    10: Encoded := (Encoded and $FFF0) + $F; 11: Encoded := (Encoded and $FFF0) + $8;");
+        lines.push("    12: Encoded := (Encoded and $FFF0) + $5; 13: Encoded := (Encoded and $FFF0) + $2;");
+        lines.push("    14: Encoded := (Encoded and $FFF0) + $9; 15: Encoded := (Encoded and $FFF0) + $E;");
+        lines.push("  end;");
+        lines.push("  Var10 := Encoded;");
+        lines.push("  Encoded := Var15;");
+        lines.push("  case (Encoded and $F) of");
+        lines.push("    0: Encoded := (Encoded and $FFF0) + $0; 1: Encoded := (Encoded and $FFF0) + $7;");
+        lines.push("    2: Encoded := (Encoded and $FFF0) + $C; 3: Encoded := (Encoded and $FFF0) + $B;");
+        lines.push("    4: Encoded := (Encoded and $FFF0) + $6; 5: Encoded := (Encoded and $FFF0) + $1;");
+        lines.push("    6: Encoded := (Encoded and $FFF0) + $A; 7: Encoded := (Encoded and $FFF0) + $D;");
+        lines.push("    8: Encoded := (Encoded and $FFF0) + $3; 9: Encoded := (Encoded and $FFF0) + $4;");
+        lines.push("    10: Encoded := (Encoded and $FFF0) + $F; 11: Encoded := (Encoded and $FFF0) + $8;");
+        lines.push("    12: Encoded := (Encoded and $FFF0) + $5; 13: Encoded := (Encoded and $FFF0) + $2;");
+        lines.push("    14: Encoded := (Encoded and $FFF0) + $9; 15: Encoded := (Encoded and $FFF0) + $E;");
+        lines.push("  end;");
+        lines.push("  Var15 := Encoded;");
+        lines.push("  I := 0;");
+        lines.push("  while I <> 64 do");
+        lines.push("  begin");
+        lines.push("    Val24 := I;");
+        lines.push("    if I < Var11 then LastVal := Var15 else LastVal := Var10;");
+        lines.push("    if ((I div 2) and 1) = 1 then LastVal := LastVal xor $FFFF;");
+        if (be) {
+            lines.push("    SetByteHexEdit(" + this.hexConst(start) + " + I, (LastVal shr 8) and $FF);");
+            lines.push("    SetByteHexEdit(" + this.hexConst(start) + " + I + 1, LastVal and $FF);");
+        } else {
+            lines.push("    SetByteHexEdit(" + this.hexConst(start) + " + I, LastVal and $FF);");
+            lines.push("    SetByteHexEdit(" + this.hexConst(start) + " + I + 1, (LastVal shr 8) and $FF);");
+        }
+        lines.push("    I := I + 2;");
+        lines.push("  end;");
+    },
+
     writeR5FPascal(lines, lastAddr) {
         const base = lastAddr - (lastAddr % 0x20);
         lines.push("  LastVal := Km * 10;");
@@ -289,7 +346,7 @@ const EditorEngine = {
         lines.push("var");
         lines.push("  Km: integer;");
         lines.push("  Encoded: cardinal;");
-        lines.push("  I, Sum, Page, LastVal, Val24: integer;");
+        lines.push("  I, Sum, Page, LastVal, Val24, Var10, Var11, Var15: integer;");
         lines.push("  CS, S: string;");
         lines.push("");
         lines.push("function AskKm: integer;");
@@ -335,6 +392,7 @@ const EditorEngine = {
                 lines.push("  Km := AskKm;");
                 lines.push("  if Km <= 0 then Exit;");
                 if (algo.familyId === "YAMAHA_R5F10") this.writeR5FPascal(lines, addrs[0] || 0);
+                else if (algo.familyId === "YAMAHA_93C_YNS") this.writeYnsPascal(lines, addrs[0] || 0, algo.endian || "BE");
                 else {
                     lines.push("  Encoded := " + this.pascalExpr(algo.formula, "Km") + ";");
                     this.writeBytesPascal(lines, addrs, algo.width || 2, algo.endian || "LE", "Encoded");

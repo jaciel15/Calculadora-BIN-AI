@@ -99,7 +99,9 @@ const WriteMachine = {
             seen.add(key);
             checksums.push(item);
         };
-        if (best.familyId === "YAMAHA_R5F10" && bytes.length === 8192 && typeof FamilyLibrary !== "undefined") {
+        if (best.familyId === "YAMAHA_93C_YNS") {
+            /* XOR interno del anillo; no hay SUM/CRC fuera */
+        } else if (best.familyId === "YAMAHA_R5F10" && bytes.length === 8192 && typeof FamilyLibrary !== "undefined") {
             const ring = FamilyLibrary.r5fRingPages(bytes);
             const last = ring.length ? ring[ring.length - 1].addr : (best.address || 0);
             for (let p = 0; p <= last; p += 0x20) {

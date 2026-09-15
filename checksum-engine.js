@@ -173,6 +173,10 @@ const ChecksumEngine = {
         if (hit.familyId === "YAMAHA_R5F10") {
             layout = "anillo 32 B: lo mid hi LE24 de décimas · última = KM×10 · bytes 30–31 = SUM16 BE";
         }
+        if (hit.familyId === "YAMAHA_93C_YNS") {
+            layout = "anillo YNS 64 B: 32 palabras " + (hit.endian || "BE") +
+                " · nibble 0/7/C/B/6/1/A/D/3/4/F/8/5/2/9/E · impar XOR FFFF · sin CRC aparte";
+        }
         return {
             layout,
             hex,
@@ -269,6 +273,9 @@ const ChecksumEngine = {
                 window: "payload-LE24",
                 linkedTo: "KM"
             }];
+        }
+        if (hit.familyId === "YAMAHA_93C_YNS") {
+            return [];
         }
         const copies = hit.copies && hit.copies.length ? hit.copies : [hit.address];
         const width = hit.width || 2;

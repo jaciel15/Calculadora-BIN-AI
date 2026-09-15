@@ -106,6 +106,7 @@ const AiCoach = {
             km1: null,
             km2: null,
             family: "",
+            familyKm: null,
             diffs: 0,
             zones: []
         };
@@ -115,6 +116,14 @@ const AiCoach = {
                 out.size = currentBIN.original.length;
                 const fam = currentBIN.family && currentBIN.family.family;
                 if (fam && fam.id) out.family = fam.id;
+                if (currentBIN.family && currentBIN.family.decodedKm != null) out.familyKm = currentBIN.family.decodedKm;
+                if (!out.family && typeof FamilyLibrary !== "undefined" && FamilyLibrary.identify) {
+                    const found = FamilyLibrary.identify(currentBIN.original);
+                    if (found && found.family) {
+                        out.family = found.family.id;
+                        out.familyKm = found.decodedKm;
+                    }
+                }
             }
             if (typeof OmegaKernel !== "undefined" && OmegaKernel.compareBins && OmegaKernel.compareBins[0]) {
                 out.bin2 = OmegaKernel.compareBins[0].fileName || "BIN 2";
@@ -209,12 +218,17 @@ const AiCoach = {
                 this.compile();
             }
             this.say("Ya tengo el BIN 1" + (seen.bin1 ? " (" + seen.bin1 + ", " + seen.size + " bytes)" : "") +
-                (seen.family ? ". Parece familia " + seen.family : "") +
+                (seen.family === "YAMAHA_93C_YNS"
+                    ? ". Esto se ve Yamaha YNS: el KM va en un anillo de 64 bytes, no en un X simple. Yo leo " + seen.familyKm + " km."
+                    : (seen.family ? ". Parece familia " + seen.family : "")) +
                 ". Sube el BIN 2 con otro kilometraje. Yo voy a mirar solo lo que cambie.");
             return;
         }
         if (kind === "bin2") {
             let text = "BIN 2 cargado" + (seen.bin2 ? " (" + seen.bin2 + ")" : "") + ". " + this.diffLine(seen);
+            if (seen.family === "YAMAHA_93C_YNS") {
+                text += " Entre esos dos solo debería moverse el anillo del KM (64 bytes). No hay CRC suelto.";
+            }
             if (seen.km1 == null || seen.km2 == null) text += " Pon KM 1 y KM 2, o dímelos aquí.";
             else text += " Con KM 1 = " + seen.km1 + " y KM 2 = " + seen.km2 + " ya puedo atacar. Dime empieza el ataque, o dime dónde ves el KM.";
             this.say(text);
@@ -282,12 +296,12 @@ const AiCoach = {
         this.merge(facts);
         this.applyMarks(facts);
         this.compile();
+        this.applySpokenKm(facts);
         if (facts.wantHunt && !facts.wantAttack) {
             this.huntNet();
             return;
         }
         if (facts.wantAttack && !facts.wrong) {
-            this.applySpokenKm(facts);
             this.tryAttack();
             return;
         }
@@ -338,16 +352,19 @@ const AiCoach = {
             wrong: false,
             wantHunt: false,
             chat: "",
+            ask: "",
+            wantWrite: null,
             notes: []
         };
         if (this.wantsAttack(t)) facts.wantAttack = true;
         const spoken = this.spokenKm(t);
         if (spoken.km1 != null) facts.km1 = spoken.km1;
         if (spoken.km2 != null) facts.km2 = spoken.km2;
+        if (spoken.want != null) facts.wantWrite = spoken.want;
         if (/busca|internet|wikipedia|algoritm/.test(t) && !facts.wantAttack) {
             facts.wantHunt = true;
         }
-        if (/te equivoc|equivocada|esta mal|está mal|incorrect|error en|no cierra|no es esa|no es la formula|no es la linea|no es el km|mal esa|mal la |descarta|cambialo|cámbi[ao]lo|corrige/.test(t)) {
+        if (/te equivoc|equivocada|esta mal|está mal|incorrect|error en|no cierra|no es esa|no es la formula|no es la linea|no es el km|mal esa|mal la |descarta|cambialo|cámbi[ao]lo|corrige|no escribe|no edita|no jala|sigue sin/.test(t)) {
             facts.wrong = true;
         }
         if (/no hay (sum|crc|checksum|check)|sin (sum|crc|checksum)|no tiene (sum|crc|checksum)|no viene checksum/.test(t)) {
@@ -362,12 +379,12 @@ const AiCoach = {
             facts.invert = false;
             facts.endian = "LE";
         }
-        const form = t.match(/\b(swap16\s*\([^)]+\)|nibble_swap\s*\([^)]+\)|~\s*\([^)]+\)|x\s*\/\s*\d+|x\s*\*\s*\d+|x\s*10|gray\s*\(\s*x\s*\)|bcd|x)\b/i);
-        if (form) facts.formula = form[1].replace(/\s+/g, " ").replace(/\bx\b/gi, "X");
+        const form = t.match(/\b(swap16\s*\([^)]+\)|nibble_swap\s*\([^)]+\)|~\s*\([^)]+\)|yns32|x\s*\/\s*\d+|x\s*\*\s*\d+|x\s*10|gray\s*\(\s*x\s*\)|bcd|x)\b/i);
+        if (form) facts.formula = form[1].replace(/\s+/g, " ").replace(/\bx\b/gi, "X").replace(/yns32/i, "YNS32");
         const w = t.match(/\b([234])\s*bytes?\b/);
         if (w) facts.width = Number(w[1]);
         if (/^(hola|buenas|hey|ey|que onda|qué onda|buenos dias|buenos días|ya estas|ya estás|estas ahi|estás ahí)\b/.test(t)) facts.chat = "hi";
-        else if (/no se|no sé|donde esta|dónde está|que hago|qué hago|como empiezo|cómo empiezo|ayudame|ayúdame|explica|no se donde|no sé dónde/.test(t)) facts.chat = "help";
+        else if (/\?|como (encuentra|lee|escribe|funciona)|que (es|opinas|pasa|hago)|dónde|donde|por que|por qué|explica|ayudame|ayúdame|platiquemos|checa/.test(t)) facts.chat = "help";
         else if (/^(gracias|sale|ok|va|perfecto|listo|dale|hazlo|ando|sigue)$/.test(t)) {
             facts.chat = "ok";
             if (this.readyToAttack()) facts.wantAttack = true;
@@ -446,7 +463,7 @@ const AiCoach = {
         if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
         const lo = Math.min(start, end);
         const hi = Math.max(start, end);
-        if (lo < 0 || hi - lo > 32) return null;
+        if (lo < 0 || hi - lo > 80) return null;
         const cap = this.dumpSize();
         if (cap && lo >= cap) return null;
         return { start: lo, end: cap ? Math.min(hi, cap - 1) : hi };
@@ -533,20 +550,30 @@ const AiCoach = {
     },
 
     reply(facts, raw) {
+        const seen = this.look();
+        const t = this.norm(raw);
         const got = [];
         if (facts.km.length) got.push("el KM en " + this.fmtRanges(facts.km) + " lo pinto rojo");
         if (facts.chk.length) got.push("el SUM en " + this.fmtRanges(facts.chk) + " lo pinto azul");
         if (facts.crc.length) got.push("el CRC en " + this.fmtRanges(facts.crc) + " lo pinto morado");
         if (facts.comp.length) got.push("el COMP en " + this.fmtRanges(facts.comp) + " lo pinto verde");
-        if (facts.noCheck) got.push("sin SUM/CRC pintado; el ataque lo busca solo");
+        if (facts.noCheck) got.push("anoté que no hay SUM/CRC pintado");
         if (facts.invert === true) got.push("probaré invertidos");
-        if (facts.invert === false) got.push("orden normal, little-endian");
+        if (facts.invert === false) got.push("orden normal");
         if (facts.formula) got.push("fórmula " + facts.formula);
-        if (facts.width) got.push(facts.width + " bytes");
+        if (facts.km1 != null || facts.km2 != null) {
+            got.push("KM " + [facts.km1 != null ? "1=" + facts.km1 : "", facts.km2 != null ? "2=" + facts.km2 : ""].filter(Boolean).join(" "));
+        }
+        if (facts.wantWrite != null) got.push("nuevo KM " + facts.wantWrite);
+
+        if (facts.wrong || /no escribe|no edita|sigue sin|checksum|crc/.test(t)) {
+            return this.explainWrite(seen, t);
+        }
 
         if (got.length) {
             let text = "Te entendí: " + got.join("; ") + ".";
-            if (this.readyToAttack()) text += " Dime atacar y arranco, no te voy a seguir preguntando.";
+            text += " " + this.analyzeNow(seen, t);
+            if (this.readyToAttack()) text += " Cuando quieras, dime atacar y arranco.";
             else {
                 const next = this.nextMove();
                 if (next) text += " " + next;
@@ -554,32 +581,42 @@ const AiCoach = {
             return text;
         }
 
-        if (facts.chat === "hi") {
-            return this.wakeUp();
-        }
-        if (facts.chat === "ok") {
-            const next = this.nextMove();
-            return next || "Va. Dime qué sigue o empieza el ataque.";
-        }
-        if (facts.chat === "help") {
-            const seen = this.look();
-            if (!seen.bin1 || !seen.bin2) {
-                return "Primero los dos archivos: BIN 1 original y BIN 2 editado, cada uno con su KM. Yo miro los bytes que cambian. No necesito que sepas la línea.";
-            }
-            return "No pasa nada si no sabes la dirección. " + this.diffLine(seen) +
-                " Esas zonas son las sospechosas. Dime atacar y las pruebo yo, o dime la línea si la ves.";
-        }
+        if (facts.chat === "hi") return this.wakeUp();
+        if (facts.chat === "ok") return this.nextMove() || "Va. Dime qué sigue o empieza el ataque.";
+        return this.analyzeNow(seen, t);
+    },
 
-        const seen = this.look();
-        let text = "Te oí. ";
-        if (seen.bin1 && seen.bin2) text += this.diffLine(seen) + " ";
-        else if (!seen.bin1) text += "Aún no veo ningún BIN. ";
-        else text += "Tengo BIN 1, falta BIN 2. ";
+    analyzeNow(seen, t) {
+        const bits = [];
+        if (/yamaha|93c|yns|r6|mt-?125|nibble|anillo/.test(t) || seen.family === "YAMAHA_93C_YNS") {
+            if (seen.family === "YAMAHA_93C_YNS") {
+                bits.push("Esto es Yamaha YNS en 93C: el KM vive en un anillo de 32 palabras (64 bytes). No es X ni X×10. El nibble bajo se recodifica y las palabras impares van XOR FFFF. Yo leo " + seen.familyKm + " km. Checksum aparte no hay: el XOR es el sello.");
+            } else if (/yamaha|93c|yns|r6/.test(t)) {
+                bits.push("Si es Yamaha 93C YNS, el KM no está en 2 bytes sueltos: es un anillo de 64 bytes. Carga el par y te digo si lo veo.");
+            }
+        }
+        if (/como (encuentra|lee)|donde esta el km|dónde está el km|kilometr/.test(t) && seen.familyKm != null) {
+            bits.push("El kilometraje lo encuentro comparando BIN 1 y BIN 2 y, si la familia cierra, decodificando el anillo.");
+        }
+        if (seen.bin1 && seen.bin2) bits.push(this.diffLine(seen));
+        else if (!seen.bin1) bits.push("Aún no veo ningún BIN.");
+        else bits.push("Tengo BIN 1, falta BIN 2.");
+        if (seen.km1 != null && seen.km2 != null) bits.push("KM 1 = " + seen.km1 + ", KM 2 = " + seen.km2 + ".");
         const next = this.nextMove();
-        if (next) text += next;
-        else text += "Puedes decirme una dirección (0010-0012), un color, o empieza el ataque.";
-        if (raw.length < 8) text += " Cuéntame más suelto, como me lo dirías a mí.";
-        return text.trim();
+        if (next) bits.push(next);
+        if (!bits.length) bits.push("Cuéntame suelto: qué ves, qué KM tienen, o dime atacar.");
+        return bits.join(" ");
+    },
+
+    explainWrite(seen, t) {
+        if (seen.family === "YAMAHA_93C_YNS") {
+            return "El problema era ese: el ataque buscaba X o X×10 y escribía 2 o 3 bytes, pero esta Yamaha guarda el KM en 64 bytes (anillo ×32 + nibble + XOR). No hay CRC afuera. Ya escribo el anillo completo. Carga el par, dime atacar y luego genera por ejemplo 25000 km: al decodificar tiene que salir 25000.";
+        }
+        if (/checksum|crc/.test(t) && seen.diffs && seen.diffs <= 64) {
+            return this.diffLine(seen) + " Si solo se mueve ese bloque, casi seguro no hay CRC aparte. El sello va dentro de esos bytes (copia, XOR o suma pegada). Dime atacar y lo cierro sin inventar un CRC suelto.";
+        }
+        return "Si el archivo salía igual, es porque la fórmula no era la del chip. " + this.analyzeNow(seen, t) +
+            " Dime atacar y escribo solo lo que el par demuestra.";
     },
 
     nextMove() {
@@ -628,11 +665,26 @@ const AiCoach = {
     },
 
     spokenKm(t) {
-        const out = { km1: null, km2: null };
-        const one = String(t || "").match(/km\s*1\s*(?:es|=|:)?\s*(\d{3,7})/);
-        const two = String(t || "").match(/km\s*2\s*(?:es|=|:)?\s*(\d{3,7})/);
+        const out = { km1: null, km2: null, want: null };
+        const raw = String(t || "");
+        const n = this.norm(raw);
+        const one = n.match(/km\s*1\s*(?:es|=|:)?\s*(\d{3,7})/);
+        const two = n.match(/km\s*2\s*(?:es|=|:)?\s*(\d{3,7})/);
         if (one) out.km1 = Number(one[1]);
         if (two) out.km2 = Number(two[1]);
+        const orig = n.match(/(?:original|bin\s*1|archivo\s*1)[^\d]{0,18}(\d{3,7})/);
+        const edit = n.match(/(?:editad|bin\s*2|archivo\s*2)[^\d]{0,18}(\d{3,7})/);
+        if (orig && out.km1 == null) out.km1 = Number(orig[1]);
+        if (edit && out.km2 == null) out.km2 = Number(edit[1]);
+        const want = n.match(/(?:quiero|ponle|genera|nuevo km|editar? a|editar? con|con)\s*(\d{4,7})\s*(?:km)?/);
+        if (want) out.want = Number(want[1]);
+        if (out.km1 == null && out.km2 == null) {
+            const pair = n.match(/(\d{4,6})\s*(?:km)?\s*(?:y|,|\/)\s*(\d{4,6})\s*(?:km)?/);
+            if (pair) {
+                out.km1 = Number(pair[1]);
+                out.km2 = Number(pair[2]);
+            }
+        }
         return out;
     },
 
@@ -647,6 +699,7 @@ const AiCoach = {
             fill("knownKm", facts.km1);
         }
         if (facts && facts.km2 != null) fill("knownKm2", facts.km2);
+        if (facts && facts.wantWrite != null) fill("newValue", facts.wantWrite);
         if (typeof refreshKmReadout === "function") refreshKmReadout();
     },
 

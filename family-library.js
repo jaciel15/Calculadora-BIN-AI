@@ -36,8 +36,240 @@ const FamilyLibrary = {
             writable: true,
             writeHow: "Línea 0260 col 00: KM actual ×10 en 3 bytes LE. Hacia 0000 el KM baja de 1 en 1. La suma de esos 3 bytes va a la línea 0270 (cola +30/+31). Si pasa de 255 aparece 01. GENERAR solo toca KM (3 B) y SUM (2 B) de cada página 0000–0260.",
             binsProven: 8
+        },
+        {
+            id: "YAMAHA_93C_YNS",
+            name: "YAMAHA 93C76/86 YNS anillo ×32",
+            manufacturer: "YAMAHA",
+            chip: "93C76/93C86",
+            version: "YNS nibble ring",
+            size: 1024,
+            status: "DEMOSTRADO",
+            writable: true,
+            writeHow: "Anillo de 32 palabras (64 B). KM = bloque×32 + resto. Nibble bajo recodificado 0/7/C/B/6/1/A/D/3/4/F/8/5/2/9/E. Palabras impares XOR $FFFF. No hay CRC aparte: el XOR es el sello. Dump 1024 B @ 0376, 2048 B @ 0776, grande @ 1E82.",
+            binsProven: 3
         }
     ],
+
+    YNS_ENC: [0x0, 0x7, 0xC, 0xB, 0x6, 0x1, 0xA, 0xD, 0x3, 0x4, 0xF, 0x8, 0x5, 0x2, 0x9, 0xE],
+    YNS_DEC: [0x0, 0x5, 0xD, 0x8, 0x9, 0xC, 0x4, 0x1, 0xB, 0xE, 0x6, 0x3, 0x2, 0x7, 0xF, 0xA],
+
+    ynsScramble(n) {
+        n = n >>> 0;
+        return (n & 0xFFF0) + this.YNS_ENC[n & 0x0F];
+    },
+
+    ynsUnscramble(n) {
+        n = n >>> 0;
+        return (n & 0xFFF0) + this.YNS_DEC[n & 0x0F];
+    },
+
+    ynsWord(bytes, addr, be) {
+        return be
+            ? ((bytes[addr] << 8) | bytes[addr + 1]) & 0xFFFF
+            : (bytes[addr] | (bytes[addr + 1] << 8)) & 0xFFFF;
+    },
+
+    ynsPutWord(bytes, addr, value, be) {
+        const v = value & 0xFFFF;
+        if (be) {
+            bytes[addr] = (v >> 8) & 0xFF;
+            bytes[addr + 1] = v & 0xFF;
+        } else {
+            bytes[addr] = v & 0xFF;
+            bytes[addr + 1] = (v >> 8) & 0xFF;
+        }
+    },
+
+    ynsXorHits(bytes, start, be) {
+        if (start + 64 > bytes.length) return 0;
+        let hits = 0;
+        for (let i = 0; i < 64; i += 4) {
+            const even = this.ynsWord(bytes, start + i, be);
+            const odd = this.ynsWord(bytes, start + i + 2, be);
+            if (((even ^ odd) & 0xFFFF) === 0xFFFF) hits++;
+        }
+        return hits;
+    },
+
+    ynsDecodeAt(bytes, start, be) {
+        if (start + 64 > bytes.length) return null;
+        const first = this.ynsWord(bytes, start, be);
+        if (first === 0) {
+            let n = 0;
+            for (let a = start; a < start + 64; a += 4) {
+                if (this.ynsWord(bytes, a, be) === 0) n++;
+                if (this.ynsWord(bytes, a + 2, be) === 0xFFFF) n++;
+            }
+            return n - 1;
+        }
+        const last = this.ynsWord(bytes, start + 62, be) ^ 0xFFFF;
+        const var7 = this.ynsUnscramble(last);
+        let var3 = 31;
+        for (let a = start; a < start + 64; a += 2) {
+            const odd = (((a - start) / 2) & 1) === 1;
+            let w = this.ynsWord(bytes, a, be);
+            if (odd) w = (w ^ 0xFFFF) & 0xFFFF;
+            if (this.ynsUnscramble(w) > var7) var3++;
+        }
+        return var7 * 32 + var3;
+    },
+
+    ynsEncodeRing(km, be) {
+        const out = new Uint8Array(64);
+        const distance = Math.floor(Number(km));
+        const put = (off, value) => {
+            const odd = ((off / 2) & 1) === 1;
+            const v = odd ? (value ^ 0xFFFF) : value;
+            this.ynsPutWord(out, off, v, be);
+        };
+        if (!Number.isFinite(distance) || distance < 0) return out;
+        if (distance <= 31) {
+            this.ynsPutWord(out, 0, 0, be);
+            let var5 = 0;
+            const filled = distance * 2;
+            while (var5 !== filled && var5 < 62) {
+                const odd = ((var5 / 2) & 1) === 1;
+                const at = 1 + var5;
+                if (at + 1 < 64) {
+                    if (odd) {
+                        out[at] = 0x00;
+                        out[at + 1] = 0x00;
+                    } else {
+                        out[at] = 0xFF;
+                        out[at + 1] = 0xFF;
+                    }
+                }
+                var5 += 2;
+            }
+            while (var5 !== 62 && var5 < 62) {
+                const odd = ((var5 / 2) & 1) === 1;
+                const at = 1 + var5;
+                if (at + 1 < 64) {
+                    if (odd) {
+                        out[at] = 0xFE;
+                        out[at + 1] = 0xFF;
+                    } else {
+                        out[at] = 0x01;
+                        out[at + 1] = 0x00;
+                    }
+                }
+                var5 += 2;
+            }
+            return out;
+        }
+        const var11 = ((distance - 31) % 32) * 2;
+        let var10 = Math.floor((distance - 31) / 32);
+        let var15 = var10 + 1;
+        var10 = this.ynsScramble(var10);
+        var15 = this.ynsScramble(var15);
+        let off = 0;
+        while (off !== var11) {
+            put(off, var15);
+            off += 2;
+        }
+        while (off !== 64) {
+            put(off, var10);
+            off += 2;
+        }
+        return out;
+    },
+
+    ynsCandidates(bytes) {
+        const out = [];
+        if (!bytes) return out;
+        if (bytes.length >= 0x376 + 64) out.push(0x376);
+        if (bytes.length >= 0x776 + 64) out.push(0x776);
+        if (bytes.length >= 0x1E82 + 64) out.push(0x1E82);
+        return out;
+    },
+
+    ynsPick(bytes) {
+        if (!bytes || bytes.length < 64) return null;
+        const tryAt = (start, be) => {
+            const xorHits = this.ynsXorHits(bytes, start, be);
+            if (xorHits < 12) return null;
+            const km = this.ynsDecodeAt(bytes, start, be);
+            if (km == null || km < 0 || km > 500000) return null;
+            return { start, be, km, xorHits };
+        };
+        const ranked = [];
+        this.ynsCandidates(bytes).forEach((start) => {
+            const be = tryAt(start, true);
+            const le = tryAt(start, false);
+            if (be) ranked.push(be);
+            if (le) ranked.push(le);
+        });
+        if (!ranked.length) {
+            const cap = Math.min(bytes.length - 64, 4096);
+            for (let start = 0; start <= cap; start += 2) {
+                const beHits = this.ynsXorHits(bytes, start, true);
+                if (beHits < 14) continue;
+                const be = tryAt(start, true);
+                const le = tryAt(start, false);
+                if (be) ranked.push(be);
+                if (le) ranked.push(le);
+                if (ranked.length > 8) break;
+            }
+        }
+        ranked.sort((a, b) => (b.xorHits - a.xorHits) || (a.start - b.start));
+        return ranked[0] || null;
+    },
+
+    detectYns(bytes) {
+        const found = this.ynsPick(bytes);
+        if (!found) return null;
+        const hexFn = (typeof MathEngine !== "undefined" && MathEngine.hexBytes)
+            ? (slice) => MathEngine.hexBytes(slice)
+            : (slice) => Array.from(slice).map((b) => b.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+        const rangeFn = (typeof Hunters !== "undefined" && Hunters.range)
+            ? (addr, n) => Hunters.range(addr, n)
+            : (addr, n) => addr.toString(16).toUpperCase().padStart(4, "0") + "-" +
+                (addr + n - 1).toString(16).toUpperCase().padStart(4, "0");
+        const hit = {
+            fromMemory: true,
+            fromFamily: true,
+            familyId: "YAMAHA_93C_YNS",
+            label: "KILOMETRAJE",
+            name: "YAMAHA_YNS_NIBBLE32",
+            formula: "YNS32",
+            width: 64,
+            endian: found.be ? "BE" : "LE",
+            copies: [found.start],
+            address: found.start,
+            addressText: rangeFn(found.start, 64),
+            hex: hexFn(bytes.slice(found.start, found.start + 8)),
+            numeric: found.km,
+            value: found.km,
+            writeHow: this.families[3].writeHow,
+            confidence: 99.4,
+            representation: "anillo 32 palabras · nibble map · XOR impar",
+            writable: true,
+            ynsBe: found.be,
+            checksumName: "",
+            noExternalChecksum: true
+        };
+        return {
+            family: this.families[3],
+            decodedKm: found.km,
+            backupKm: null,
+            swapped: !found.be,
+            hits: [hit],
+            confidence: 99.4
+        };
+    },
+
+    writeYnsRing(bytes, hit, km) {
+        const working = bytes instanceof Uint8Array ? new Uint8Array(bytes) : new Uint8Array(bytes);
+        const start = (hit && (hit.address != null ? hit.address : (hit.copies && hit.copies[0]))) || 0;
+        const be = hit && hit.endian !== "LE" && hit.ynsBe !== false;
+        if (start + 64 > working.length) {
+            return { bytes: working, encoded: new Uint8Array(0), count: 0 };
+        }
+        const ring = this.ynsEncodeRing(Number(km), be);
+        working.set(ring, start);
+        return { bytes: working, encoded: ring, count: 1 };
+    },
 
     ffRatio(bytes, start) {
         if (start >= bytes.length) return 1;
@@ -344,7 +576,7 @@ const FamilyLibrary = {
     },
 
     identify(bytes) {
-        return this.detectYamaha(bytes) || this.detectR5F(bytes) || this.detectOdyssey(bytes) || this.detectLearned(bytes) || null;
+        return this.detectYns(bytes) || this.detectYamaha(bytes) || this.detectR5F(bytes) || this.detectOdyssey(bytes) || this.detectLearned(bytes) || null;
     },
 
     writeStair(bytes, hit, newKm) {

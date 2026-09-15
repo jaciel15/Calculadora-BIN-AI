@@ -640,9 +640,14 @@ const OmegaKernel = {
         }
         let best = mileageHits[0] || hoursHits[0] || unknown[0] || null;
         const userGuiding = typeof MarkBook !== "undefined" && MarkBook.hasHelp();
-        if (!userGuiding && familyMatch && familyMatch.hits && familyMatch.hits[0] && familyMatch.hits[0].familyId === "YAMAHA_R5F10") {
+        if (!userGuiding && familyMatch && familyMatch.hits && familyMatch.hits[0] &&
+            /YAMAHA_R5F10|YAMAHA_93C_YNS/.test(String(familyMatch.hits[0].familyId || ""))) {
             best = familyMatch.hits[0];
-            say("FAMILY KERNEL", "Este anillo manda: KM en 0260→0000 y SUM en la cola de cada página.");
+            if (best.familyId === "YAMAHA_93C_YNS") {
+                say("FAMILY KERNEL", "Anillo YNS: 32 palabras, nibble mezclado, XOR en impares. KM leído " + familyMatch.decodedKm + ".");
+            } else {
+                say("FAMILY KERNEL", "Este anillo manda: KM en 0260→0000 y SUM en la cola de cada página.");
+            }
         }
         if (typeof DiscoveryManager !== "undefined" && DiscoveryManager.lastResults && DiscoveryManager.lastResults[0]) {
             const found = DiscoveryManager.lastResults[0];

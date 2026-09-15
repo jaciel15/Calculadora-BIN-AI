@@ -90,7 +90,7 @@ const DeepAttack = {
         const add = f.match(/X\s*\+\s*(\d+)/i);
         const sub = f.match(/X\s*-\s*(\d+)/i);
         const xor = f.match(/XOR(?:BYTES)?\s+([0-9A-Fa-f]+)/i);
-        if (mul) bits.push("tomé el kilometraje y lo multipliqué por " + mul[1]);
+        if (f === "YNS32") return "usé el anillo Yamaha YNS: bloque×32 + resto, nibble recodificado y XOR FFFF en palabras impares";
         else if (div) bits.push("tomé el kilometraje y lo dividí entre " + div[1]);
         else if (add) bits.push("al kilometraje le sumé " + add[1]);
         else if (sub) bits.push("al kilometraje le resté " + sub[1]);
@@ -224,7 +224,7 @@ const DeepAttack = {
             if (typeof KnowledgeBase !== "undefined" && KnowledgeBase.isHidden(item)) return;
             if (bytes && !this.recipeFitsFile(item, bytes)) return;
             const width = Number(item.width || item.length) || 0;
-            if (width < 2 || width > 4) return;
+            if (width < 2 || (width > 4 && String(item.formula) !== "YNS32")) return;
             const endian = item.endian === "BE" || item.endian === "BIG_ENDIAN" ? "BE"
                 : (item.endian === "BCD" ? "BCD" : "LE");
             const familyId = item.familyId || item.id || item.codeId || "";
@@ -261,7 +261,10 @@ const DeepAttack = {
     },
 
     encodeRecipe(code, km) {
-        if (typeof EditorEngine !== "undefined" && EditorEngine.encodeValue) {
+        if (code.formula === "YNS32" && typeof FamilyLibrary !== "undefined" && FamilyLibrary.ynsEncodeRing) {
+            return FamilyLibrary.ynsEncodeRing(Number(km), code.endian !== "LE");
+        }
+        if (typeof EditorEngine !== "undefined" && EditorEngine.encodeValue && code.formula !== "YNS32") {
             return EditorEngine.encodeValue(km, {
                 formula: code.formula,
                 width: code.width,
@@ -654,7 +657,48 @@ const DeepAttack = {
         return found;
     },
 
+    familySeedHits(a, b, c, km1, km2, km3) {
+        const out = [];
+        if (typeof FamilyLibrary === "undefined" || !FamilyLibrary.detectYns) return out;
+        const fam = FamilyLibrary.detectYns(a);
+        if (!fam || !fam.hits || !fam.hits[0]) return out;
+        const base = fam.hits[0];
+        const be = base.endian !== "LE";
+        if (b && FamilyLibrary.ynsXorHits(b, base.address, be) < 12) return out;
+        const dec1 = fam.decodedKm;
+        const dec2 = b ? FamilyLibrary.ynsDecodeAt(b, base.address, be) : null;
+        const dec3 = c ? FamilyLibrary.ynsDecodeAt(c, base.address, be) : null;
+        const ok1 = km1 == null || dec1 === Number(km1);
+        const ok2 = km2 == null || dec2 === Number(km2);
+        const ok3 = km3 == null || !c || dec3 === Number(km3);
+        out.push({
+            line: base.address & ~0x0F,
+            addr: base.address,
+            width: 64,
+            endian: base.endian,
+            formula: "YNS32",
+            raw: dec1,
+            km: dec1,
+            hex: base.hex,
+            checksum: null,
+            copies: [base.address],
+            stair: 1,
+            score: 140 + (ok1 ? 4 : 0) + (ok2 ? 4 : 0) + (ok3 ? 2 : 0),
+            fromFamily: true,
+            fromPair: true,
+            fromKnown: true,
+            name: "YAMAHA_YNS_NIBBLE32",
+            familyId: "YAMAHA_93C_YNS",
+            writeHow: base.writeHow
+        });
+        return out;
+    },
+
     decodeHow(hit) {
+        if (hit.familyId === "YAMAHA_93C_YNS") {
+            return "En " + this.hex(hit.addr) + "-" + this.hex(hit.addr + 63) +
+                " hay un anillo Yamaha YNS de 32 palabras. El KM no es X ni X×10: es bloque×32 + resto, nibble mezclado y XOR $FFFF en las palabras impares. No hay CRC aparte; el XOR es el sello. KM leído " + hit.km + ".";
+        }
         const bits = [];
         bits.push("En la línea " + this.hex(hit.line) + " leí " + hit.width + " bytes en " +
             this.hex(hit.addr) + "-" + this.hex(hit.addr + hit.width - 1) +
@@ -681,6 +725,7 @@ const DeepAttack = {
         return {
             fromPair: true,
             fromAttack: true,
+            fromFamily: !!hit.fromFamily,
             familyId: hit.familyId || "",
             label: "KILOMETRAJE",
             name: hit.name || ("ATAQUE_" + String(hit.formula).replace(/\s+/g, "_")),
@@ -708,6 +753,8 @@ const DeepAttack = {
             scatter: hit.scatter && hit.scatter.length ? hit.scatter.slice(0, 96) : undefined,
             equalize: !!hit.equalize,
             fromInvert: !!hit.fromInvert,
+            ynsBe: hit.endian !== "LE",
+            noExternalChecksum: hit.familyId === "YAMAHA_93C_YNS",
             operation: (hit.formula || "X") + " · " + hit.width + "B " + (hit.endian || "LE") +
                 (hit.checksum ? " · " + hit.checksum.name + " @" + this.hex(hit.checksum.storedAt) : ""),
             vin: (this._vins && this._vins[0] && this._vins[0].value) || ""
@@ -726,6 +773,7 @@ const DeepAttack = {
         if (!hit || !hit.formula) return false;
         const copies = hit.copies || [];
         if (copies.length < 1 || copies.length > 64) return false;
+        if (hit.fromFamily && copies.length >= 1) return true;
         if (hit.fromUser && copies.length >= 1) return true;
         if (hit.fromSaid && copies.length >= 1) return true;
         if (hit.fromCombo && copies.length >= 1) return !!(hit.checksum || copies.length >= 2 || hit.fromFound);
@@ -1334,9 +1382,10 @@ const DeepAttack = {
                 scatter: code.scatter && code.scatter.length ? code.scatter : undefined,
                 equalize: !!(code.scatter && code.scatter.length),
                 stair: copies.length,
-                score: 92 + (same ? 8 : 0) + Math.min(copies.length, 8) + (cOk ? 4 : 0) + (same && same.fromUser ? 6 : 0),
+                score: 92 + (same ? 8 : 0) + Math.min(copies.length, 8) + (cOk ? 4 : 0) + (same && same.fromUser ? 6 : 0) + (code.formula === "YNS32" ? 30 : 0),
                 familyId: code.familyId || "",
                 fromSaved: true,
+                fromFamily: code.familyId === "YAMAHA_93C_YNS",
                 fromKnown: !!code.familyId,
                 fromPair: true,
                 name: code.name
@@ -1701,6 +1750,7 @@ const DeepAttack = {
                     }
                     if (phase === "help") {
                         try {
+                            self.familySeedHits(a, b, c, km1, km2, km3).forEach((hit) => hits.push(hit));
                             self.hitsFromHelp(a, b, c, km1, km2, km3).forEach((hit) => hits.push(hit));
                         } catch (error) { /* sigo pensando sin esa ayuda */ }
                         emit({

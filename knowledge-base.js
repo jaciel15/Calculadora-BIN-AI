@@ -14,6 +14,17 @@ const CodeBook = {
                 writeHow: "Escribe 00 00 lo hi en 0000–0017."
             },
             {
+                id: "YAMAHA_93C_YNS",
+                name: "Yamaha 93C76/86 YNS anillo ×32",
+                origin: "DEMOSTRADO aquí · R6/MT-125 93C76",
+                formula: "YNS32",
+                width: 64,
+                endian: "BE",
+                chk: "",
+                recipe: "El KM no es X ni X×10. Es un anillo de 32 palabras (64 bytes). KM=(bloque×32)+resto. El nibble bajo se recodifica 0/7/C/B/6/1/A/D/3/4/F/8/5/2/9/E. Cada palabra impar va XOR $FFFF. No hay CRC aparte. En dump de 1024 B empieza en 0376; en 2048 B en 0776.",
+                writeHow: "Reescribe las 64 bytes del anillo. El XOR de las impares es el sello."
+            },
+            {
                 id: "YAMAHA_R5F10",
                 name: "Yamaha R5F10 anillo 32B",
                 origin: "DEMOSTRADO aquí · 8 BIN",
@@ -252,6 +263,9 @@ const CodeBook = {
     },
 
     encode(code, km) {
+        if (code.formula === "YNS32" && typeof FamilyLibrary !== "undefined" && FamilyLibrary.ynsEncodeRing) {
+            return FamilyLibrary.ynsEncodeRing(Number(km), code.endian !== "LE");
+        }
         if (code.formula === "BCD") return MathEngine.toBCD(Number(km), code.width);
         const value = MathEngine.applyFormula(Number(km), code.formula);
         return MathEngine.toBytes(value, code.width, code.endian !== "BE" && code.endian !== "BCD");
@@ -298,6 +312,9 @@ const CodeBook = {
         }
         if (/YAMAHA_MT09|MT-09 93C86/i.test(id)) {
             return bytes.length === 2048 && typeof FamilyLibrary !== "undefined" && !!FamilyLibrary.detectYamaha(bytes);
+        }
+        if (/YAMAHA_93C_YNS|YNS anillo/i.test(id)) {
+            return typeof FamilyLibrary !== "undefined" && !!FamilyLibrary.detectYns(bytes);
         }
         if (/ODYSSEY/i.test(id)) {
             return typeof FamilyLibrary !== "undefined" && !!FamilyLibrary.detectOdyssey(bytes);
