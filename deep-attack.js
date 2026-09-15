@@ -5,6 +5,7 @@ const DeepAttack = {
     MIN_MS: 5 * 60 * 1000,
     SIM_MS: 2 * 60 * 1000,
     MAX_MS: 10 * 60 * 1000,
+    HARD_MS: 15 * 60 * 1000,
     lastReport: null,
 
     hex(value, size) {
@@ -199,11 +200,12 @@ const DeepAttack = {
             const e1 = MathEngine.applyFormula(km1, code.formula);
             const e2 = MathEngine.applyFormula(km2, code.formula);
             if (Math.abs(e1 - raw1) > 40 || Math.abs(e2 - raw2) > 40) continue;
+            const hit = { formula: code.formula, n: 0, off: 0, name: code.name, familyId: code.familyId, fromKnown: true };
             if (raw3 != null && km3 != null) {
                 const e3 = MathEngine.applyFormula(km3, code.formula);
-                if (Math.abs(e3 - raw3) > 40) continue;
+                if (Math.abs(e3 - raw3) > 40) hit.cMiss = true;
             }
-            return { formula: code.formula, n: 0, off: 0, name: code.name, familyId: code.familyId, fromKnown: true };
+            return hit;
         }
         return null;
     },
@@ -387,8 +389,11 @@ const DeepAttack = {
         if (hit.fromKnown && hit.name) bits.push("Usó el algoritmo que ya tenía: " + hit.name + ".");
         if (hit.stair) bits.push("Hacia 0000 el valor baja de 1 en 1 (" + hit.stair + " páginas).");
         if (hit.checksum) {
-            bits.push("Checksum " + hit.checksum.name + " " + hit.checksum.endian +
-                " de esos " + hit.width + " bytes, escrito en " + this.hex(hit.checksum.storedAt) + ".");
+            bits.push("Checksum " + hit.checksum.name + " " + (hit.checksum.endian || "") +
+                (hit.checksum.start != null ? " de " + this.hex(hit.checksum.start) + "-" + this.hex(hit.checksum.end - 1) : " de esos " + hit.width + " bytes") +
+                ", escrito en " + this.hex(hit.checksum.storedAt) + ".");
+        } else {
+            bits.push("Aún no ligó SUM/CRC de ese KM.");
         }
         bits.push("No toqué el resto del archivo: solo las líneas que cambian.");
         return bits.join(" ");
@@ -421,6 +426,8 @@ const DeepAttack = {
             checksumName: hit.checksum ? hit.checksum.name : undefined,
             checksumEndian: hit.checksum ? hit.checksum.endian : undefined,
             checksumSize: hit.checksum ? hit.checksum.size : undefined,
+            checksumStart: hit.checksum && hit.checksum.start != null ? hit.checksum.start : undefined,
+            checksumEnd: hit.checksum && hit.checksum.end != null ? hit.checksum.end : undefined,
             operation: (hit.formula || "X") + " · " + hit.width + "B " + (hit.endian || "LE") +
                 (hit.checksum ? " · " + hit.checksum.name + " @" + this.hex(hit.checksum.storedAt) : ""),
             vin: (this._vins && this._vins[0] && this._vins[0].value) || ""
@@ -439,6 +446,7 @@ const DeepAttack = {
         if (!hit || !hit.formula) return false;
         const copies = hit.copies || [];
         if (copies.length < 1 || copies.length > 64) return false;
+        if (hit.fromUser && copies.length >= 1) return true;
         if (hit.fromSaved && copies.length <= 64) return !!(hit.checksum || copies.length >= 2 || hit.fromXor);
         if (hit.fromKnown && hit.familyId && this._ctx && this.recipeFitsFile({ id: hit.familyId, familyId: hit.familyId }, this._ctx.bytes)) {
             return copies.length <= 64;
@@ -460,6 +468,21 @@ const DeepAttack = {
         return set;
     },
 
+    checksumFns() {
+        return [
+            { name: "SUM8", size: 1, fn: (b, s, e) => ChecksumEngine.sum8(b, s, e) },
+            { name: "CRC8", size: 1, fn: (b, s, e) => ChecksumEngine.crc8(b, s, e) },
+            { name: "XOR8", size: 1, fn: (b, s, e) => ChecksumEngine.xor8(b, s, e) },
+            { name: "COMP8", size: 1, fn: (b, s, e) => (0x100 - ChecksumEngine.sum8(b, s, e)) & 0xFF },
+            { name: "SUM16", size: 2, fn: (b, s, e) => ChecksumEngine.sum16(b, s, e) },
+            { name: "XOR16", size: 2, fn: (b, s, e) => ChecksumEngine.xor16(b, s, e) },
+            { name: "CRC16", size: 2, fn: (b, s, e) => ChecksumEngine.crc16(b, s, e) },
+            { name: "CRC16-0", size: 2, fn: (b, s, e) => ChecksumEngine.crc16(b, s, e, 0x1021, 0) },
+            { name: "CRC16-IBM", size: 2, fn: (b, s, e) => ChecksumEngine.crc16IBM(b, s, e) },
+            { name: "FLETCHER16", size: 2, fn: (b, s, e) => ChecksumEngine.fletcher16(b, s, e) }
+        ];
+    },
+
     checksumsNear(bytes, addr, width) {
         const found = [];
         if (!bytes || addr < 0) return found;
@@ -471,45 +494,49 @@ const DeepAttack = {
         spots.push(page + 16 + 1);
         spots.push(page + 16 + 2);
         const fill = { 0x00: 1, 0xFF: 1, 0xEB: 1, 0xAA: 1 };
-        const tryPush = (name, storedAt, size, endian, calc) => {
+        const tryPush = (name, storedAt, size, endian, calc, start, end) => {
             if (storedAt < 0 || storedAt + size > bytes.length) return;
             if (storedAt >= addr && storedAt < addr + width) return;
             if (size === 1 && fill[bytes[storedAt]]) return;
             const stored = MathEngine.fromBytes(bytes, storedAt, size, endian === "LE");
-            if (stored === calc) found.push({ name: name, storedAt: storedAt, endian: endian, value: calc, size: size });
+            if (stored === calc) {
+                found.push({
+                    name: name,
+                    storedAt: storedAt,
+                    endian: endian,
+                    value: calc,
+                    size: size,
+                    start: start,
+                    end: end
+                });
+            }
         };
         const windows = [
             [addr, addr + width],
+            [addr, page + 17],
+            [Math.max(0, addr - 1), page + 17],
+            [page + 13, page + 17],
             [page + 13, page + 16],
             [page + 12, page + 16],
             [page + 4, page + 16]
         ];
-        if ((addr & 0x0F) === 0x0E && width === 2) windows.push([addr - 1, addr + width]);
+        if ((addr & 0x0F) === 0x0E && width === 2) {
+            windows.push([addr - 1, addr + width]);
+            windows.push([addr - 1, page + 16]);
+        }
         windows.forEach((win) => {
             const start = win[0];
             const end = win[1];
             if (start < 0 || end > bytes.length || end <= start) return;
-            const sum8 = ChecksumEngine.sum8(bytes, start, end);
-            const sum16 = ChecksumEngine.sum16(bytes, start, end);
-            const crc8 = ChecksumEngine.crc8(bytes, start, end);
-            const crc16 = ChecksumEngine.crc16(bytes, start, end);
-            const crc16ibm = ChecksumEngine.crc16IBM(bytes, start, end);
-            const xor8 = ChecksumEngine.xor8(bytes, start, end);
-            const xor16 = ChecksumEngine.xor16(bytes, start, end);
-            const comp8 = (0x100 - sum8) & 0xFF;
-            spots.forEach((at) => {
-                tryPush("SUM8", at, 1, "LE", sum8);
-                tryPush("CRC8", at, 1, "LE", crc8);
-                tryPush("XOR8", at, 1, "LE", xor8);
-                tryPush("COMP8", at, 1, "LE", comp8);
-                tryPush("SUM16", at, 2, "BE", sum16);
-                tryPush("SUM16", at, 2, "LE", sum16);
-                tryPush("XOR16", at, 2, "BE", xor16);
-                tryPush("XOR16", at, 2, "LE", xor16);
-                tryPush("CRC16", at, 2, "BE", crc16);
-                tryPush("CRC16", at, 2, "LE", crc16);
-                tryPush("CRC16-IBM", at, 2, "BE", crc16ibm);
-                tryPush("CRC16-IBM", at, 2, "LE", crc16ibm);
+            this.checksumFns().forEach((algo) => {
+                const calc = algo.fn(bytes, start, end);
+                spots.forEach((at) => {
+                    if (algo.size === 1) tryPush(algo.name, at, 1, "LE", calc, start, end);
+                    else {
+                        tryPush(algo.name, at, 2, "BE", calc, start, end);
+                        tryPush(algo.name, at, 2, "LE", calc, start, end);
+                    }
+                });
             });
         });
         return found;
@@ -524,6 +551,106 @@ const DeepAttack = {
             (other.storedAt & 0x0F) === (item.storedAt & 0x0F) &&
             other.value !== item.value
         ));
+    },
+
+    movingStores(a, b, addr, width) {
+        const stores = [];
+        if (!a || !b) return stores;
+        const page = addr & ~0x0F;
+        const seen = new Set();
+        const push = (at, size) => {
+            if (at < 0 || at + size > a.length) return;
+            if (at >= addr && at < addr + width) return;
+            const key = at + "|" + size;
+            if (seen.has(key)) return;
+            let move = false;
+            for (let i = 0; i < size; i++) if (a[at + i] !== b[at + i]) move = true;
+            if (!move) return;
+            seen.add(key);
+            stores.push(at);
+        };
+        for (let at = page; at < page + 34 && at < a.length; at++) {
+            push(at, 1);
+            push(at, 2);
+        }
+        push(page + 17, 2);
+        push(page + 16 + 1, 2);
+        return stores;
+    },
+
+    inventChecksum(a, b, addr, width) {
+        if (!a || !b) return null;
+        const page = addr & ~0x0F;
+        const stores = this.movingStores(a, b, addr, width);
+        const windows = [
+            [addr, addr + width],
+            [addr, page + 17],
+            [Math.max(0, addr - 1), page + 17],
+            [page + 13, page + 17],
+            [page + 12, page + 17],
+            [page + 4, page + 16]
+        ];
+        stores.forEach((storeAt) => {
+            if (storeAt > addr) windows.push([addr, storeAt]);
+            if (storeAt > addr - 1) windows.push([Math.max(0, addr - 1), storeAt]);
+            if ((addr & 0x0F) >= 0x0D) windows.push([page + 13, storeAt]);
+        });
+        const algos = this.checksumFns();
+        for (let si = 0; si < stores.length; si++) {
+            const storeAt = stores[si];
+            for (let wi = 0; wi < windows.length; wi++) {
+                const start = windows[wi][0];
+                const end = windows[wi][1];
+                if (end <= start || end > a.length || start < 0) continue;
+                if (storeAt >= start && storeAt < end) continue;
+                for (let ai = 0; ai < algos.length; ai++) {
+                    const algo = algos[ai];
+                    if (storeAt + algo.size > a.length) continue;
+                    const calcA = algo.fn(a, start, end);
+                    const calcB = algo.fn(b, start, end);
+                    if (calcA === calcB) continue;
+                    const le = (endian) => MathEngine.fromBytes(a, storeAt, algo.size, endian === "LE") === calcA &&
+                        MathEngine.fromBytes(b, storeAt, algo.size, endian === "LE") === calcB;
+                    const endian = le("LE") ? "LE" : (le("BE") ? "BE" : null);
+                    if (!endian) continue;
+                    return {
+                        name: algo.name,
+                        storedAt: storeAt,
+                        endian: endian,
+                        value: calcA,
+                        size: algo.size,
+                        start: start,
+                        end: end
+                    };
+                }
+            }
+        }
+        return null;
+    },
+
+    attachChecksum(hit, a, b, c) {
+        if (!hit) return hit;
+        let same = this.checksumsThatMove(a, b, hit.addr, hit.width);
+        if (!same.length && hit.width === 2 && (hit.addr & 0x0F) === 0x0E) {
+            same = this.checksumsThatMove(a, b, hit.addr - 1, 3);
+        }
+        if (!same.length && hit.width === 2) {
+            same = this.checksumsThatMove(a, b, Math.max(0, hit.addr - 1), hit.width + 1);
+        }
+        let chk = same[0] || this.inventChecksum(a, b, hit.addr, hit.width) || this.userChecksum(hit.addr, hit.width);
+        if (chk && c && chk.start != null && chk.end != null) {
+            const fn = this.checksumFns().find((algo) => algo.name === chk.name);
+            if (fn) {
+                const calcC = fn.fn(c, chk.start, chk.end);
+                const storedC = MathEngine.fromBytes(c, chk.storedAt, chk.size || fn.size, chk.endian === "LE");
+                chk.cOk = storedC === calcC;
+            }
+        }
+        if (chk) {
+            hit.checksum = chk;
+            hit.score = (hit.score || 80) + 10;
+        }
+        return hit;
     },
 
     copiesFor(a, b, c, addr, width, little, diffs) {
@@ -562,63 +689,151 @@ const DeepAttack = {
         return top[0] + top[1] > diffs.size * 0.75;
     },
 
+    markAddrs() {
+        const out = [];
+        const seen = new Set();
+        if (typeof MarkBook === "undefined") return out;
+        const push = (addr) => {
+            const n = Number(addr);
+            if (!Number.isFinite(n) || n < 0 || seen.has(n)) return;
+            seen.add(n);
+            out.push(n);
+        };
+        ["KM", "HINT", "COPY"].forEach((kind) => {
+            (MarkBook.paintedAddrs(kind) || []).forEach(push);
+            (MarkBook.lessonRanges(kind) || []).forEach((range) => {
+                for (let i = range.start; i <= range.end; i++) push(i);
+            });
+        });
+        return out;
+    },
+
+    userChecksum(addr, width) {
+        if (typeof MarkBook === "undefined") return null;
+        const stores = [];
+        ["CHK", "CRC", "COMP"].forEach((kind) => {
+            (MarkBook.lessonRanges(kind) || []).forEach((range) => {
+                stores.push({ kind: kind, start: range.start, size: range.size || 1 });
+            });
+            (MarkBook.paintedAddrs(kind) || []).forEach((start) => {
+                stores.push({ kind: kind, start: start, size: 1 });
+            });
+        });
+        if (!stores.length) return null;
+        const page = addr & ~0x0F;
+        const near = stores.find((s) =>
+            s.start >= page &&
+            s.start <= page + 34 &&
+            !(s.start >= addr && s.start < addr + width)
+        ) || stores[0];
+        if (!near) return null;
+        const name = near.kind === "COMP" ? "COMP8" : (near.kind === "CRC" ? "CRC16" : "SUM8");
+        return {
+            name: name,
+            storedAt: near.start,
+            endian: "LE",
+            size: near.kind === "CRC" ? 2 : 1,
+            fromUser: true
+        };
+    },
+
+    findOnDiffs(bytes, pattern, diffs) {
+        const out = [];
+        const seen = new Set();
+        if (!bytes || !pattern || !pattern.length) return out;
+        const width = pattern.length;
+        const visit = (addr) => {
+            const minStart = Math.max(0, addr - width + 1);
+            for (let start = minStart; start <= addr; start++) {
+                if (start + width > bytes.length || seen.has(start)) continue;
+                if (!this.patternFits(bytes, start, pattern)) continue;
+                seen.add(start);
+                out.push(start);
+            }
+        };
+        if (diffs && diffs.forEach) diffs.forEach(visit);
+        this.markAddrs().forEach(visit);
+        return out;
+    },
+
+    tryOneSaved(a, b, c, km1, km2, km3, diffs, code) {
+        const hits = [];
+        if (!code || !code.formula) return hits;
+        const notable = !!(code.familyId || /YAMAHA_|ODYSSEY_|Aprendida|USER_/i.test(String(code.name || "")));
+        const skip = function (self) {
+            if (!notable) return;
+            if (!self._skipped) self._skipped = [];
+            self._skipped.push(code.name || code.formula);
+        };
+        if (/YAMAHA_|ODYSSEY_/i.test(String(code.familyId || code.name || "")) && !this.recipeFitsFile(code, a)) {
+            skip(this);
+            return hits;
+        }
+        let pat1;
+        let pat2 = null;
+        let pat3 = null;
+        try {
+            pat1 = this.encodeRecipe(code, km1);
+            if (b && km2 != null) pat2 = this.encodeRecipe(code, km2);
+            if (c && km3 != null) pat3 = this.encodeRecipe(code, km3);
+        } catch (error) {
+            skip(this);
+            return hits;
+        }
+        let locs = this.findOnDiffs(a, pat1, diffs).filter((addr) => {
+            if (pat2 && !this.patternFits(b, addr, pat2)) return false;
+            return true;
+        });
+        if (!locs.length) {
+            skip(this);
+            return hits;
+        }
+        if (locs.length > 32) {
+            locs = locs.filter((addr) => {
+                for (let i = 0; i < pat1.length; i++) if (diffs && diffs.has && diffs.has(addr + i)) return true;
+                return false;
+            });
+        }
+        if (!locs.length || locs.length > 32) {
+            skip(this);
+            return hits;
+        }
+        locs.slice(0, 12).forEach((addr) => {
+            const same = this.checksumsThatMove(a, b, addr, code.width)[0] || this.userChecksum(addr, code.width);
+            const little = code.endian !== "BE" && code.endian !== "BCD";
+            let copies = this.copiesFor(a, b, c, addr, code.width, little, diffs);
+            if (diffs && diffs.size) {
+                const offCopies = this.copiesOnDiffOffset(diffs, addr, a.length, code.width);
+                if (offCopies.length > copies.length) copies = offCopies;
+            }
+            const cOk = !(pat3 && !this.patternFits(c, addr, pat3));
+            hits.push({
+                line: addr & ~0x0F,
+                addr: addr,
+                width: code.width,
+                endian: code.endian,
+                formula: code.formula,
+                raw: this.read(a, addr, code.width, little),
+                km: km1,
+                hex: MathEngine.hexBytes(a.slice(addr, addr + code.width)),
+                checksum: same,
+                copies: copies,
+                stair: copies.length,
+                score: 92 + (same ? 8 : 0) + Math.min(copies.length, 8) + (cOk ? 4 : 0) + (same && same.fromUser ? 6 : 0),
+                familyId: code.familyId || "",
+                fromSaved: true,
+                fromKnown: !!code.familyId,
+                fromPair: true,
+                name: code.name
+            });
+        });
+        return hits;
+    },
+
     trySavedAlgos(a, b, c, km1, km2, km3, diffs) {
         const hits = [];
-        const recipes = this.knownRecipes();
-        recipes.forEach((code) => {
-            if (/YAMAHA_|ODYSSEY_/i.test(String(code.familyId || code.name || "")) && !this.recipeFitsFile(code, a)) return;
-            let pat1;
-            let pat2 = null;
-            let pat3 = null;
-            try {
-                pat1 = this.encodeRecipe(code, km1);
-                if (b && km2 != null) pat2 = this.encodeRecipe(code, km2);
-                if (c && km3 != null) pat3 = this.encodeRecipe(code, km3);
-            } catch (error) {
-                return;
-            }
-            let locs = MathEngine.findPattern(a, pat1).filter((addr) => {
-                if (diffs && diffs.size) {
-                    let touch = false;
-                    for (let i = 0; i < pat1.length; i++) if (diffs.has(addr + i)) touch = true;
-                    if (!touch) return false;
-                }
-                if (pat2 && !this.patternFits(b, addr, pat2)) return false;
-                if (pat3 && !this.patternFits(c, addr, pat3)) return false;
-                return true;
-            });
-            if (!locs.length) return;
-            if (locs.length > 32) {
-                locs = locs.filter((addr) => {
-                    for (let i = 0; i < pat1.length; i++) if (diffs && diffs.has(addr + i)) return true;
-                    return false;
-                });
-            }
-            if (!locs.length || locs.length > 32) return;
-            locs.forEach((addr) => {
-                const same = this.checksumsThatMove(a, b, addr, code.width)[0] || null;
-                const little = code.endian !== "BE" && code.endian !== "BCD";
-                const copies = this.copiesFor(a, b, c, addr, code.width, little, diffs);
-                hits.push({
-                    line: addr & ~0x0F,
-                    addr: addr,
-                    width: code.width,
-                    endian: code.endian,
-                    formula: code.formula,
-                    raw: this.read(a, addr, code.width, little),
-                    km: km1,
-                    hex: MathEngine.hexBytes(a.slice(addr, addr + code.width)),
-                    checksum: same,
-                    copies: copies,
-                    stair: copies.length,
-                    score: 92 + (same ? 8 : 0) + Math.min(copies.length, 8),
-                    familyId: code.familyId || "",
-                    fromSaved: true,
-                    fromKnown: !!code.familyId,
-                    fromPair: true,
-                    name: code.name
-                });
-            });
+        (this.knownRecipes() || []).forEach((code) => {
+            this.tryOneSaved(a, b, c, km1, km2, km3, diffs, code).forEach((hit) => hits.push(hit));
         });
         return hits;
     },
@@ -634,8 +849,7 @@ const DeepAttack = {
         if (this._diffs && this._diffs.size) {
             copies = this.copiesOnDiffOffset(this._diffs, hit.offset, bytes.length, width);
         }
-        const checksum = this.checksumsThatMove(bytes, ctx.bytes2, hit.offset, width)[0] || null;
-        return {
+        const built = {
             line: hit.offset & ~0x0F,
             addr: hit.offset,
             width: width,
@@ -644,15 +858,17 @@ const DeepAttack = {
             raw: this.read(bytes, hit.offset, width, little),
             km: ctx.km1,
             hex: MathEngine.hexBytes(bytes.slice(hit.offset, hit.offset + width)),
-            checksum: checksum,
+            checksum: null,
             copies: copies,
             stair: copies.length,
-            score: (Number(hit.confidence) || 80) + (checksum ? 8 : 0) + Math.min(copies.length, 10),
+            score: (Number(hit.confidence) || 80) + Math.min(copies.length, 10),
             fromKnown: hit.status === "VALIDATED",
             fromPair: true,
             name: hit.expression,
             familyId: ""
         };
+        this.attachChecksum(built, bytes, ctx.bytes2, ctx.bytes3);
+        return built;
     },
 
     stop() {
@@ -687,8 +903,20 @@ const DeepAttack = {
             self.MIN_MS = Number(opts.minMs) > 0 ? Number(opts.minMs) : 5 * 60 * 1000;
             self.SIM_MS = Number(opts.simMs) > 0 ? Number(opts.simMs) : 2 * 60 * 1000;
             self.MAX_MS = Number(opts.maxMs) > 0 ? Number(opts.maxMs) : 10 * 60 * 1000;
+            self.HARD_MS = Number(opts.hardMs) > 0 ? Number(opts.hardMs)
+                : (Number(opts.maxMs) > 0 ? Number(opts.maxMs) : 15 * 60 * 1000);
             if (self.SIM_MS >= self.MIN_MS) self.SIM_MS = Math.max(40, Math.floor(self.MIN_MS * 0.4));
             if (self.MIN_MS > self.MAX_MS) self.MAX_MS = self.MIN_MS;
+            if (self.MAX_MS > self.HARD_MS) self.HARD_MS = self.MAX_MS;
+            self._ctx = { bytes: a, bytes2: b, bytes3: c, km1: km1, km2: km2, km3: km3 };
+            self._recipes = self.knownRecipes();
+            self._simLog = [];
+            self._vins = [];
+            self._inventStarted = false;
+            self._diffs = null;
+            self._skipped = [];
+            self._chkI = null;
+            self._chkList = [];
             self._ctx = { bytes: a, bytes2: b, bytes3: c, km1: km1, km2: km2, km3: km3 };
             self._recipes = self.knownRecipes();
             self._simLog = [];
@@ -718,10 +946,10 @@ const DeepAttack = {
             const emit = function (info) {
                 const elapsed = Date.now() - self.started;
                 const solid = info.found || hits.some((h) => self.isSolid(h));
-                const cap = elapsed < self.MIN_MS ? self.MIN_MS : self.MAX_MS;
+                const cap = elapsed < self.MIN_MS ? self.MIN_MS : (hits.some((h) => self.isSolid(h)) ? self.MAX_MS : self.HARD_MS);
                 if (opts.onTick) {
                     opts.onTick({
-                        pct: Math.min(99, (elapsed / self.MAX_MS) * 100),
+                        pct: Math.min(99, (elapsed / self.HARD_MS) * 100),
                         elapsed: elapsed,
                         line: info.line || 0,
                         tested: tested,
@@ -732,8 +960,10 @@ const DeepAttack = {
                         phase: info.phase || "scan",
                         sim: self._simLog || [],
                         vins: self._vins || [],
+                        skipped: (self._skipped || []).slice(-8),
                         minMs: self.MIN_MS,
-                        maxMs: self.MAX_MS,
+                        maxMs: cap,
+                        hardMs: self.HARD_MS,
                         solid: !!solid
                     });
                 }
@@ -752,6 +982,10 @@ const DeepAttack = {
                     let same = self.checksumsThatMove(a, b, job.addr, job.width);
                     if (!same.length && job.width === 2 && (job.addr & 0x0F) === 0x0E) {
                         same = self.checksumsThatMove(a, b, job.addr - 1, 3);
+                    }
+                    if (!same.length) {
+                        const painted = self.userChecksum(job.addr, job.width);
+                        if (painted) same = [painted];
                     }
                     let copies = self.copiesFor(a, b, c, job.addr, job.width, job.en.little, self._diffs);
                     if (self._diffs && self._diffs.size) {
@@ -814,7 +1048,7 @@ const DeepAttack = {
                         formula: best ? best.formula : "",
                         line: best ? best.line : (lines[0] || 0)
                     });
-                    if (elapsed >= self.MAX_MS) {
+                    if (elapsed >= self.HARD_MS) {
                         if (typeof DiscoveryManager !== "undefined") {
                             takeDisc(DiscoveryManager.getResults());
                             DiscoveryManager.cancel();
@@ -875,14 +1109,13 @@ const DeepAttack = {
                     settled = true;
                     return;
                 }
-                const saved = self.trySavedAlgos(a, b, c, km1, km2, km3, diffs);
-                saved.forEach((hit) => hits.push(hit));
                 self._vins = self.huntVins(a, b, c);
-                emit({ phase: "scan", line: lines[0] || 0, formula: hits[0] ? hits[0].formula : "" });
+                emit({ phase: "saved", line: lines[0] || 0 });
                 const widths = [2, 3, 4];
                 const endians = [{ id: "LE", little: true }, { id: "BE", little: false }];
                 const jobMap = {};
-                diffs.forEach((addr) => {
+                const markSet = new Set(self.markAddrs());
+                const addJobAddr = function (addr) {
                     widths.forEach((width) => {
                         const maxStart = addr;
                         const minStart = Math.max(0, addr - width + 1);
@@ -892,14 +1125,24 @@ const DeepAttack = {
                             endians.forEach((en) => {
                                 const key = start + "|" + width + "|" + en.id;
                                 if (jobMap[key]) return;
-                                jobMap[key] = { line: start & ~0x0F, addr: start, width: width, en: en };
+                                jobMap[key] = {
+                                    line: start & ~0x0F,
+                                    addr: start,
+                                    width: width,
+                                    en: en,
+                                    marked: markSet.has(start)
+                                };
                             });
                         }
                     });
-                });
-                const jobs = Object.keys(jobMap).map((k) => jobMap[k]);
+                };
+                diffs.forEach(addJobAddr);
+                markSet.forEach(addJobAddr);
+                const jobs = Object.keys(jobMap).map((k) => jobMap[k]).sort((x, y) => (y.marked - x.marked) || (x.addr - y.addr));
+                const recipes = self._recipes || [];
+                let ri = 0;
                 let ji = 0;
-                let phase = "scan";
+                let phase = "saved";
                 let simStarted = 0;
                 const tick = function () {
                     if (settled) return;
@@ -908,8 +1151,28 @@ const DeepAttack = {
                         return;
                     }
                     const elapsed = Date.now() - self.started;
-                    if (elapsed >= self.MAX_MS) {
+                    if (elapsed >= self.HARD_MS) {
                         done(false);
+                        return;
+                    }
+                    if (phase === "saved") {
+                        const sliceEnd = Date.now() + 40;
+                        while (Date.now() < sliceEnd && ri < recipes.length) {
+                            try {
+                                self.tryOneSaved(a, b, c, km1, km2, km3, diffs, recipes[ri]).forEach((hit) => hits.push(hit));
+                            } catch (error) {
+                                if (!self._skipped) self._skipped = [];
+                                self._skipped.push((recipes[ri] && recipes[ri].name) || "algo");
+                            }
+                            ri++;
+                        }
+                        emit({
+                            phase: "saved",
+                            formula: (hits[0] && hits[0].formula) || "",
+                            line: lines[0] || 0
+                        });
+                        if (ri >= recipes.length) phase = "scan";
+                        self.timer = setTimeout(tick, 16);
                         return;
                     }
                     if (phase === "scan") {
@@ -924,7 +1187,33 @@ const DeepAttack = {
                             formula: (hits[0] && hits[0].formula) || "",
                             line: job.line || 0
                         });
-                        if (ji >= jobs.length) phase = "sim";
+                        if (ji >= jobs.length) phase = "chk";
+                        self.timer = setTimeout(tick, 16);
+                        return;
+                    }
+                    if (phase === "chk") {
+                        if (self._chkI == null) {
+                            self._chkList = hits.filter((h) => h && h.addr != null);
+                            self._chkI = 0;
+                        }
+                        const sliceEnd = Date.now() + 40;
+                        while (Date.now() < sliceEnd && self._chkI < self._chkList.length) {
+                            const row = self._chkList[self._chkI];
+                            if (!row.checksum || !row.checksum.name) self.attachChecksum(row, a, b, c);
+                            self._chkI++;
+                        }
+                        const linked = hits.filter((h) => h.checksum && h.checksum.name).length;
+                        emit({
+                            phase: "chk",
+                            formula: (hits[0] && hits[0].formula) || "",
+                            line: hits[0] ? hits[0].line : 0
+                        });
+                        if (self._chkI >= self._chkList.length) {
+                            hits.forEach((h) => {
+                                if (h.checksum && h.checksum.name) h.score = (h.score || 80) + 2;
+                            });
+                            phase = "sim";
+                        }
                         self.timer = setTimeout(tick, 16);
                         return;
                     }
@@ -997,13 +1286,17 @@ const DeepAttack = {
             best: best ? this.buildBest(best) : null,
             sim: this._simLog || [],
             vins: this._vins || [],
+            skipped: this._skipped || [],
             message: best
                 ? "TERMINÓ. Desencriptó el kilometraje en la línea " + this.hex(best.line) +
-                    " con " + best.formula + (best.checksum ? " y " + best.checksum.name + " en " + this.hex(best.checksum.storedAt) : "") +
+                    " con " + best.formula +
+                    (best.checksum
+                        ? " y " + best.checksum.name + " en " + this.hex(best.checksum.storedAt)
+                        : " y no hallé SUM/CRC de ese KM") +
                     (this._vins && this._vins[0] ? ". VIN " + this._vins[0].value : "") +
                     ". " + this.decodeHow(best)
-                : "TERMINÓ. Atacé " + (lines || []).length + " líneas que cambian (" + tested +
-                    " pruebas). El cerebro siguió 5–10 min. Revisa KM 1 y KM 2 si no hay fórmula sólida."
+                    : "TERMINÓ. Atacé " + (lines || []).length + " líneas que cambian (" + tested +
+                    " pruebas). El cerebro siguió 5–15 min. Los algoritmos que no calzaron se descartaron y siguió."
         };
         report.discoveries = [];
         this.lastReport = report;

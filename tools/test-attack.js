@@ -136,6 +136,9 @@ async function main() {
     if (real.best.copies.length < 20) {
         throw new Error("Tracker copias de menos: " + real.best.copies.length);
     }
+    if (!real.best.checksumName || !/CRC16/i.test(real.best.checksumName)) {
+        throw new Error("Tracker debía ligar CRC16, salió " + real.best.checksumName);
+    }
     const ghost = EditorEngine.apply(new Uint8Array(t1), real.best, 12000);
     let ghostChanged = 0;
     for (let i = 0; i < t1.length; i++) if (t1[i] !== ghost.bytes[i]) ghostChanged++;

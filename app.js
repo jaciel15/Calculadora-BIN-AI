@@ -1893,11 +1893,14 @@ function runPairAnalysis() {
     startDeepAttack();
 }
 
-function clockText(ms) {
-    const s = Math.min(600, Math.floor(ms / 1000));
+function clockText(ms, maxMs) {
+    const cap = Math.max(60, Math.floor((maxMs || 15 * 60 * 1000) / 1000));
+    const s = Math.min(cap, Math.floor(ms / 1000));
     const m = Math.floor(s / 60);
     const r = s % 60;
-    return m + ":" + String(r).padStart(2, "0") + " / 10:00";
+    const cm = Math.floor(cap / 60);
+    const cr = cap % 60;
+    return m + ":" + String(r).padStart(2, "0") + " / " + cm + ":" + String(cr).padStart(2, "0");
 }
 
 function fillAttackSim(info) {
@@ -1910,7 +1913,10 @@ function fillAttackSim(info) {
         "KM " + s.km + " → " + s.hex + " · " + s.copies + " copias · " + s.bytes + " bytes " + (s.ok ? "OK" : "REVISAR")
     ).join("\n");
     box.textContent = (vinLine ? "VIN: " + vinLine + "\n" : "") +
+        (info.skipped && info.skipped.length ? "Algoritmos que no calzaron (sigo): " + info.skipped.join(", ") + "\n" : "") +
         (info.phase === "sim" ? "SIMULADOR (el cerebro fabrica archivos de prueba)\n" : "") +
+        (info.phase === "saved" ? "Probando algoritmos guardados uno por uno. Si no calzan, los descarto y sigo.\n" : "") +
+        (info.phase === "chk" ? "KM hallado. Ligando SUM/CRC de esa misma zona…\n" : "") +
         (sims || "Juntando hipótesis en los bytes que cambian…") +
         (info.formula ? "\nFórmula en juego: " + info.formula : "");
 }
@@ -1948,6 +1954,7 @@ async function startDeepAttack() {
         alert("Cargaste BIN 3. Pon su KM 3 para verificar CRC/SUM en ese entorno.");
         return;
     }
+    if (typeof MarkBook !== "undefined") MarkBook.harvest();
     startDeepAttack.busy = true;
     const overlay = $("attackOverlay");
     const fill = $("attackFill");
@@ -1960,8 +1967,8 @@ async function startDeepAttack() {
         fill.style.width = "2%";
     }
     setStatus("CARGANDO", "busy");
-    if (status) status.textContent = "En carga. KM 1 = " + km1 + " · KM 2 = " + km2 + ". Simula 2 min, mínimo 5:00, si hace falta 10:00.";
-    if (clock) clock.textContent = "0:00 / 10:00";
+    if (status) status.textContent = "En carga. KM 1 = " + km1 + " · KM 2 = " + km2 + ". 5 min fijos. Si no cierra, 10. Si aún no, 15. Tus colores y el complemento también entran.";
+    if (clock) clock.textContent = "0:00 / 15:00";
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     let report;
     try {
@@ -1974,16 +1981,22 @@ async function startDeepAttack() {
             km3: km3,
             onTick: function (info) {
                 if (fill) fill.style.width = info.pct.toFixed(1) + "%";
-                if (clock) clock.textContent = clockText(info.elapsed);
+                if (clock) clock.textContent = clockText(info.elapsed, info.hardMs || info.maxMs);
                 fillAttackSim(info);
                 setStatus("CARGANDO", "busy");
                 if (status) {
-                    if (info.phase === "sim") {
+                    if (info.phase === "saved") {
+                        status.textContent = "Probando algoritmos guardados. Si no calzan, los descarto y sigo.";
+                    } else if (info.phase === "chk") {
+                        status.textContent = "Ya hay KM. Buscando su checksum o CRC en las páginas de al lado.";
+                    } else if (info.phase === "sim") {
                         status.textContent = "Simulando 2 min: fabrica archivos con la hipótesis y los muestra abajo.";
                     } else if (info.phase === "invent") {
-                        status.textContent = "IA inventando fórmula. Mínimo 5:00, si hace falta hasta 10:00.";
+                        status.textContent = info.solid
+                            ? "Ya hay fórmula. Completo el mínimo 5:00."
+                            : "IA inventando fórmula. Mínimo 5:00, si hace falta 10, y si no cierra hasta 15:00.";
                     } else {
-                        status.textContent = "Atacando diffs · XOR por byte · VIN. Línea " +
+                        status.textContent = "Atacando diffs · XOR · colores · VIN. Línea " +
                             padHex(info.line || 0) + " · " + info.tested + " pruebas · " +
                             info.hits + " hipótesis";
                     }
@@ -2026,10 +2039,10 @@ async function startDeepAttack() {
                 kmChecksums: report.best.checksumAt !== undefined ? [{
                     name: report.best.checksumName,
                     storedAt: report.best.checksumAt,
-                    start: report.best.address,
-                    end: report.best.address + report.best.width,
-                    size: /16/.test(report.best.checksumName || "") ? 2 : 1,
-                    endian: "BE"
+                    start: report.best.checksumStart != null ? report.best.checksumStart : report.best.address,
+                    end: report.best.checksumEnd != null ? report.best.checksumEnd : report.best.address + report.best.width,
+                    size: report.best.checksumSize || (/16/.test(report.best.checksumName || "") ? 2 : 1),
+                    endian: report.best.checksumEndian || "LE"
                 }] : [],
                 closed: []
             });
@@ -2050,6 +2063,10 @@ async function startDeepAttack() {
             ? "<p><strong>Simulador</strong></p><pre>" + report.sim.map((s) =>
                 "KM " + s.km + " → " + s.hex + " · " + s.copies + " copias · " + s.bytes + " bytes " + (s.ok ? "OK" : "REVISAR")
             ).join("\n") + "</pre>"
+            : "") +
+        (report.skipped && report.skipped.length
+            ? "<p>Algoritmos guardados que no calzaron y se descartaron: " +
+                escapeText(report.skipped.slice(0, 12).join(", ")) + ". El ataque siguió.</p>"
             : "") +
         (need3
             ? "<p><strong>Falta un tercer BIN</strong> con otro KM para cerrar CRC/SUM en un entorno distinto. Súbelo en BIN 3 y vuelve a ATAQUE 10 MIN. Si ya quieres el archivo, pulsa SÍ.</p>"

@@ -106,18 +106,22 @@ const EditorEngine = {
                 const at = (addr & ~0x0F) + chkOff;
                 if (at < 0 || at + size > working.length) return;
                 if (at >= addr && at < addr + (hit.width || 2)) return;
+                const relS = hit.checksumStart != null ? (hit.checksumStart - hit.address) : 0;
+                const relE = hit.checksumEnd != null ? (hit.checksumEnd - hit.address) : (hit.width || 2);
+                const winS = addr + relS;
+                const winE = addr + relE;
+                if (winS < 0 || winE <= winS || winE > working.length) return;
                 let val = 0;
-                if (name.indexOf("CRC16-IBM") !== -1) val = ChecksumEngine.crc16IBM(working, addr, addr + hit.width);
-                else if (name.indexOf("CRC16") !== -1) val = ChecksumEngine.crc16(working, addr, addr + hit.width);
-                else if (name.indexOf("CRC8") !== -1) val = ChecksumEngine.crc8(working, addr, addr + hit.width);
-                else if (name.indexOf("XOR16") !== -1) val = ChecksumEngine.xor16(working, addr, addr + hit.width);
-                else if (name.indexOf("XOR") !== -1) {
-                    val = 0;
-                    for (let i = 0; i < hit.width; i++) val ^= working[addr + i];
-                } else if (name.indexOf("COMP") !== -1) {
-                    val = (0x100 - ChecksumEngine.sum8(working, addr, addr + hit.width)) & 0xFF;
-                } else if (name.indexOf("SUM16") !== -1) val = ChecksumEngine.sum16(working, addr, addr + hit.width);
-                else val = ChecksumEngine.sum8(working, addr, addr + hit.width);
+                if (name.indexOf("CRC16-IBM") !== -1) val = ChecksumEngine.crc16IBM(working, winS, winE);
+                else if (name.indexOf("CRC16-0") !== -1) val = ChecksumEngine.crc16(working, winS, winE, 0x1021, 0);
+                else if (name.indexOf("CRC16") !== -1) val = ChecksumEngine.crc16(working, winS, winE);
+                else if (name.indexOf("FLETCHER") !== -1) val = ChecksumEngine.fletcher16(working, winS, winE);
+                else if (name.indexOf("CRC8") !== -1) val = ChecksumEngine.crc8(working, winS, winE);
+                else if (name.indexOf("XOR16") !== -1) val = ChecksumEngine.xor16(working, winS, winE);
+                else if (name.indexOf("XOR") !== -1) val = ChecksumEngine.xor8(working, winS, winE);
+                else if (name.indexOf("COMP") !== -1) val = (0x100 - ChecksumEngine.sum8(working, winS, winE)) & 0xFF;
+                else if (name.indexOf("SUM16") !== -1) val = ChecksumEngine.sum16(working, winS, winE);
+                else val = ChecksumEngine.sum8(working, winS, winE);
                 working.set(MathEngine.toBytes(val, size, little), at);
             });
         }
