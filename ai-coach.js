@@ -282,11 +282,12 @@ const AiCoach = {
         this.merge(facts);
         this.applyMarks(facts);
         this.compile();
-        if (facts.wantHunt) {
+        if (facts.wantHunt && !facts.wantAttack) {
             this.huntNet();
             return;
         }
         if (facts.wantAttack && !facts.wrong) {
+            this.applySpokenKm(facts);
             this.tryAttack();
             return;
         }
@@ -331,15 +332,18 @@ const AiCoach = {
             formula: "",
             width: null,
             wantAttack: false,
+            km1: null,
+            km2: null,
             noCheck: false,
             wrong: false,
             wantHunt: false,
             chat: "",
             notes: []
         };
-        if (/\b(atac|empieza|empezamos|arranca|dale con el ataque|vamos al ataque|10\s*min|vuelve a atac|otra vez|repite)\b/.test(t)) {
-            facts.wantAttack = true;
-        }
+        if (this.wantsAttack(t)) facts.wantAttack = true;
+        const spoken = this.spokenKm(t);
+        if (spoken.km1 != null) facts.km1 = spoken.km1;
+        if (spoken.km2 != null) facts.km2 = spoken.km2;
         if (/busca|internet|wikipedia|algoritm/.test(t) && !facts.wantAttack) {
             facts.wantHunt = true;
         }
@@ -364,7 +368,10 @@ const AiCoach = {
         if (w) facts.width = Number(w[1]);
         if (/^(hola|buenas|hey|ey|que onda|qué onda|buenos dias|buenos días|ya estas|ya estás|estas ahi|estás ahí)\b/.test(t)) facts.chat = "hi";
         else if (/no se|no sé|donde esta|dónde está|que hago|qué hago|como empiezo|cómo empiezo|ayudame|ayúdame|explica|no se donde|no sé dónde/.test(t)) facts.chat = "help";
-        else if (/gracias|sale|ok|va|perfecto|listo/.test(t) && t.length < 24) facts.chat = "ok";
+        else if (/^(gracias|sale|ok|va|perfecto|listo|dale|hazlo|ando|sigue)$/.test(t)) {
+            facts.chat = "ok";
+            if (this.readyToAttack()) facts.wantAttack = true;
+        }
 
         const clauses = t.split(/\s*(?:,|;|\.| y |\n)\s*/);
         clauses.forEach((clause) => {
@@ -539,8 +546,11 @@ const AiCoach = {
 
         if (got.length) {
             let text = "Te entendí: " + got.join("; ") + ".";
-            const next = this.nextMove();
-            if (next) text += " " + next;
+            if (this.readyToAttack()) text += " Dime atacar y arranco, no te voy a seguir preguntando.";
+            else {
+                const next = this.nextMove();
+                if (next) text += " " + next;
+            }
             return text;
         }
 
@@ -557,7 +567,7 @@ const AiCoach = {
                 return "Primero los dos archivos: BIN 1 original y BIN 2 editado, cada uno con su KM. Yo miro los bytes que cambian. No necesito que sepas la línea.";
             }
             return "No pasa nada si no sabes la dirección. " + this.diffLine(seen) +
-                " Esas zonas son las sospechosas. Si alguna es el KM, dímelo (ej. KM en 0010 rojo). Si no, escribe empieza el ataque y las pruebo yo.";
+                " Esas zonas son las sospechosas. Dime atacar y las pruebo yo, o dime la línea si la ves.";
         }
 
         const seen = this.look();
@@ -578,8 +588,8 @@ const AiCoach = {
         if (!seen.bin2) return "Sube el BIN 2 con otro KM.";
         if (seen.km1 == null || seen.km2 == null) return "Escribe KM 1 y KM 2 (o dímelos aquí).";
         const have = this.whatIHave();
-        if (have) return have + " Cuando quieras: empieza el ataque.";
-        return "Con eso ya puedo atacar. Escríbeme empieza el ataque, o dime la línea del KM si la ves.";
+        if (have) return have + " Dime atacar y arranco.";
+        return "Ya tengo el par y los KM. Dime atacar y arranco, sin más preguntas.";
     },
 
     stillNeed() {
@@ -604,10 +614,51 @@ const AiCoach = {
         return this.missingBins();
     },
 
+    readyToAttack() {
+        return this.missingBins().length === 0;
+    },
+
+    wantsAttack(t) {
+        const s = this.norm(t);
+        if (/atacar|ataqu[eo]|ataca\b|atacalo|atacale|atacamos|atacando|atacr/.test(s)) return true;
+        if (/empez(a|ar|amos|ale)|arranc(a|ar|ale|amos)|adelante/.test(s)) return true;
+        if (/dale con|vamos al ataque|vamos a atac|10\s*min|ataque\s*10/.test(s)) return true;
+        if (/vuelve a atac|otra vez el ataque|repite el ataque/.test(s)) return true;
+        return false;
+    },
+
+    spokenKm(t) {
+        const out = { km1: null, km2: null };
+        const one = String(t || "").match(/km\s*1\s*(?:es|=|:)?\s*(\d{3,7})/);
+        const two = String(t || "").match(/km\s*2\s*(?:es|=|:)?\s*(\d{3,7})/);
+        if (one) out.km1 = Number(one[1]);
+        if (two) out.km2 = Number(two[1]);
+        return out;
+    },
+
+    applySpokenKm(facts) {
+        const fill = function (id, km) {
+            if (km == null || !Number.isFinite(km)) return;
+            const el = document.getElementById(id);
+            if (el) el.value = String(km);
+        };
+        if (facts && facts.km1 != null) {
+            fill("knownKm1", facts.km1);
+            fill("knownKm", facts.km1);
+        }
+        if (facts && facts.km2 != null) fill("knownKm2", facts.km2);
+        if (typeof refreshKmReadout === "function") refreshKmReadout();
+    },
+
     tryAttack() {
+        if ((typeof DeepAttack !== "undefined" && DeepAttack.running) ||
+            (typeof startDeepAttack === "function" && startDeepAttack.busy)) {
+            this.say("Ya estoy atacando. Cuando termine te cuento qué leí. No te voy a seguir preguntando.");
+            return;
+        }
         const miss = this.missingBins();
         if (miss.length) {
-            this.say("Quiero atacar, pero aún falta " + miss.join(", ") + ". Cárgalo y escríbeme otra vez empieza el ataque. Yo ya guardé lo que me dijiste.");
+            this.say("Quiero atacar, pero aún falta " + miss.join(", ") + ". Cárgalo y dime otra vez atacar. Yo ya guardé lo que me dijiste.");
             return;
         }
         this.say("Empezamos el ataque. Uso lo que me diste y lo que cambia entre los BIN. Al final te cuento qué línea leí, qué bytes y cómo lo descifré. Si me equivoco, me lo dices y vuelvo.");
