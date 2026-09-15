@@ -112,7 +112,7 @@ const MarkBook = {
     parseRecipe(text) {
         const raw = String(text || this.recipeText() || "");
         const t = raw.toLowerCase().replace(/×/g, "x").replace(/,/g, " ");
-        const rec = { formula: null, width: null, endian: null, chk: null, chkOn: null, raw: raw };
+        const rec = { formula: null, width: null, endian: null, chk: null, chkOn: null, invert: false, raw: raw };
         if (!raw) return rec;
         if (/x\s*10\s*-\s*1|por 10 menos 1/.test(t)) rec.formula = "X * 10 - 1";
         else if (/x\s*10\s*-\s*5|por 10 menos 5/.test(t)) rec.formula = "X * 10 - 5";
@@ -123,7 +123,7 @@ const MarkBook = {
         else if (/x\s*\/\s*4|entre\s*4|dividid[oa]\s*4/.test(t) && !/x\s*\*\s*4/.test(t)) rec.formula = "X / 4";
         else if (/x\s*\*\s*4/.test(t)) rec.formula = "X * 4";
         else if (/x\s*\/\s*10|entre\s*10/.test(t)) rec.formula = "X / 10";
-        else if (/invertid|not\s*\(.*1000|~\s*\(.*1000/.test(t)) rec.formula = "~(X * 1000)";
+        else if (/not\s*\(.*1000|~\s*\(.*1000/.test(t)) rec.formula = "~(X * 1000)";
         else if (/gray/.test(t)) rec.formula = "GRAY(X)";
         else if (/swap16.*10|bytes?\s*swapead/.test(t)) rec.formula = "SWAP16(X*10)";
         else if (/nibble/.test(t)) rec.formula = "NIBBLE_SWAP(X)";
@@ -152,6 +152,7 @@ const MarkBook = {
         if (/morado|crc/.test(t) && /escrib|guarda|ahi|allí|dónde|donde/.test(t)) rec.chkOn = "CRC";
         else if (/azul|sum\b/.test(t) && /escrib|guarda|ahi|allí|donde/.test(t)) rec.chkOn = "CHK";
         if (/complemento|\bcomp\b/.test(t)) rec.chkOn = rec.chkOn || "COMP";
+        if (/invertid|al revés|al reves|swapead|byte.?swap|bytes invert|word.?swap/.test(t)) rec.invert = true;
         if (!rec.chkOn && rec.chk) {
             if (this.lessonRanges("CRC").length || this.ranges("CRC").length) rec.chkOn = "CRC";
             else if (this.lessonRanges("CHK").length || this.ranges("CHK").length) rec.chkOn = "CHK";
@@ -161,7 +162,8 @@ const MarkBook = {
             rec.formula ? "KM = " + rec.formula : null,
             rec.width ? rec.width + " bytes" : null,
             rec.endian || null,
-            rec.chk ? rec.chk + (rec.chkOn ? " en " + rec.chkOn : "") : null
+            rec.chk ? rec.chk + (rec.chkOn ? " en " + rec.chkOn : "") : null,
+            rec.invert ? "bytes invertidos" : null
         ].filter(Boolean).join(" · ");
         return rec;
     },
@@ -229,7 +231,8 @@ const MarkBook = {
             localStorage.setItem(this.STORAGE, JSON.stringify({
                 lessons: this.lessons,
                 guideStep: this.guideStep,
-                recipe: this.recipeText()
+                recipe: this.recipeText(),
+                invert: !!(document.getElementById("hintInvertBytes") && document.getElementById("hintInvertBytes").checked)
             }));
         } catch (error) { /* ignore */ }
     },
@@ -246,6 +249,9 @@ const MarkBook = {
             if (!this.hasLessons()) this.guideStep = "KM";
             if (data.recipe && document.getElementById("helpRecipe")) {
                 document.getElementById("helpRecipe").value = data.recipe;
+            }
+            if (document.getElementById("hintInvertBytes") && data.invert) {
+                document.getElementById("hintInvertBytes").checked = true;
             }
         } catch (error) { /* ignore */ }
     },

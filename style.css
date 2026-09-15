@@ -503,6 +503,7 @@ body {
 
 .help-recipe-bar {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: 10px;
     margin: 0 0 10px;
@@ -527,6 +528,33 @@ body {
     padding: 6px 8px;
     font: inherit;
     font-size: 12px;
+}
+.hint-invert {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 160px;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    color: #163a6b !important;
+    padding-top: 8px !important;
+    cursor: pointer;
+}
+.hint-invert input {
+    width: 16px;
+    height: 16px;
+    accent-color: #1e5a9c;
+}
+.ai-reply {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid #8eb8e8;
+    border-radius: 12px;
+    background: #eef6ff;
+    color: #163a6b;
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.45;
 }
 
 .hex-oracle {

@@ -43,6 +43,78 @@ const DeepAttack = {
         return MathEngine.fromBytes(bytes, addr, width, little);
     },
 
+    viewRaw(raw, width, wrap) {
+        if (raw == null || wrap === "ID") return raw;
+        if (wrap === "SWAP16") return width >= 4 ? MathEngine.swap32(raw) : MathEngine.swap16(raw);
+        if (wrap === "NIBBLE_SWAP") return MathEngine.nibbleSwap(raw);
+        if (wrap === "~") {
+            const mask = width === 2 ? 0xFFFF : (width === 3 ? 0xFFFFFF : 0xFFFFFFFF);
+            return ((~raw) >>> 0) & mask;
+        }
+        return raw;
+    },
+
+    wrapFormula(match, wrap) {
+        if (!match) return null;
+        if (!wrap || wrap === "ID") return match;
+        const inner = match.formula || "X";
+        const formula = wrap === "~" ? "~(" + inner + ")" : wrap + "(" + inner + ")";
+        return Object.assign({}, match, { formula: formula, fromInvert: true, name: formula });
+    },
+
+    matchLayouts(raw1, raw2, raw3, km1, km2, km3, job) {
+        const invert = !!(this._help && this._help.invert);
+        const wraps = invert ? ["ID", "SWAP16", "NIBBLE_SWAP", "~"] : ["ID", "SWAP16"];
+        let found = null;
+        for (let i = 0; i < wraps.length; i++) {
+            const wrap = wraps[i];
+            if (wrap === "SWAP16" && job.width !== 2 && job.width !== 4) continue;
+            const v1 = this.viewRaw(raw1, job.width, wrap);
+            const v2 = this.viewRaw(raw2, job.width, wrap);
+            const v3 = raw3 == null ? null : this.viewRaw(raw3, job.width, wrap);
+            const m = this.matchKnown(v1, v2, v3, km1, km2, km3, job) ||
+                this.matchMany([v1, v2, v3], [km1, km2, km3]);
+            if (!m) continue;
+            const row = this.wrapFormula(m, wrap);
+            if (wrap === "ID") return row;
+            if (!found) found = row;
+        }
+        return found;
+    },
+
+    talkBack(hits, best) {
+        const help = this._help || {};
+        const bits = [];
+        if (help.invert) {
+            bits.push("Me dijiste que tal vez los bytes están invertidos. Los probé: little-endian, big-endian, SWAP16, nibble-swap y NOT.");
+        } else {
+            bits.push("También miré si el orden de bytes iba al revés (LE/BE/SWAP16).");
+        }
+        if (!best) {
+            bits.push("Te respondo: todavía no cierro el kilometraje. Sube otro BIN con otro KM, pinta el KM en rojo o marca «Tal vez bytes invertidos». No invento el nombre del algoritmo.");
+            return bits.join(" ");
+        }
+        const looksInv = best.endian === "BE" || /SWAP16|SWAP32|NIBBLE_SWAP|~\(/.test(String(best.formula || "")) || !!best.fromInvert;
+        if (help.invert) {
+            if (looksInv) {
+                bits.push("Te respondo: SÍ, iban invertidos. La lectura que cierra es " + best.formula +
+                    " en " + best.width + " bytes " + best.endian + " @ " + this.hex(best.addr) + ".");
+            } else {
+                bits.push("Te respondo: NO estaban invertidos. El KM cierra en little-endian, fórmula " +
+                    best.formula + " @ " + this.hex(best.addr) + ".");
+            }
+        } else {
+            bits.push("Te respondo: desencripté " + best.formula + " · " + best.width + "B " + best.endian +
+                " @ " + this.hex(best.addr) +
+                (looksInv ? ". El orden de bytes iba al revés." : ". El orden de bytes es el normal (primero el bajo)."));
+        }
+        const top = (hits || []).filter((h) => this.isSolid(h)).slice(0, 5);
+        if (top.length > 1) {
+            bits.push("Otras hipótesis: " + top.slice(1).map((h) => h.formula + " " + h.endian).join(" · ") + ".");
+        }
+        return bits.join(" ");
+    },
+
     matchPair(raw1, raw2, km1, km2) {
         if (raw1 === null || raw2 === null || !km1 || !km2) return null;
         if (Number(km1) !== Number(km2) && raw1 === raw2) return null;
@@ -452,6 +524,7 @@ const DeepAttack = {
             checksumEnd: hit.checksum && hit.checksum.end != null ? hit.checksum.end : undefined,
             scatter: hit.scatter && hit.scatter.length ? hit.scatter.slice(0, 96) : undefined,
             equalize: !!hit.equalize,
+            fromInvert: !!hit.fromInvert,
             operation: (hit.formula || "X") + " · " + hit.width + "B " + (hit.endian || "LE") +
                 (hit.checksum ? " · " + hit.checksum.name + " @" + this.hex(hit.checksum.storedAt) : ""),
             vin: (this._vins && this._vins[0] && this._vins[0].value) || ""
@@ -477,6 +550,7 @@ const DeepAttack = {
             return copies.length <= 64;
         }
         if (hit.fromXor && copies.length >= 1) return true;
+        if (hit.fromInvert && copies.length >= 1) return true;
         if (hit.scatter && hit.scatter.length >= 4) return true;
         if (hit.checksum && copies.length >= 1) return true;
         return !!(hit.fromPair && copies.length >= 2);
@@ -828,6 +902,7 @@ const DeepAttack = {
         let width = null;
         let endian = null;
         let chk = null;
+        let invert = false;
         let text = "";
         if (typeof MarkBook !== "undefined") {
             const rec = MarkBook.recipe();
@@ -836,17 +911,21 @@ const DeepAttack = {
             width = rec.width || null;
             endian = rec.endian || null;
             chk = rec.chk || null;
+            invert = !!rec.invert;
             if (rec.note) notes.push(rec.note);
             if (MarkBook.hasHelp()) notes.push("Hay colores o texto de ayuda");
         }
+        const box = typeof document !== "undefined" ? document.getElementById("hintInvertBytes") : null;
+        if (box && box.checked) invert = true;
         const raw = String(text);
         const low = raw.toLowerCase();
+        if (/invertid|al revés|al reves|swapead|bytes invert/.test(low)) invert = true;
         if (!formula) {
             if (/x\s*\/\s*31/.test(low)) formula = "X / 31";
             else if (/x\s*\/\s*32/.test(low)) formula = "X / 32";
             else if (/x\s*\/\s*4|entre\s*4/.test(low)) formula = "X / 4";
             else if (/x\s*\*\s*10|x\s*10/.test(low)) formula = "X * 10";
-            else if (/invertid|~\s*\(.*1000/.test(low)) formula = "~(X * 1000)";
+            else if (/~\s*\(.*1000/.test(low)) formula = "~(X * 1000)";
             else if (/xorbytes\s+/i.test(raw)) formula = "X XORBYTES " + (raw.match(/xorbytes\s+([0-9A-Fa-f\-]{5,})/i) || [])[1];
         }
         (raw.match(/0x[0-9A-Fa-f]{3,6}\b|\b[0-9A-Fa-f]{4}\b/g) || []).forEach((h) => {
@@ -860,6 +939,7 @@ const DeepAttack = {
         if (width) notes.push(width + " bytes");
         if (endian) notes.push(endian);
         if (chk) notes.push("Checksum " + chk);
+        if (invert) notes.push("Pista: bytes invertidos");
         if (addrs.length) notes.push(addrs.length + " direcciones de tu ayuda");
         if (!notes.length) notes.push("Sin ayuda extra: pienso solo con los diffs");
         return {
@@ -869,6 +949,7 @@ const DeepAttack = {
             width: width,
             endian: endian,
             chk: chk,
+            invert: invert,
             text: raw,
             notes: notes
         };
@@ -889,7 +970,15 @@ const DeepAttack = {
             "~X", "~(X * 1000)", "GRAY(X)", "SWAP16(X)", "SWAP16(X*10)", "BCD"].forEach((f) => {
             if (formulas.indexOf(f) < 0) formulas.push(f);
         });
-        const endians = help.endian === "BE"
+        if (help.invert) {
+            formulas.slice().forEach((f) => {
+                if (/^SWAP16|^NIBBLE_SWAP|^~/.test(f)) return;
+                ["SWAP16(" + f + ")", "NIBBLE_SWAP(" + f + ")", "~(" + f + ")"].forEach((w) => {
+                    if (formulas.indexOf(w) < 0) formulas.push(w);
+                });
+            });
+        }
+        const endians = help.invert || help.endian === "BE"
             ? [{ id: "BE", little: false }, { id: "LE", little: true }]
             : [{ id: "LE", little: true }, { id: "BE", little: false }];
         const seen = new Set();
@@ -1203,6 +1292,10 @@ const DeepAttack = {
                         vins: self._vins || [],
                         skipped: (self._skipped || []).slice(-8),
                         help: (self._help && self._help.notes) || [],
+                        reply: self._help && self._help.invert
+                            ? "Me dijiste que tal vez los bytes están invertidos. Estoy probando LE, BE, SWAP16, nibble-swap y NOT. Luego te respondo si sí o no."
+                            : "Cuando termine te respondo con la fórmula, el orden de bytes y las otras hipótesis.",
+                        invert: !!(self._help && self._help.invert),
                         minMs: self.MIN_MS,
                         maxMs: cap,
                         hardMs: self.HARD_MS,
@@ -1218,7 +1311,7 @@ const DeepAttack = {
                     const raw3 = c ? self.read(c, job.addr, job.width, job.en.little) : null;
                     tested++;
                     const match = self.matchKnown(raw1, raw2, raw3, km1, km2, km3, job) ||
-                        self.matchMany([raw1, raw2, raw3], [km1, km2, km3]) ||
+                        self.matchLayouts(raw1, raw2, raw3, km1, km2, km3, job) ||
                         self.matchXorBytes(a, b, c, job.addr, job.width, job.en.little, km1, km2, km3);
                     if (!match || !km1 || (raw1 === null && !match.fromXor)) return;
                     let same = self.checksumsThatMove(a, b, job.addr, job.width);
@@ -1246,9 +1339,10 @@ const DeepAttack = {
                         checksum: same[0] || null,
                         copies: copies,
                         stair: copies.length,
-                        score: (match.fromXor ? 96 : (match.fromKnown ? 94 : 88)) + (same[0] ? 8 : 0) + Math.min(copies.length, 10) + (c && km3 && !match.cMiss ? 4 : 0),
+                        score: (match.fromXor ? 96 : (match.fromKnown ? 94 : 88)) + (same[0] ? 8 : 0) + Math.min(copies.length, 10) + (c && km3 && !match.cMiss ? 4 : 0) + (match.fromInvert && self._help && self._help.invert ? 6 : 0),
                         fromKnown: !!match.fromKnown,
                         fromXor: !!match.fromXor,
+                        fromInvert: !!match.fromInvert,
                         fromPair: true,
                         name: match.name || match.formula,
                         familyId: match.familyId || ""
@@ -1363,7 +1457,9 @@ const DeepAttack = {
                 self._help = self.readHelp();
                 emit({ phase: "help", line: lines[0] || 0 });
                 const widths = [2, 3, 4];
-                const endians = [{ id: "LE", little: true }, { id: "BE", little: false }];
+                const endians = self._help && self._help.invert
+                    ? [{ id: "BE", little: false }, { id: "LE", little: true }]
+                    : [{ id: "LE", little: true }, { id: "BE", little: false }];
                 const jobMap = {};
                 const markSet = new Set((self._help.addrs || []).concat(self.markAddrs()));
                 const addJobAddr = function (addr) {
@@ -1543,6 +1639,7 @@ const DeepAttack = {
         hits = (hits || []).slice().sort((a, b) => (b.score - a.score) || (b.line - a.line));
         const solid = hits.filter((h) => this.isSolid(h));
         const best = solid[0] || null;
+        const reply = this.talkBack(hits, best);
         const report = {
             ok: !!best,
             stopped: stopped,
@@ -1554,16 +1651,16 @@ const DeepAttack = {
             vins: this._vins || [],
             skipped: this._skipped || [],
             help: (this._help && this._help.notes) || [],
-            message: best
-                ? "TERMINÓ. Desencriptó el kilometraje en la línea " + this.hex(best.line) +
-                    " con " + best.formula +
-                    (best.checksum
-                        ? " y " + best.checksum.name + " en " + this.hex(best.checksum.storedAt)
-                        : " y no hallé SUM/CRC de ese KM") +
-                    (this._vins && this._vins[0] ? ". VIN " + this._vins[0].value : "") +
-                    ". " + this.decodeHow(best)
-                    : "TERMINÓ. Atacé " + (lines || []).length + " líneas que cambian (" + tested +
-                    " pruebas). El cerebro siguió 5–15 min. Los algoritmos que no calzaron se descartaron y siguió."
+            reply: reply,
+            invert: !!(this._help && this._help.invert),
+            message: reply + (best
+                ? " " + (best.checksum
+                    ? ("Checksum " + best.checksum.name + " en " + this.hex(best.checksum.storedAt) + ".")
+                    : " No hallé SUM/CRC de ese KM.") +
+                    (this._vins && this._vins[0] ? " VIN " + this._vins[0].value + "." : "") +
+                    " " + this.decodeHow(best)
+                : " Atacé " + (lines || []).length + " líneas que cambian (" + tested +
+                    " pruebas). Los algoritmos que no calzaron se descartaron.")
         };
         if (best && typeof KnowledgeBase !== "undefined") {
             try {

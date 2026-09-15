@@ -1912,14 +1912,15 @@ function fillAttackSim(info) {
     const sims = (info.sim || []).map((s) =>
         "KM " + s.km + " → " + s.hex + " · " + s.copies + " copias · " + s.bytes + " bytes " + (s.ok ? "OK" : "REVISAR")
     ).join("\n");
-    box.textContent = (vinLine ? "VIN: " + vinLine + "\n" : "") +
+    box.textContent = (info.reply ? "IA: " + info.reply + "\n" : "") +
+        (vinLine ? "VIN: " + vinLine + "\n" : "") +
         (info.help && info.help.length ? "AYUDA: " + info.help.join(" · ") + "\n" : "") +
         (info.skipped && info.skipped.length ? "Algoritmos que no calzaron (sigo): " + info.skipped.join(", ") + "\n" : "") +
-        (info.phase === "help" ? "Pensando tu ayuda (colores, complemento, CÓMO LO HAGO) con IA…\n" : "") +
+        (info.phase === "help" ? "Pensando tu ayuda (colores, bytes invertidos, CÓMO LO HAGO)…\n" : "") +
         (info.phase === "sim" ? "SIMULADOR (el cerebro fabrica archivos de prueba y aprende la escritura)\n" : "") +
         (info.phase === "saved" ? "Probando codebook + lo que ya aprendió. Si no calzan, los descarto y sigo.\n" : "") +
         (info.phase === "chk" ? "KM hallado. Igualo copias del editado, quito restos del original y ligo SUM/CRC…\n" : "") +
-        (info.phase === "invent" ? "Inventando fórmulas nuevas (XOR, /4, /31, invertido, Gray, CRC)…\n" : "") +
+        (info.phase === "invent" ? "Inventando fórmulas nuevas (XOR, /4, invertido, SWAP, Gray, CRC)…\n" : "") +
         (sims || "Juntando hipótesis en los bytes que cambian…") +
         (info.formula ? "\nFórmula en juego: " + info.formula : "");
 }
@@ -1989,7 +1990,9 @@ async function startDeepAttack() {
                 setStatus("CARGANDO", "busy");
                 if (status) {
                     if (info.phase === "help") {
-                        status.textContent = "Leyendo tu ayuda y pensando más sobre esas pistas.";
+                        status.textContent = info.invert
+                            ? "Me dijiste que tal vez están invertidos. Pruebo LE, BE, SWAP16, nibble y NOT. Luego te respondo."
+                            : "Leyendo tu ayuda y pensando más sobre esas pistas. Luego te respondo.";
                     } else if (info.phase === "saved") {
                         status.textContent = "Probando algoritmos guardados. Si no calzan, los descarto y sigo.";
                     } else if (info.phase === "chk") {
@@ -2020,6 +2023,8 @@ async function startDeepAttack() {
     setStatus("LISTO", "ok");
     await new Promise(function (resolve) { setTimeout(resolve, 900); });
     if (overlay) overlay.classList.add("hidden");
+    if ($("aiReply")) $("aiReply").textContent = report.reply || report.message;
+    if ($("omegaThink")) $("omegaThink").textContent = report.reply || report.message;
     if (report.best) {
         if (!currentBIN.analysis) {
             currentBIN.analysis = {
@@ -2031,10 +2036,8 @@ async function startDeepAttack() {
         }
         currentBIN.analysis.best = report.best;
         paintAttackPoster("attackPosterMain", report.best);
-        if ($("helpRecipe")) $("helpRecipe").value = report.best.writeHow;
-        if ($("aiHow")) $("aiHow").textContent = report.best.writeHow;
+        if ($("aiHow")) $("aiHow").textContent = report.reply || report.best.writeHow;
         if ($("aiAlgorithm")) $("aiAlgorithm").textContent = report.best.formula;
-        if ($("omegaThink")) $("omegaThink").textContent = report.message;
         fillEditorFromBest(currentBIN.analysis);
         if (typeof WriteMachine !== "undefined") {
             currentBIN.analysis.omega = currentBIN.analysis.omega || {};
@@ -2059,7 +2062,7 @@ async function startDeepAttack() {
     addLogRows();
     const need3 = needsThirdBin(report);
     showBin3Ask(need3);
-    const extra = "<p>" + report.message + "</p><p>Líneas distintas: " +
+    const extra = "<p><strong>La IA te responde</strong></p><p>" + escapeText(report.reply || report.message) + "</p><p>Líneas distintas: " +
         report.lines + " · Pruebas: " + report.tested + "</p>" +
         (report.vins && report.vins[0]
             ? "<p>VIN: " + escapeText(report.vins.filter((v) => v.value && !/^P{8}/.test(v.value)).map((v) => v.value).join(" · ") || "no leí VIN") + "</p>"
@@ -2266,6 +2269,14 @@ function wireUI() {
         const saveRecipe = () => { if (typeof MarkBook !== "undefined") MarkBook.persist(); };
         $("helpRecipe").addEventListener("change", saveRecipe);
         $("helpRecipe").addEventListener("input", saveRecipe);
+    }
+    if ($("hintInvertBytes")) {
+        $("hintInvertBytes").addEventListener("change", function () {
+            if (typeof MarkBook !== "undefined") MarkBook.persist();
+            if ($("aiReply") && $("hintInvertBytes").checked) {
+                $("aiReply").textContent = "Entendido: tal vez los bytes están invertidos. En ATAQUE probaré LE, BE, SWAP16, nibble-swap y NOT, y te responderé si sí o no.";
+            }
+        });
     }
     bindClick("closeProjectBtn", closeProject);
     bindClick("machineBtn", () => focusPanel("machinePanel"));

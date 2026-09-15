@@ -277,6 +277,14 @@ const MathEngine = {
         if (f === "X*10+5" || f === "X * 10 + 5") return (n * 10 + 5) >>> 0;
         if (f === "X*1000" || f === "X * 1000") return (n * 1000) >>> 0;
         if (f === "SWAP16(X*10)") return this.swap16(n * 10);
+        m = f.match(/^(SWAP16|SWAP32|NIBBLE_SWAP|~)\((.+)\)$/);
+        if (m && m[2] !== "X" && m[2] !== "X*10") {
+            const inner = this.applyFormula(n, m[2]);
+            if (m[1] === "SWAP16") return this.swap16(inner);
+            if (m[1] === "SWAP32") return this.swap32(inner);
+            if (m[1] === "NIBBLE_SWAP") return this.nibbleSwap(inner);
+            return (~inner) >>> 0;
+        }
         m = f.match(/^~\(X\s*\*\s*(\d+)\)$/);
         if (m) return (~(n * Number(m[1]))) >>> 0;
         if (f === "~(X * 1000)" || f === "~(X*1000)") return (~(n * 1000)) >>> 0;
@@ -316,7 +324,16 @@ const MathEngine = {
         const n = Number(stored);
         if (f === "X" || f === "BCD") return n;
         if (f === "~X") return (~n) >>> 0;
-        let m = f.match(/^~\(X\s*\*\s*(\d+)\)$/);
+        let m = f.match(/^(SWAP16|SWAP32|NIBBLE_SWAP|~)\((.+)\)$/);
+        if (m) {
+            let inner = n;
+            if (m[1] === "SWAP16") inner = this.swap16(n);
+            else if (m[1] === "SWAP32") inner = this.swap32(n);
+            else if (m[1] === "NIBBLE_SWAP") inner = this.nibbleSwap(n);
+            else inner = (~n) >>> 0;
+            return this.invertFormula(inner, m[2]);
+        }
+        m = f.match(/^~\(X\s*\*\s*(\d+)\)$/);
         if (m) return ((~n) >>> 0) / Number(m[1]);
         if (f === "GRAY(X)") {
             let x = n >>> 0;

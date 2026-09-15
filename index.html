@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=mente7">
+    <link rel="stylesheet" href="style.css?v=mente8">
 </head>
 
 <body>
@@ -122,8 +122,13 @@
         </div>
         <div class="help-recipe-bar">
             <label>CÓMO LO HAGO</label>
-            <textarea id="helpRecipe" rows="3" placeholder="Tu ayuda: p. ej. X / 4, XORBYTE AA, 2 bytes LE, CRC16 CCITT, 2C4D. Pinta KM en rojo y SUM/CRC. El ataque lee esto, inventa y aprende."></textarea>
+            <textarea id="helpRecipe" rows="3" placeholder="Tu ayuda: p. ej. X / 4, bytes invertidos, XORBYTE AA, CRC16, 2C4D. Pinta KM en rojo. El ataque lee esto y te responde."></textarea>
+            <label class="hint-invert">
+                <input type="checkbox" id="hintInvertBytes">
+                Tal vez bytes invertidos
+            </label>
         </div>
+        <div id="aiReply" class="ai-reply">La IA te responde aquí después de ATAQUE: si los bytes iban al revés, la fórmula y las otras hipótesis.</div>
         <input type="file" id="fileInput2" accept="*/*,.bin,.eep,.hex,.s19,.srec,.mot" hidden>
 
         <div id="vinStrip" class="vin-strip">
@@ -600,7 +605,7 @@
 <div id="attackOverlay" class="attack-overlay hidden">
     <div class="attack-box">
         <h2>ATAQUE · CEREBRO 5 A 15 MIN</h2>
-        <p id="attackStatus">En carga. 5 minutos fijos. Si no cierra, 10. Si aún no, 15. No se traba. Tus colores y el complemento también cuentan.</p>
+        <p id="attackStatus">En carga. 5 minutos fijos. Si no cierra, 10. Si aún no, 15. No se traba. Tus colores, el complemento y si los bytes van invertidos también cuentan. Al final te responde.</p>
         <div class="attack-bar"><i id="attackFill"></i></div>
         <p id="attackClock">0:00 / 15:00</p>
         <pre id="attackSim" class="attack-sim">El simulador aparece aquí cuando el ataque ya tiene una hipótesis.</pre>
@@ -608,28 +613,28 @@
 </div>
 <div id="attackToast" class="attack-toast hidden"></div>
 
-<script src="mark-book.js?v=mente7"></script>
-<script src="operation-registry.js?v=mente7"></script>
-<script src="expression-tree.js?v=mente7"></script>
-<script src="math-engine.js?v=mente7"></script>
-<script src="expression-generator.js?v=mente7"></script>
-<script src="fitness-engine.js?v=mente7"></script>
-<script src="validation-engine.js?v=mente7"></script>
-<script src="checksum-engine.js?v=mente7"></script>
-<script src="knowledge-base.js?v=mente7"></script>
-<script src="bin-world.js?v=mente7"></script>
-<script src="mind-engine.js?v=mente7"></script>
-<script src="hunters.js?v=mente7"></script>
-<script src="dna-discovery.js?v=mente7"></script>
-<script src="editor-upa.js?v=mente7"></script>
-<script src="write-machine.js?v=mente7"></script>
-<script src="bin-object.js?v=mente7"></script>
-<script src="family-library.js?v=mente7"></script>
-<script src="omega-kernel.js?v=mente7"></script>
-<script src="bin-core.js?v=mente7"></script>
-<script src="discovery-manager.js?v=mente7"></script>
-<script src="deep-attack.js?v=mente7"></script>
-<script src="app.js?v=mente7"></script>
+<script src="mark-book.js?v=mente8"></script>
+<script src="operation-registry.js?v=mente8"></script>
+<script src="expression-tree.js?v=mente8"></script>
+<script src="math-engine.js?v=mente8"></script>
+<script src="expression-generator.js?v=mente8"></script>
+<script src="fitness-engine.js?v=mente8"></script>
+<script src="validation-engine.js?v=mente8"></script>
+<script src="checksum-engine.js?v=mente8"></script>
+<script src="knowledge-base.js?v=mente8"></script>
+<script src="bin-world.js?v=mente8"></script>
+<script src="mind-engine.js?v=mente8"></script>
+<script src="hunters.js?v=mente8"></script>
+<script src="dna-discovery.js?v=mente8"></script>
+<script src="editor-upa.js?v=mente8"></script>
+<script src="write-machine.js?v=mente8"></script>
+<script src="bin-object.js?v=mente8"></script>
+<script src="family-library.js?v=mente8"></script>
+<script src="omega-kernel.js?v=mente8"></script>
+<script src="bin-core.js?v=mente8"></script>
+<script src="discovery-manager.js?v=mente8"></script>
+<script src="deep-attack.js?v=mente8"></script>
+<script src="app.js?v=mente8"></script>
 
 </body>
 </html>
