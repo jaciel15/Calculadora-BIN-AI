@@ -132,6 +132,16 @@ const DeepAttack = {
         lines.push("2) Orden: " + order + ".");
         lines.push("3) Descifrado: " + this.formulaSpanish(best.formula) +
             " (fórmula " + (best.formula || "X") + ").");
+        const comboN = (this._comboIndex && this._comboIndex.count) || 0;
+        const saidN = (this._saidFound && this._saidFound.length) || 0;
+        if (comboN || saidN) {
+            lines.push("   Combinaciones: probé las que me dijiste (" + saidN +
+                ") y las ya encontradas/motor (" + comboN + ").");
+        }
+        if (best.fromSaid) lines.push("   Esa fórmula es la que me habías dicho.");
+        else if (best.fromCombo || best.fromFound || best.fromKnown) {
+            lines.push("   Esa fórmula ya estaba en el codebook o en lo que el ataque encontró antes.");
+        }
         if (ctx.km1 != null) {
             lines.push("4) Con eso el KM del BIN 1 cierra en " + ctx.km1 +
                 (ctx.km2 != null ? " y el del BIN 2 en " + ctx.km2 : "") + ".");
@@ -319,6 +329,128 @@ const DeepAttack = {
         return hits;
     },
 
+    saidFoundFormulas() {
+        const out = [];
+        const seen = new Set();
+        const ban = (this._help && this._help.ban && this._help.ban.formulas) || [];
+        const push = (f) => {
+            const s = String(f || "").replace(/\s+/g, " ").trim();
+            if (!s || s === "FINO" || seen.has(s)) return;
+            if (ban.indexOf(s) >= 0) return;
+            seen.add(s);
+            out.push(s);
+        };
+        const help = this._help;
+        if (help && help.formula) push(help.formula);
+        if (typeof AiCoach !== "undefined" && AiCoach.memory) {
+            push(AiCoach.memory.formula);
+            String(AiCoach.compiled || "").split(/\n/).forEach((line) => {
+                const t = line.trim();
+                if (/X|SWAP|BCD|GRAY|XOR|NIBBLE|~/i.test(t) && t.length < 48) push(t);
+            });
+        }
+        if (typeof AlgoNet !== "undefined" && AlgoNet.last) {
+            (AlgoNet.last.formulas || []).forEach(push);
+        }
+        (this._recipes || []).forEach((r) => push(r && r.formula));
+        ["X", "X * 10", "X * 100", "X * 1000", "X / 2", "X / 4", "X / 8", "X / 10", "X / 16", "X / 31", "X / 32", "X / 64",
+            "X * 4", "X * 16", "X * 31", "X * 32", "X * 64", "X * 10 - 1", "X * 10 + 5",
+            "~X", "~(X * 10)", "~(X * 1000)", "NIBBLE_SWAP(X)", "GRAY(X)", "SWAP16(X)", "SWAP16(X*10)", "BCD"].forEach(push);
+        if (help && help.invert) {
+            out.slice().forEach((f) => {
+                if (/^SWAP16|^NIBBLE_SWAP|^~/.test(f)) return;
+                push("SWAP16(" + f + ")");
+                push("NIBBLE_SWAP(" + f + ")");
+                push("~(" + f + ")");
+            });
+        }
+        this._saidFound = out;
+        return out;
+    },
+
+    buildComboIndex(km1, km2) {
+        const empty = { km1: km1, km2: km2, byVal: new Map(), count: 0 };
+        if (typeof MathEngine === "undefined" || km1 == null) return empty;
+        try {
+            const items = MathEngine.transforms(Number(km1)) || [];
+            const byVal = new Map();
+            items.forEach((item) => {
+                const key = item.value >>> 0;
+                let list = byVal.get(key);
+                if (!list) {
+                    list = [];
+                    byVal.set(key, list);
+                }
+                if (list.length < 10 && list.indexOf(item.name) < 0) list.push(item.name);
+            });
+            this._comboIndex = {
+                km1: km1,
+                km2: km2,
+                byVal: byVal,
+                count: items.length || (typeof MathEngine.lastComboCount === "number" ? MathEngine.lastComboCount : 0)
+            };
+            return this._comboIndex;
+        } catch (error) {
+            this._comboIndex = empty;
+            return empty;
+        }
+    },
+
+    matchSaidFound(raw1, raw2, raw3, km1, km2, km3) {
+        if (raw1 == null || raw2 == null || km1 == null || km2 == null) return null;
+        const said = this._help && this._help.formula;
+        const formulas = this._saidFound || this.saidFoundFormulas();
+        for (let i = 0; i < formulas.length; i++) {
+            const f = formulas[i];
+            let e1;
+            let e2;
+            try {
+                e1 = MathEngine.applyFormula(km1, f);
+                e2 = MathEngine.applyFormula(km2, f);
+            } catch (error) {
+                continue;
+            }
+            if (e1 !== raw1 || e2 !== raw2) continue;
+            const hit = {
+                formula: f,
+                fromCombo: true,
+                fromSaid: !!(said && said === f),
+                fromFound: true,
+                name: f
+            };
+            if (raw3 != null && km3 != null) {
+                try {
+                    if (MathEngine.applyFormula(km3, f) !== raw3) hit.cMiss = true;
+                } catch (error) {
+                    hit.cMiss = true;
+                }
+            }
+            return hit;
+        }
+        const idx = this._comboIndex;
+        if (idx && idx.byVal) {
+            const names = idx.byVal.get(raw1 >>> 0) || [];
+            for (let i = 0; i < names.length; i++) {
+                const f = names[i];
+                try {
+                    if (MathEngine.applyFormula(km2, f) !== raw2) continue;
+                } catch (error) {
+                    continue;
+                }
+                const hit = { formula: f, fromCombo: true, fromSaid: !!(said && said === f), name: f };
+                if (raw3 != null && km3 != null) {
+                    try {
+                        if (MathEngine.applyFormula(km3, f) !== raw3) hit.cMiss = true;
+                    } catch (error) {
+                        hit.cMiss = true;
+                    }
+                }
+                return hit;
+            }
+        }
+        return null;
+    },
+
     matchKnown(raw1, raw2, raw3, km1, km2, km3, job) {
         const recipes = this._recipes || [];
         for (let i = 0; i < recipes.length; i++) {
@@ -357,7 +489,7 @@ const DeepAttack = {
 
     matchXorBytes(a, b, c, addr, width, little, km1, km2, km3) {
         if (!a || !b || km1 == null || km2 == null) return null;
-        const formulas = [
+        const formulas = (this._saidFound && this._saidFound.length) ? this._saidFound.slice() : [
             "X", "X * 10", "X * 100", "X * 1000", "X / 2", "X / 4", "X / 8", "X / 10", "X / 16", "X / 31", "X / 32", "X / 64",
             "X * 4", "X * 16", "X * 31", "X * 32", "X * 64", "X * 10 - 1", "X * 10 + 5",
             "~X", "~(X * 10)", "~(X * 1000)", "NIBBLE_SWAP(X)", "GRAY(X)", "SWAP16(X)", "SWAP16(X*10)", "BCD"
@@ -595,6 +727,8 @@ const DeepAttack = {
         const copies = hit.copies || [];
         if (copies.length < 1 || copies.length > 64) return false;
         if (hit.fromUser && copies.length >= 1) return true;
+        if (hit.fromSaid && copies.length >= 1) return true;
+        if (hit.fromCombo && copies.length >= 1) return !!(hit.checksum || copies.length >= 2 || hit.fromFound);
         if (hit.fromHelp && copies.length >= 1) return true;
         if (hit.fromSaved && copies.length <= 64) return !!(hit.checksum || copies.length >= 2 || hit.fromXor);
         if (hit.fromKnown && hit.familyId && this._ctx && this.recipeFitsFile({ id: hit.familyId, familyId: hit.familyId }, this._ctx.bytes)) {
@@ -1029,25 +1163,7 @@ const DeepAttack = {
             const widths = help.width ? [help.width, 2, 3, 4] : [2, 3, 4];
             widths.forEach((w) => starts.push({ start: addr, width: w }));
         });
-        const formulas = [];
-        if (help.formula) formulas.push(help.formula);
-        if (typeof AlgoNet !== "undefined" && AlgoNet.last) {
-            (AlgoNet.last.formulas || []).forEach((f) => {
-                if (f && formulas.indexOf(f) < 0) formulas.unshift(f);
-            });
-        }
-        ["X", "X / 2", "X / 4", "X / 10", "X / 31", "X / 32", "X * 10", "X * 100", "X * 4", "X * 31", "X * 32",
-            "~X", "~(X * 1000)", "GRAY(X)", "SWAP16(X)", "SWAP16(X*10)", "BCD"].forEach((f) => {
-            if (formulas.indexOf(f) < 0) formulas.push(f);
-        });
-        if (help.invert) {
-            formulas.slice().forEach((f) => {
-                if (/^SWAP16|^NIBBLE_SWAP|^~/.test(f)) return;
-                ["SWAP16(" + f + ")", "NIBBLE_SWAP(" + f + ")", "~(" + f + ")"].forEach((w) => {
-                    if (formulas.indexOf(w) < 0) formulas.push(w);
-                });
-            });
-        }
+        const formulas = this.saidFoundFormulas();
         const endians = help.invert || help.endian === "BE"
             ? [{ id: "BE", little: false }, { id: "LE", little: true }]
             : [{ id: "LE", little: true }, { id: "BE", little: false }];
@@ -1361,6 +1477,8 @@ const DeepAttack = {
                         vins: self._vins || [],
                         skipped: (self._skipped || []).slice(-8),
                         help: (self._help && self._help.notes) || [],
+                        combos: (self._comboIndex && self._comboIndex.count) || 0,
+                        said: (self._saidFound && self._saidFound.length) || 0,
                         reply: self._help && self._help.invert
                             ? "Me dijiste que tal vez los bytes están invertidos. Estoy probando LE, BE, SWAP16, nibble-swap y NOT. Luego te respondo si sí o no."
                             : "Cuando termine te respondo con la fórmula, el orden de bytes y las otras hipótesis.",
@@ -1379,7 +1497,8 @@ const DeepAttack = {
                     const raw2 = self.read(b, job.addr, job.width, job.en.little);
                     const raw3 = c ? self.read(c, job.addr, job.width, job.en.little) : null;
                     tested++;
-                    const match = self.matchKnown(raw1, raw2, raw3, km1, km2, km3, job) ||
+                    const match = self.matchSaidFound(raw1, raw2, raw3, km1, km2, km3) ||
+                        self.matchKnown(raw1, raw2, raw3, km1, km2, km3, job) ||
                         self.matchLayouts(raw1, raw2, raw3, km1, km2, km3, job) ||
                         self.matchXorBytes(a, b, c, job.addr, job.width, job.en.little, km1, km2, km3);
                     if (!match || !km1 || (raw1 === null && !match.fromXor)) return;
@@ -1408,10 +1527,13 @@ const DeepAttack = {
                         checksum: same[0] || null,
                         copies: copies,
                         stair: copies.length,
-                        score: (match.fromXor ? 96 : (match.fromKnown ? 94 : 88)) + (same[0] ? 8 : 0) + Math.min(copies.length, 10) + (c && km3 && !match.cMiss ? 4 : 0) + (match.fromInvert && self._help && self._help.invert ? 6 : 0),
+                        score: (match.fromSaid ? 108 : (match.fromCombo ? 100 : (match.fromXor ? 96 : (match.fromKnown ? 94 : 88)))) + (same[0] ? 8 : 0) + Math.min(copies.length, 10) + (c && km3 && !match.cMiss ? 4 : 0) + (match.fromInvert && self._help && self._help.invert ? 6 : 0),
                         fromKnown: !!match.fromKnown,
                         fromXor: !!match.fromXor,
                         fromInvert: !!match.fromInvert,
+                        fromCombo: !!match.fromCombo,
+                        fromSaid: !!match.fromSaid,
+                        fromFound: !!match.fromFound,
                         fromPair: true,
                         name: match.name || match.formula,
                         familyId: match.familyId || ""
@@ -1524,6 +1646,12 @@ const DeepAttack = {
                 }
                 self._vins = self.huntVins(a, b, c);
                 self._help = self.readHelp();
+                self._saidFound = self.saidFoundFormulas();
+                self._comboIndex = self.buildComboIndex(km1, km2);
+                if (self._help && self._help.notes) {
+                    self._help.notes.push("Combinaciones dichas " + ((self._saidFound && self._saidFound.length) || 0) +
+                        " · motor " + ((self._comboIndex && self._comboIndex.count) || 0));
+                }
                 emit({ phase: "help", line: lines[0] || 0 });
                 const widths = [2, 3, 4];
                 const endians = self._help && self._help.invert

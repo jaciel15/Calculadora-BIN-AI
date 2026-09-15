@@ -2006,11 +2006,14 @@ function fillAttackSim(info) {
         (vinLine ? "VIN: " + vinLine + "\n" : "") +
         (info.help && info.help.length ? "AYUDA: " + info.help.join(" · ") + "\n" : "") +
         (info.skipped && info.skipped.length ? "Algoritmos que no calzaron (sigo): " + info.skipped.join(", ") + "\n" : "") +
-        (info.phase === "help" ? "Pensando tu ayuda (colores, bytes invertidos, CÓMO LO HAGO)…\n" : "") +
+        (info.phase === "help" ? "Pensando tu ayuda y las combinaciones dichas y encontradas…\n" : "") +
         (info.phase === "sim" ? "SIMULADOR (el cerebro fabrica archivos de prueba y aprende la escritura)\n" : "") +
         (info.phase === "saved" ? "Probando codebook + lo que ya aprendió. Si no calzan, los descarto y sigo.\n" : "") +
         (info.phase === "chk" ? "KM hallado. Igualo copias del editado, quito restos del original y ligo SUM/CRC…\n" : "") +
         (info.phase === "invent" ? "Inventando fórmulas nuevas (XOR, /4, invertido, SWAP, Gray, CRC)…\n" : "") +
+        ((info.combos || info.said)
+            ? "Combinaciones en juego: dichas " + (info.said || 0) + " · motor " + (info.combos || 0) + "\n"
+            : "") +
         (sims || "Juntando hipótesis en los bytes que cambian…") +
         (info.formula ? "\nFórmula en juego: " + info.formula : "");
 }
@@ -2082,11 +2085,14 @@ async function startDeepAttack() {
                 if (clock) clock.textContent = clockText(info.elapsed, info.hardMs || info.maxMs);
                 fillAttackSim(info);
                 setStatus("CARGANDO", "busy");
+                if ($("aiCombos") && (info.combos || info.said)) {
+                    $("aiCombos").textContent = String((info.said || 0) + (info.combos || 0));
+                }
                 if (status) {
                     if (info.phase === "help") {
                         status.textContent = info.invert
-                            ? "Me dijiste que tal vez están invertidos. Pruebo LE, BE, SWAP16, nibble y NOT. Luego te respondo."
-                            : "Leyendo tu ayuda y pensando más sobre esas pistas. Luego te respondo.";
+                            ? "Me dijiste que tal vez están invertidos. Pruebo LE, BE, SWAP16, nibble y NOT, y las combinaciones dichas y encontradas."
+                            : "Leyendo tu ayuda y las combinaciones dichas y encontradas. Luego te respondo.";
                     } else if (info.phase === "saved") {
                         status.textContent = "Probando algoritmos guardados. Si no calzan, los descarto y sigo.";
                     } else if (info.phase === "chk") {
