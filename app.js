@@ -1915,10 +1915,11 @@ function fillAttackSim(info) {
     box.textContent = (vinLine ? "VIN: " + vinLine + "\n" : "") +
         (info.help && info.help.length ? "AYUDA: " + info.help.join(" · ") + "\n" : "") +
         (info.skipped && info.skipped.length ? "Algoritmos que no calzaron (sigo): " + info.skipped.join(", ") + "\n" : "") +
-        (info.phase === "help" ? "Pensando tu ayuda (colores, complemento, CÓMO LO HAGO)…\n" : "") +
-        (info.phase === "sim" ? "SIMULADOR (el cerebro fabrica archivos de prueba)\n" : "") +
-        (info.phase === "saved" ? "Probando algoritmos guardados uno por uno. Si no calzan, los descarto y sigo.\n" : "") +
-        (info.phase === "chk" ? "KM hallado. Ligando SUM/CRC de esa misma zona…\n" : "") +
+        (info.phase === "help" ? "Pensando tu ayuda (colores, complemento, CÓMO LO HAGO) con IA…\n" : "") +
+        (info.phase === "sim" ? "SIMULADOR (el cerebro fabrica archivos de prueba y aprende la escritura)\n" : "") +
+        (info.phase === "saved" ? "Probando codebook + lo que ya aprendió. Si no calzan, los descarto y sigo.\n" : "") +
+        (info.phase === "chk" ? "KM hallado. Igualo copias del editado, quito restos del original y ligo SUM/CRC…\n" : "") +
+        (info.phase === "invent" ? "Inventando fórmulas nuevas (XOR, /4, /31, invertido, Gray, CRC)…\n" : "") +
         (sims || "Juntando hipótesis en los bytes que cambian…") +
         (info.formula ? "\nFórmula en juego: " + info.formula : "");
 }
@@ -1992,7 +1993,7 @@ async function startDeepAttack() {
                     } else if (info.phase === "saved") {
                         status.textContent = "Probando algoritmos guardados. Si no calzan, los descarto y sigo.";
                     } else if (info.phase === "chk") {
-                        status.textContent = "Ya hay KM. Buscando su checksum o CRC en las páginas de al lado.";
+                        status.textContent = "Ya hay KM. Igualo copias del archivo editado, quito restos y busco CRC.";
                     } else if (info.phase === "sim") {
                         status.textContent = "Simulando 2 min: fabrica archivos con la hipótesis y los muestra abajo.";
                     } else if (info.phase === "invent") {

@@ -11,7 +11,7 @@ const ExpressionGenerator = {
     },
 
     inferredConstants(samples) {
-        const out = new Set([0, 1, 2, 5, 8, 10, 16, 32, 64, 100, 256, 1000]);
+        const out = new Set([0, 1, 2, 4, 5, 8, 10, 16, 31, 32, 64, 100, 256, 1000]);
         (samples || []).forEach((row) => {
             const x = Number(row.input);
             const y = Number(row.output);
@@ -52,7 +52,7 @@ const ExpressionGenerator = {
 
         push(ExpressionTree.input());
         const ks = this.inferredConstants(opt.samples).slice(0, opt.maximumConstants);
-        const unary = ["NOT", "SWAP16", "NIBBLE_SWAP", "COMPLEMENT", "UINT8", "UINT16", "UINT24"];
+        const unary = ["NOT", "SWAP16", "NIBBLE_SWAP", "COMPLEMENT", "GRAY", "UINT8", "UINT16", "UINT24"];
         const binary = ["ADD", "SUB", "MUL", "XOR", "AND", "OR"];
 
         unary.forEach((op) => push(ExpressionTree.op(op, [ExpressionTree.input()])));

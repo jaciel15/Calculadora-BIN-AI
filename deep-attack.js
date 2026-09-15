@@ -70,6 +70,12 @@ const DeepAttack = {
             Math.abs(raw2 - (km2 / d1)) <= slack) {
             return { formula: "X / " + d1, n: d1, off: 0 };
         }
+        const inv1 = (~raw1) >>> 0;
+        const inv2 = (~raw2) >>> 0;
+        const nInv = Math.round(inv1 / km1);
+        if (nInv >= 1 && nInv <= 1000000 && Math.abs(inv1 - km1 * nInv) <= slack && Math.abs(inv2 - km2 * nInv) <= slack) {
+            return { formula: nInv === 1 ? "~X" : "~(X * " + nInv + ")", n: nInv, off: 0 };
+        }
         return null;
     },
 
@@ -101,7 +107,9 @@ const DeepAttack = {
                 formula: item.formula,
                 width: width,
                 endian: endian,
-                chk: item.chk || (item.checksums && item.checksums[0] && item.checksums[0].name) || ""
+                chk: item.chk || (item.checksums && item.checksums[0] && item.checksums[0].name) || "",
+                scatter: item.scatter && item.scatter.length ? item.scatter : undefined,
+                checksums: item.checksums || undefined
             });
         };
         if (typeof CodeBook !== "undefined") {
@@ -228,7 +236,11 @@ const DeepAttack = {
 
     matchXorBytes(a, b, c, addr, width, little, km1, km2, km3) {
         if (!a || !b || km1 == null || km2 == null) return null;
-        const formulas = ["X", "X * 10", "X * 100", "X / 4", "X / 10", "X / 16", "X / 64", "X * 4", "X * 64", "~X", "NIBBLE_SWAP(X)", "BCD"];
+        const formulas = [
+            "X", "X * 10", "X * 100", "X * 1000", "X / 2", "X / 4", "X / 8", "X / 10", "X / 16", "X / 31", "X / 32", "X / 64",
+            "X * 4", "X * 16", "X * 31", "X * 32", "X * 64", "X * 10 - 1", "X * 10 + 5",
+            "~X", "~(X * 10)", "~(X * 1000)", "NIBBLE_SWAP(X)", "GRAY(X)", "SWAP16(X)", "SWAP16(X*10)", "BCD"
+        ];
         if (this._help && this._help.formula && formulas.indexOf(this._help.formula) < 0) {
             formulas.unshift(this._help.formula.replace(/\s+XORBYTES?\s+.*/i, "").trim() || "X");
         }
@@ -403,8 +415,8 @@ const DeepAttack = {
             bits.push("Aún no ligó SUM/CRC de ese KM.");
         }
         if (hit.scatter && hit.scatter.length) {
-            bits.push("BIN 1 original vs BIN 2 editado: el KM se igualó en " + hit.scatter.length +
-                " bytes y no toqué lo que se queda igual (ni lo que hay que dejar).");
+            bits.push("BIN 1 es original y BIN 2/3 editados: igualé el KM en " + hit.scatter.length +
+                " bytes (copias, eco del byte bajo y espejo). Lo que no cambió se queda; los restos del KM viejo se quitan.");
         }
         return bits.join(" ");
     },
@@ -672,30 +684,57 @@ const DeepAttack = {
         if (typeof EditorEngine === "undefined" || !EditorEngine.encodeValue) return hit;
         let e1;
         let e2;
-        let e3 = null;
         try {
             e1 = EditorEngine.encodeValue(km1, { formula: hit.formula, width: hit.width, endian: hit.endian });
             e2 = EditorEngine.encodeValue(km2, { formula: hit.formula, width: hit.width, endian: hit.endian });
-            if (c && km3 != null) e3 = EditorEngine.encodeValue(km3, { formula: hit.formula, width: hit.width, endian: hit.endian });
         } catch (error) {
             return hit;
         }
-        if (!e1 || !e2) return hit;
+        if (!e1 || !e2 || !e1.length) return hit;
+        const used = new Set();
         const map = [];
-        this._diffs.forEach((i) => {
-            for (let k = 0; k < e1.length; k++) {
-                if (a[i] !== e1[k] || b[i] !== e2[k]) continue;
-                if (e3 && c[i] !== e3[k]) continue;
-                map.push({ addr: i, part: k });
-                break;
+        const diffs = [];
+        this._diffs.forEach((i) => diffs.push(i));
+        diffs.sort((x, y) => x - y);
+        const width = e2.length;
+        diffs.forEach((i) => {
+            if (used.has(i) || i + width > b.length) return;
+            let ok = true;
+            for (let k = 0; k < width; k++) {
+                if (!this._diffs.has(i + k) && k > 0) {
+                    if (b[i + k] !== e2[k]) ok = false;
+                } else if (b[i + k] !== e2[k]) ok = false;
+            }
+            if (!ok) return;
+            if (b[i] !== e2[0]) return;
+            for (let k = 0; k < width; k++) {
+                if (this._diffs.has(i + k) || a[i + k] !== b[i + k]) {
+                    map.push({ addr: i + k, part: k });
+                    used.add(i + k);
+                }
             }
         });
-        if (map.length >= 4 && map.length >= this._diffs.size * 0.45) {
+        diffs.forEach((i) => {
+            if (used.has(i)) return;
+            for (let k = 0; k < width; k++) {
+                if (b[i] !== e2[k]) continue;
+                const near = used.has(i - 1) || used.has(i + 1) || used.has(i - 2) || used.has(i + 2);
+                const old = a[i] === e1[k];
+                if (near || old) {
+                    map.push({ addr: i, part: k });
+                    used.add(i);
+                    break;
+                }
+            }
+        });
+        if (map.length >= 4 && map.length >= this._diffs.size * 0.4) {
             hit.scatter = map;
             hit.equalize = true;
-            hit.score = (hit.score || 80) + 14;
-            if (hit.checksum && map.some((s) => s.addr === hit.checksum.storedAt ||
-                (hit.checksum.storedAt != null && s.addr === hit.checksum.storedAt + 1))) {
+            hit.score = (hit.score || 80) + 14 + Math.min(12, map.length);
+            if (hit.checksum && map.some((s) =>
+                s.addr === hit.checksum.storedAt ||
+                (hit.checksum.storedAt != null && s.addr === hit.checksum.storedAt + 1)
+            )) {
                 hit.checksum = null;
             }
         }
@@ -803,8 +842,11 @@ const DeepAttack = {
         const raw = String(text);
         const low = raw.toLowerCase();
         if (!formula) {
-            if (/x\s*\/\s*4|entre\s*4/.test(low)) formula = "X / 4";
+            if (/x\s*\/\s*31/.test(low)) formula = "X / 31";
+            else if (/x\s*\/\s*32/.test(low)) formula = "X / 32";
+            else if (/x\s*\/\s*4|entre\s*4/.test(low)) formula = "X / 4";
             else if (/x\s*\*\s*10|x\s*10/.test(low)) formula = "X * 10";
+            else if (/invertid|~\s*\(.*1000/.test(low)) formula = "~(X * 1000)";
             else if (/xorbytes\s+/i.test(raw)) formula = "X XORBYTES " + (raw.match(/xorbytes\s+([0-9A-Fa-f\-]{5,})/i) || [])[1];
         }
         (raw.match(/0x[0-9A-Fa-f]{3,6}\b|\b[0-9A-Fa-f]{4}\b/g) || []).forEach((h) => {
@@ -843,19 +885,46 @@ const DeepAttack = {
         });
         const formulas = [];
         if (help.formula) formulas.push(help.formula);
-        ["X", "X / 4", "X * 10", "X * 100", "X / 10", "X * 4"].forEach((f) => {
+        ["X", "X / 2", "X / 4", "X / 10", "X / 31", "X / 32", "X * 10", "X * 100", "X * 4", "X * 31", "X * 32",
+            "~X", "~(X * 1000)", "GRAY(X)", "SWAP16(X)", "SWAP16(X*10)", "BCD"].forEach((f) => {
             if (formulas.indexOf(f) < 0) formulas.push(f);
         });
         const endians = help.endian === "BE"
             ? [{ id: "BE", little: false }, { id: "LE", little: true }]
             : [{ id: "LE", little: true }, { id: "BE", little: false }];
         const seen = new Set();
-        starts.slice(0, 96).forEach((field) => {
+        const pushHit = (field, en, formula, extra) => {
+            const key = field.start + "|" + field.width + "|" + en.id + "|" + formula;
+            if (seen.has(key) || field.start + field.width > a.length) return;
+            seen.add(key);
+            const copies = this._diffs && this._diffs.size
+                ? this.copiesOnDiffOffset(this._diffs, field.start, a.length, field.width)
+                : [field.start];
+            const row = {
+                line: field.start & ~0x0F,
+                addr: field.start,
+                width: field.width,
+                endian: en.id,
+                formula: formula,
+                raw: this.read(a, field.start, field.width, en.little),
+                km: km1,
+                hex: MathEngine.hexBytes(a.slice(field.start, field.start + field.width)),
+                checksum: this.userChecksum(field.start, field.width),
+                copies: copies,
+                stair: copies.length,
+                score: 99 + (help.formula === formula ? 6 : 0) + (extra && extra.fromXor ? 4 : 0),
+                fromHelp: true,
+                fromUser: true,
+                fromXor: !!(extra && extra.fromXor),
+                fromPair: true,
+                name: "AYUDA_" + formula
+            };
+            this.attachChecksum(row, a, b, c);
+            hits.push(row);
+        };
+        starts.slice(0, 128).forEach((field) => {
             endians.forEach((en) => {
                 formulas.forEach((formula) => {
-                    const key = field.start + "|" + field.width + "|" + en.id + "|" + formula;
-                    if (seen.has(key) || field.start + field.width > a.length) return;
-                    seen.add(key);
                     let pat1;
                     let pat2;
                     try {
@@ -866,29 +935,10 @@ const DeepAttack = {
                     }
                     if (!this.patternFits(a, field.start, pat1)) return;
                     if (pat2 && !this.patternFits(b, field.start, pat2)) return;
-                    const copies = this._diffs && this._diffs.size
-                        ? this.copiesOnDiffOffset(this._diffs, field.start, a.length, field.width)
-                        : [field.start];
-                    const row = {
-                        line: field.start & ~0x0F,
-                        addr: field.start,
-                        width: field.width,
-                        endian: en.id,
-                        formula: formula,
-                        raw: this.read(a, field.start, field.width, en.little),
-                        km: km1,
-                        hex: MathEngine.hexBytes(a.slice(field.start, field.start + field.width)),
-                        checksum: this.userChecksum(field.start, field.width),
-                        copies: copies,
-                        stair: copies.length,
-                        score: 99 + (help.formula === formula ? 4 : 0),
-                        fromHelp: true,
-                        fromPair: true,
-                        name: "AYUDA_" + formula
-                    };
-                    this.attachChecksum(row, a, b, c);
-                    hits.push(row);
+                    pushHit(field, en, formula, null);
                 });
+                const xor = this.matchXorBytes(a, b, c, field.start, field.width, en.little, km1, km2, km3);
+                if (xor && xor.formula) pushHit(field, en, xor.formula, { fromXor: !!xor.fromXor });
             });
         });
         return hits;
@@ -1006,6 +1056,8 @@ const DeepAttack = {
                 hex: MathEngine.hexBytes(a.slice(addr, addr + code.width)),
                 checksum: same,
                 copies: copies,
+                scatter: code.scatter && code.scatter.length ? code.scatter : undefined,
+                equalize: !!(code.scatter && code.scatter.length),
                 stair: copies.length,
                 score: 92 + (same ? 8 : 0) + Math.min(copies.length, 8) + (cOk ? 4 : 0) + (same && same.fromUser ? 6 : 0),
                 familyId: code.familyId || "",
@@ -1268,9 +1320,10 @@ const DeepAttack = {
                             km2: km2,
                             km3: km3,
                             addrs: probe,
-                            maximumCandidates: self._help && self._help.addrs && self._help.addrs.length ? 480 : 320,
-                            maximumDepth: self._help && self._help.formula ? 4 : 3,
-                            timeout: 900
+                            maximumCandidates: self._help && self._help.addrs && self._help.addrs.length ? 640 : 520,
+                            maximumDepth: 4,
+                            timeout: 1400,
+                            beamWidth: 48
                         }, function (ev) {
                             if (settled) return;
                             if (ev.type === "DISCOVERY_COMPLETE") takeDisc(ev.payload && ev.payload.results);
@@ -1434,7 +1487,7 @@ const DeepAttack = {
                             simStarted = Date.now();
                             const best = hits.filter((h) => self.isSolid(h))[0] || hits[0];
                             self._simLog = best ? self.simulateHit(best, a, km1) : [];
-                            if (best && typeof KnowledgeBase !== "undefined") {
+                            if (best && self.isSolid(best) && typeof KnowledgeBase !== "undefined") {
                                 try {
                                     KnowledgeBase.rememberValidatedDiscovery({
                                         offset: best.addr,
@@ -1442,7 +1495,8 @@ const DeepAttack = {
                                         length: best.width,
                                         endian: best.endian,
                                         confidence: best.score,
-                                        status: self.isSolid(best) ? "VALIDATED" : "HYPOTHESIS"
+                                        status: "VALIDATED",
+                                        scatter: best.scatter
                                     });
                                 } catch (error) { /* ignore */ }
                             }
@@ -1511,6 +1565,28 @@ const DeepAttack = {
                     : "TERMINÓ. Atacé " + (lines || []).length + " líneas que cambian (" + tested +
                     " pruebas). El cerebro siguió 5–15 min. Los algoritmos que no calzaron se descartaron y siguió."
         };
+        if (best && typeof KnowledgeBase !== "undefined") {
+            try {
+                const built = report.best;
+                KnowledgeBase.rememberAlgorithm(built, "ataque", (this._ctx && this._ctx.bytes && this._ctx.bytes.length) || 0, built.checksumName ? [{
+                    name: built.checksumName,
+                    storedAt: built.checksumAt,
+                    start: built.checksumStart,
+                    end: built.checksumEnd,
+                    size: built.checksumSize,
+                    endian: built.checksumEndian
+                }] : []);
+                KnowledgeBase.rememberValidatedDiscovery({
+                    expression: best.formula,
+                    length: best.width,
+                    endian: best.endian,
+                    offset: best.addr,
+                    confidence: best.score,
+                    status: "VALIDATED",
+                    scatter: best.scatter
+                });
+            } catch (error) { /* ignore */ }
+        }
         report.discoveries = [];
         this.lastReport = report;
         this.notify("VELOCÍMETROS CDMX", report.message);

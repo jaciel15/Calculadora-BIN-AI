@@ -133,6 +133,105 @@ const CodeBook = {
                 chk: "",
                 recipe: "Rojo es KM×10 en 3 bytes big-endian.",
                 writeHow: "KM×10 hi mid lo."
+            },
+            {
+                id: "GEN_X_DIV4_LE16",
+                name: "Genérico KM/4 LE16",
+                origin: "DEMOSTRADO en Tracker/Onix RH850",
+                formula: "X / 4",
+                width: 2,
+                endian: "LE",
+                chk: "CRC16",
+                recipe: "El KM se guarda dividido entre 4 en 2 bytes little-endian. A veces el CRC16 va en la página siguiente (KM + 00). En Onix se reparte el lo/hi en varios huecos y un espejo; lo que no cambia no se toca.",
+                writeHow: "Escribe floor(KM/4) LE16 solo en los bytes que el par movió."
+            },
+            {
+                id: "GEN_X_DIV4_LE24",
+                name: "Genérico KM/4 LE24",
+                origin: "Patrón público EEPROM",
+                formula: "X / 4",
+                width: 3,
+                endian: "LE",
+                chk: "",
+                recipe: "KM/4 en 3 bytes little-endian.",
+                writeHow: "floor(KM/4) en 3 bytes LE."
+            },
+            {
+                id: "GEN_X_DIV2_LE16",
+                name: "Genérico KM/2 LE16",
+                origin: "Patrón público (pasos de 2 km)",
+                formula: "X / 2",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "Algunos clusters guardan el odómetro en pasos de 2 km.",
+                writeHow: "floor(KM/2) LE16."
+            },
+            {
+                id: "GEN_X_DIV31_LE16",
+                name: "Genérico KM/31 LE16",
+                origin: "Patrón público Honda 93C76 diesel",
+                formula: "X / 31",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "km mostrado = valor × 31. El dump guarda KM/31.",
+                writeHow: "floor(KM/31) LE16."
+            },
+            {
+                id: "GEN_X_DIV32_LE16",
+                name: "Genérico KM/32 LE16",
+                origin: "Patrón público Honda 93C76 nafta",
+                formula: "X / 32",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "km mostrado = valor × 32. El dump guarda KM/32.",
+                writeHow: "floor(KM/32) LE16."
+            },
+            {
+                id: "GEN_SWAP16_X10",
+                name: "Genérico SWAP16(KM×10)",
+                origin: "Patrón público EEPROM swapeada",
+                formula: "SWAP16(X*10)",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "KM×10 con los dos bytes del word intercambiados.",
+                writeHow: "SWAP16 de KM×10."
+            },
+            {
+                id: "GEN_GRAY_LE16",
+                name: "Genérico Gray LE16",
+                origin: "Patrón público contadores",
+                formula: "GRAY(X)",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "KM en código Gray de 16 bits.",
+                writeHow: "Gray(KM) LE16."
+            },
+            {
+                id: "GEN_NOT_X1000_LE32",
+                name: "Genérico invertido KM×1000 LE32",
+                origin: "Patrón público Toyota/Ford (odómetro invertido)",
+                formula: "~(X * 1000)",
+                width: 4,
+                endian: "LE",
+                chk: "",
+                recipe: "El KM×1000 se guarda invertido bit a bit en 4 bytes little-endian.",
+                writeHow: "NOT de KM×1000 en 4 bytes LE."
+            },
+            {
+                id: "GEN_NOT_X10_LE32",
+                name: "Genérico invertido KM×10 LE32",
+                origin: "Patrón público EEPROM invertida",
+                formula: "~(X * 10)",
+                width: 4,
+                endian: "LE",
+                chk: "",
+                recipe: "KM×10 invertido en 4 bytes LE.",
+                writeHow: "NOT de KM×10 LE32."
             }
         ];
     },
@@ -398,6 +497,8 @@ const KnowledgeBase = {
         if (fileName && item.files.indexOf(fileName) === -1) item.files.push(fileName);
         const packed = this.packChecksums(checksums || hit.checksums);
         if (packed.length) item.checksums = packed;
+        if (hit.scatter && hit.scatter.length) item.scatter = hit.scatter.slice(0, 96);
+        if (hit.equalize) item.equalize = true;
         item.steps = this.recipe(hit);
         item.howManual = item.steps.map((s) => s.n + ". " + s.title + ": " + s.text).join(" ");
         if (!item.version) item.version = 1;
@@ -512,7 +613,9 @@ const KnowledgeBase = {
     },
 
     rememberValidatedDiscovery(hit) {
-        if (!hit || hit.status !== "VALIDATED") return null;
+        if (!hit) return null;
+        const status = hit.status === "VALIDATED" ? "VALIDATED" : (hit.status === "HYPOTHESIS" ? "HYPOTHESIS" : "");
+        if (status !== "VALIDATED" && status !== "HYPOTHESIS") return null;
         const db = this.load();
         if (!db.discoveries) db.discoveries = [];
         const key = hit.expression + "|" + hit.length + "|" + hit.endian;
@@ -525,7 +628,7 @@ const KnowledgeBase = {
                 length: hit.length,
                 endian: hit.endian,
                 confidence: hit.confidence,
-                status: hit.status,
+                status: status,
                 evidence: hit.evidence,
                 hits: 0
             };
@@ -534,6 +637,8 @@ const KnowledgeBase = {
         item.hits += 1;
         item.lastSeen = new Date().toISOString();
         item.confidence = hit.confidence;
+        if (status === "VALIDATED") item.status = "VALIDATED";
+        if (hit.scatter && hit.scatter.length) item.scatter = hit.scatter.slice(0, 96);
         this.save(db);
         return item;
     },

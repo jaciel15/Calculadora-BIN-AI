@@ -277,6 +277,10 @@ const MathEngine = {
         if (f === "X*10+5" || f === "X * 10 + 5") return (n * 10 + 5) >>> 0;
         if (f === "X*1000" || f === "X * 1000") return (n * 1000) >>> 0;
         if (f === "SWAP16(X*10)") return this.swap16(n * 10);
+        m = f.match(/^~\(X\s*\*\s*(\d+)\)$/);
+        if (m) return (~(n * Number(m[1]))) >>> 0;
+        if (f === "~(X * 1000)" || f === "~(X*1000)") return (~(n * 1000)) >>> 0;
+        if (f === "~(X * 10)" || f === "~(X*10)") return (~(n * 10)) >>> 0;
         m = f.match(/^X\s*\*\s*(\d+)$/);
         if (m) return (n * Number(m[1])) >>> 0;
         m = f.match(/^X\s*\/\s*(\d+)$/);
@@ -312,7 +316,20 @@ const MathEngine = {
         const n = Number(stored);
         if (f === "X" || f === "BCD") return n;
         if (f === "~X") return (~n) >>> 0;
-        let m = f.match(/^X\s*\*\s*(\d+)\s*-\s*(\d+)$/);
+        let m = f.match(/^~\(X\s*\*\s*(\d+)\)$/);
+        if (m) return ((~n) >>> 0) / Number(m[1]);
+        if (f === "GRAY(X)") {
+            let x = n >>> 0;
+            let mask = x >>> 1;
+            while (mask) {
+                x ^= mask;
+                mask >>>= 1;
+            }
+            return x >>> 0;
+        }
+        if (f === "SWAP16(X)") return this.swap16(n);
+        if (f === "SWAP16(X*10)") return this.swap16(n) / 10;
+        m = f.match(/^X\s*\*\s*(\d+)\s*-\s*(\d+)$/);
         if (m) return (n + Number(m[2])) / Number(m[1]);
         m = f.match(/^X\s*\*\s*(\d+)\s*\+\s*(\d+)$/);
         if (m) return (n - Number(m[2])) / Number(m[1]);

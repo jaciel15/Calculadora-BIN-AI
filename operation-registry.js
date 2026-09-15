@@ -93,6 +93,7 @@ const OperationRegistry = {
         return out >>> 0;
     }, "Nibble swap");
     add("COMPLEMENT", "COMP8", 1, 1, (a) => (256 - (u(a[0]) & 0xFF)) & 0xFF, "Complemento 8");
+    add("GRAY", "GRAY", 1, 2, (a) => (u(a[0]) ^ (u(a[0]) >>> 1)) >>> 0, "Código Gray");
     add("ABS", "ABS", 1, 1, (a) => Math.abs(Number(a[0])) >>> 0, "Absoluto");
     add("UINT8", "UINT8", 1, 1, (a) => bits(a[0], 8), "Corta a 8 bits");
     add("UINT16", "UINT16", 1, 1, (a) => bits(a[0], 16), "Corta a 16 bits");
