@@ -440,7 +440,7 @@ const EditorEngine = {
     analyzeError(text) {
         const t = String(text || "").toLowerCase();
         const tips = [];
-        if (!t.trim()) return "Pega el error del UPA (pantalla roja, log o mensaje).";
+        if (!t.trim()) return "No hay un error pegado todavía. Copia el texto rojo o el log del programador UPA, pégalo en el recuadro «ERROR DEL PROGRAMADOR UPA» y pulsa otra vez ANALIZAR ERROR.";
         if (/cc error|certificate|digital signing/.test(t)) {
             tips.push("CC Error: Windows sin parches o falta el certificado Elrasoft. Instala es_cert y reinicia UPA.");
         }

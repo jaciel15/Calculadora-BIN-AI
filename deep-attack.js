@@ -82,37 +82,86 @@ const DeepAttack = {
         return found;
     },
 
+    formulaSpanish(formula) {
+        const f = String(formula || "X").replace(/\s+/g, " ").trim();
+        const bits = [];
+        const mul = f.match(/X\s*\*\s*(\d+)/i);
+        const div = f.match(/X\s*\/\s*(\d+)/i);
+        const add = f.match(/X\s*\+\s*(\d+)/i);
+        const sub = f.match(/X\s*-\s*(\d+)/i);
+        const xor = f.match(/XOR(?:BYTES)?\s+([0-9A-Fa-f]+)/i);
+        if (mul) bits.push("tomé el kilometraje y lo multipliqué por " + mul[1]);
+        else if (div) bits.push("tomé el kilometraje y lo dividí entre " + div[1]);
+        else if (add) bits.push("al kilometraje le sumé " + add[1]);
+        else if (sub) bits.push("al kilometraje le resté " + sub[1]);
+        else if (/^~?\(?\s*X\s*\)?$/.test(f) || f === "X") bits.push("usé el kilometraje tal cual, sin multiplicar ni dividir");
+        if (/SWAP16/.test(f)) bits.push("después intercambié los 2 bytes (el bajo y el alto se van al revés)");
+        if (/SWAP32/.test(f)) bits.push("después intercambié los 4 bytes");
+        if (/NIBBLE_SWAP/.test(f)) bits.push("después intercambié las mitades de cada byte");
+        if (/~/.test(f) || /\bNOT/.test(f)) bits.push("después invertí los bits (NOT)");
+        if (/GRAY/.test(f)) bits.push("después apliqué código Gray");
+        if (/BCD/.test(f)) bits.push("lo guardé en BCD (cada nibble es un dígito)");
+        if (xor) bits.push("le hice XOR con " + xor[1].toUpperCase());
+        return bits.length ? bits.join("; ") : ("apliqué la fórmula " + f);
+    },
+
     talkBack(hits, best) {
         const help = this._help || {};
-        const bits = [];
-        if (help.invert) {
-            bits.push("Me dijiste que tal vez los bytes están invertidos. Los probé: little-endian, big-endian, SWAP16, nibble-swap y NOT.");
-        } else {
-            bits.push("También miré si el orden de bytes iba al revés (LE/BE/SWAP16).");
-        }
+        const ctx = this._ctx || {};
+        const lines = [];
         if (!best) {
-            bits.push("Te respondo: todavía no cierro el kilometraje. Sube otro BIN con otro KM, pinta el KM en rojo o marca «Tal vez bytes invertidos». No invento el nombre del algoritmo.");
-            return bits.join(" ");
+            lines.push("Terminé el ataque y no pude cerrar el kilometraje con lo que hay.");
+            lines.push("Atacé " + ((this._diffs && this._diffs.size) || 0) + " bytes que cambian entre BIN 1 y BIN 2.");
+            if (help.invert) lines.push("Probé orden normal, invertido, SWAP y NOT, como me pediste.");
+            lines.push("Dime qué está mal o qué falta: otra dirección, otro color, si hay checksum, o sube otro BIN. Platicamos y vuelvo a atacar.");
+            return lines.join("\n");
         }
-        const looksInv = best.endian === "BE" || /SWAP16|SWAP32|NIBBLE_SWAP|~\(/.test(String(best.formula || "")) || !!best.fromInvert;
-        if (help.invert) {
-            if (looksInv) {
-                bits.push("Te respondo: SÍ, iban invertidos. La lectura que cierra es " + best.formula +
-                    " en " + best.width + " bytes " + best.endian + " @ " + this.hex(best.addr) + ".");
-            } else {
-                bits.push("Te respondo: NO estaban invertidos. El KM cierra en little-endian, fórmula " +
-                    best.formula + " @ " + this.hex(best.addr) + ".");
-            }
+        const a = ctx.bytes;
+        const start = best.addr;
+        const width = best.width || 2;
+        const end = start + width - 1;
+        const rawHex = (best.hex) || (a ? MathEngine.hexBytes(a.slice(start, start + width)) : "—");
+        const copies = (best.copies && best.copies.length) ? best.copies : [start];
+        const order = best.endian === "BE"
+            ? "big-endian: leí primero el byte de la izquierda (el alto)"
+            : "little-endian: el primer byte es el bajo (el de la derecha en el número)";
+        lines.push("Esto es lo que hice, sin rarezas:");
+        lines.push("1) En la línea " + this.hex(best.line) + " leí " + width +
+            " byte" + (width === 1 ? "" : "s") + " en " + this.hex(start) + "-" + this.hex(end) +
+            ": " + rawHex + ".");
+        lines.push("2) Orden: " + order + ".");
+        lines.push("3) Descifrado: " + this.formulaSpanish(best.formula) +
+            " (fórmula " + (best.formula || "X") + ").");
+        if (ctx.km1 != null) {
+            lines.push("4) Con eso el KM del BIN 1 cierra en " + ctx.km1 +
+                (ctx.km2 != null ? " y el del BIN 2 en " + ctx.km2 : "") + ".");
+        }
+        lines.push("5) Lo mismo está en " + copies.length + " copia" + (copies.length === 1 ? "" : "s") +
+            ": " + copies.slice(0, 8).map((addr) => this.hex(addr)).join(", ") +
+            (copies.length > 8 ? "…" : "") + ".");
+        if (best.checksum) {
+            lines.push("6) Checksum " + best.checksum.name +
+                (best.checksum.start != null
+                    ? " de " + this.hex(best.checksum.start) + "-" + this.hex((best.checksum.end || best.checksum.start + 1) - 1)
+                    : " de esos " + width + " bytes") +
+                ", lo escribí/leí en " + this.hex(best.checksum.storedAt) + ".");
         } else {
-            bits.push("Te respondo: desencripté " + best.formula + " · " + best.width + "B " + best.endian +
-                " @ " + this.hex(best.addr) +
-                (looksInv ? ". El orden de bytes iba al revés." : ". El orden de bytes es el normal (primero el bajo)."));
+            lines.push("6) No ligé SUM/CRC a ese KM. Si ves el checksum en otro byte, dímelo.");
         }
-        const top = (hits || []).filter((h) => this.isSolid(h)).slice(0, 5);
-        if (top.length > 1) {
-            bits.push("Otras hipótesis: " + top.slice(1).map((h) => h.formula + " " + h.endian).join(" · ") + ".");
+        if (help.invert) {
+            const looksInv = best.endian === "BE" || /SWAP16|SWAP32|NIBBLE_SWAP|~/.test(String(best.formula || "")) || !!best.fromInvert;
+            lines.push(looksInv
+                ? "De los invertidos: SÍ, el que cierra iba al revés (BE/SWAP/NOT)."
+                : "De los invertidos: NO. Cerró en little-endian, orden normal.");
         }
-        return bits.join(" ");
+        const top = (hits || []).filter((h) => this.isSolid(h) && h !== best).slice(0, 3);
+        if (top.length) {
+            lines.push("Otras lecturas posibles: " + top.map((h) =>
+                this.hex(h.addr) + " " + h.formula + " " + h.width + "B " + h.endian
+            ).join(" · ") + ".");
+        }
+        lines.push("Si me equivoqué en esta parte, dímelo: qué línea, qué bytes o qué cuenta está mal, y qué debería ser. Corrijo y vuelvo a atacar.");
+        return lines.join("\n");
     },
 
     matchPair(raw1, raw2, km1, km2) {
@@ -475,9 +524,11 @@ const DeepAttack = {
 
     decodeHow(hit) {
         const bits = [];
-        bits.push("Línea " + this.hex(hit.line) + " @ " + this.hex(hit.addr) + " guarda el KM en " + hit.width + " bytes " + hit.endian + ".");
-        bits.push("Fórmula: " + hit.formula + ".");
-        if (hit.fromKnown && hit.name) bits.push("Usó el algoritmo que ya tenía: " + hit.name + ".");
+        bits.push("En la línea " + this.hex(hit.line) + " leí " + hit.width + " bytes en " +
+            this.hex(hit.addr) + "-" + this.hex(hit.addr + hit.width - 1) +
+            (hit.hex ? " (" + hit.hex + ")" : "") + ".");
+        bits.push("Descifrado: " + this.formulaSpanish(hit.formula) + ".");
+        if (hit.fromKnown && hit.name) bits.push("Partí del algoritmo guardado " + hit.name + ".");
         if (hit.stair) bits.push("Hacia 0000 el valor baja de 1 en 1 (" + hit.stair + " páginas).");
         if (hit.checksum) {
             bits.push("Checksum " + hit.checksum.name + " " + (hit.checksum.endian || "") +
@@ -487,8 +538,8 @@ const DeepAttack = {
             bits.push("Aún no ligó SUM/CRC de ese KM.");
         }
         if (hit.scatter && hit.scatter.length) {
-            bits.push("BIN 1 es original y BIN 2/3 editados: igualé el KM en " + hit.scatter.length +
-                " bytes (copias, eco del byte bajo y espejo). Lo que no cambió se queda; los restos del KM viejo se quitan.");
+            bits.push("Igualé el KM en " + hit.scatter.length +
+                " bytes que el par movió. Lo que no cambió se queda.");
         }
         return bits.join(" ");
     },
@@ -917,6 +968,13 @@ const DeepAttack = {
         }
         const box = typeof document !== "undefined" ? document.getElementById("hintInvertBytes") : null;
         if (box && box.checked) invert = true;
+        let ban = { formulas: [], addrs: [] };
+        if (typeof AiCoach !== "undefined" && AiCoach.memory && AiCoach.memory.ban) {
+            ban = {
+                formulas: (AiCoach.memory.ban.formulas || []).slice(),
+                addrs: (AiCoach.memory.ban.addrs || []).slice()
+            };
+        }
         const raw = String(text);
         const low = raw.toLowerCase();
         if (/invertid|al revés|al reves|swapead|bytes invert/.test(low)) invert = true;
@@ -935,13 +993,21 @@ const DeepAttack = {
         this.kmFields().forEach((f) => {
             if (addrs.indexOf(f.start) < 0) addrs.push(f.start);
         });
+        if (formula && ban.formulas.indexOf(formula) >= 0) formula = null;
         if (formula) notes.push("Fórmula que me dijiste: " + formula);
         if (width) notes.push(width + " bytes");
         if (endian) notes.push(endian);
         if (chk) notes.push("Checksum " + chk);
         if (invert) notes.push("Pista: bytes invertidos");
+        if (typeof AlgoNet !== "undefined" && AlgoNet.last) {
+            (AlgoNet.last.formulas || []).forEach((f) => {
+                if (f && notes.indexOf("net:" + f) < 0) notes.push("Algoritmo de búsqueda: " + f);
+            });
+            if (!formula && AlgoNet.last.formulas && AlgoNet.last.formulas[0]) formula = AlgoNet.last.formulas[0];
+        }
         if (addrs.length) notes.push(addrs.length + " direcciones de tu ayuda");
         if (!notes.length) notes.push("Sin ayuda extra: pienso solo con los diffs");
+        if (ban.formulas.length) notes.push("Descarté lo que me dijiste que estaba mal: " + ban.formulas.join(", "));
         return {
             addrs: addrs,
             fields: this.kmFields(),
@@ -950,6 +1016,7 @@ const DeepAttack = {
             endian: endian,
             chk: chk,
             invert: invert,
+            ban: ban,
             text: raw,
             notes: notes
         };
@@ -966,6 +1033,11 @@ const DeepAttack = {
         });
         const formulas = [];
         if (help.formula) formulas.push(help.formula);
+        if (typeof AlgoNet !== "undefined" && AlgoNet.last) {
+            (AlgoNet.last.formulas || []).forEach((f) => {
+                if (f && formulas.indexOf(f) < 0) formulas.unshift(f);
+            });
+        }
         ["X", "X / 2", "X / 4", "X / 10", "X / 31", "X / 32", "X * 10", "X * 100", "X * 4", "X * 31", "X * 32",
             "~X", "~(X * 1000)", "GRAY(X)", "SWAP16(X)", "SWAP16(X*10)", "BCD"].forEach((f) => {
             if (formulas.indexOf(f) < 0) formulas.push(f);
@@ -1238,16 +1310,15 @@ const DeepAttack = {
             if (self.MIN_MS > self.MAX_MS) self.MAX_MS = self.MIN_MS;
             if (self.MAX_MS > self.HARD_MS) self.HARD_MS = self.MAX_MS;
             self._ctx = { bytes: a, bytes2: b, bytes3: c, km1: km1, km2: km2, km3: km3 };
-            self._recipes = self.knownRecipes();
-            self._simLog = [];
-            self._vins = [];
-            self._inventStarted = false;
-            self._diffs = null;
-            self._skipped = [];
-            self._help = null;
-            self._chkI = null;
-            self._chkList = [];
-            self._ctx = { bytes: a, bytes2: b, bytes3: c, km1: km1, km2: km2, km3: km3 };
+            if (typeof AlgoNet !== "undefined") {
+                AlgoNet.hunt({
+                    size: a.length,
+                    km1: km1,
+                    km2: km2,
+                    chip: (typeof currentBIN !== "undefined" && currentBIN && currentBIN.chip) || "",
+                    fileName: (typeof currentBIN !== "undefined" && currentBIN && currentBIN.fileName) || ""
+                });
+            }
             self._recipes = self.knownRecipes();
             self._simLog = [];
             self._vins = [];
@@ -1636,7 +1707,12 @@ const DeepAttack = {
 
     finish(hits, lines, tested, stopped) {
         this.running = false;
-        hits = (hits || []).slice().sort((a, b) => (b.score - a.score) || (b.line - a.line));
+        const ban = (this._help && this._help.ban) || { formulas: [], addrs: [] };
+        hits = (hits || []).filter((h) => {
+            if (ban.formulas && ban.formulas.indexOf(h.formula) >= 0) return false;
+            if (ban.addrs && ban.addrs.indexOf(h.addr) >= 0) return false;
+            return true;
+        }).slice().sort((a, b) => (b.score - a.score) || (b.line - a.line));
         const solid = hits.filter((h) => this.isSolid(h));
         const best = solid[0] || null;
         const reply = this.talkBack(hits, best);
@@ -1653,14 +1729,7 @@ const DeepAttack = {
             help: (this._help && this._help.notes) || [],
             reply: reply,
             invert: !!(this._help && this._help.invert),
-            message: reply + (best
-                ? " " + (best.checksum
-                    ? ("Checksum " + best.checksum.name + " en " + this.hex(best.checksum.storedAt) + ".")
-                    : " No hallé SUM/CRC de ese KM.") +
-                    (this._vins && this._vins[0] ? " VIN " + this._vins[0].value + "." : "") +
-                    " " + this.decodeHow(best)
-                : " Atacé " + (lines || []).length + " líneas que cambian (" + tested +
-                    " pruebas). Los algoritmos que no calzaron se descartaron.")
+            message: reply
         };
         if (best && typeof KnowledgeBase !== "undefined") {
             try {

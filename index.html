@@ -7,7 +7,7 @@
     <title>VELOCÍMETROS CDMX</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="style.css?v=mente9">
+    <link rel="stylesheet" href="style.css?v=mente14">
 </head>
 
 <body>
@@ -120,19 +120,27 @@
             <canvas id="attackPosterMain" width="720" height="420"></canvas>
             <button type="button" class="action-btn green" id="attackPosterMainSave">DESCARGAR IMAGEN DEL ATAQUE</button>
         </div>
-        <div class="help-recipe-bar">
-            <button type="button" id="helpHowBtn" class="help-how-btn">CÓMO LO HAGO</button>
-            <textarea id="helpRecipe" rows="3" placeholder="Pulsa CÓMO LO HAGO. La IA te pregunta el color del KM, si hay SUM/CRC (Sí o No) y si los bytes van invertidos."></textarea>
-            <label class="hint-invert">
-                <input type="checkbox" id="hintInvertBytes">
-                Tal vez bytes invertidos
-            </label>
-        </div>
-        <div id="aiChat" class="ai-chat">
+        <div id="aiChat" class="ai-chat ai-live">
+            <div class="ai-chat-head">
+                <button type="button" id="helpHowBtn" class="help-how-btn">CÓMO LO HAGO</button>
+                <div class="ai-chat-title">
+                    <strong>IA del ataque</strong>
+                    <span id="aiPulse" class="ai-pulse">en vivo</span>
+                </div>
+                <label class="hint-invert">
+                    <input type="checkbox" id="hintInvertBytes">
+                    Tal vez bytes invertidos
+                </label>
+            </div>
             <div id="aiChatLog" class="ai-chat-log"></div>
-            <p id="aiReply" class="ai-ask">Pulsa CÓMO LO HAGO. Te pregunto el color del KM, si hay SUM/CRC (Sí o No) y si los bytes van invertidos. Al final te digo: empezamos el ataque.</p>
-            <div id="aiChatBtns" class="ai-chat-btns"></div>
+            <p id="aiReply" class="ai-ask hidden" hidden></p>
+            <div id="aiChatBtns" class="ai-chat-btns" hidden></div>
+            <div class="ai-chat-input">
+                <textarea id="aiTalk" rows="2" placeholder="Háblame suelto: el KM está en 0010-0012 rojo, no hay checksum, empieza el ataque…"></textarea>
+                <button type="button" id="aiSendBtn" class="ai-send-btn">DECIRLE</button>
+            </div>
         </div>
+        <textarea id="helpRecipe" hidden aria-hidden="true"></textarea>
         <input type="file" id="fileInput2" accept="*/*,.bin,.eep,.hex,.s19,.srec,.mot" hidden>
 
         <div id="vinStrip" class="vin-strip">
@@ -598,11 +606,19 @@
             <button type="button" id="upaMakeTxt" class="btn-blue">NOTAS .TXT</button>
         </div>
         <label>ERROR DEL PROGRAMADOR UPA</label>
-        <textarea id="upaErrorBox" rows="4" placeholder="Pega aquí el mensaje rojo o el log de UPA."></textarea>
+        <textarea id="upaErrorBox" rows="4" placeholder="Aquí NO se escribe a mano. Copia el error rojo de UPA y pégalo (Ctrl+V)."></textarea>
         <div class="editor-buttons">
             <button type="button" id="upaErrorBtn" class="action-btn yellow">ANALIZAR ERROR</button>
         </div>
-        <p id="upaErrorOut" class="modal-help">Si falla en el programador, pega el error y pulsa ANALIZAR ERROR.</p>
+        <p id="upaErrorOut" class="modal-help">Si el programador UPA falla, copia su mensaje rojo, pégalo arriba y pulsa ANALIZAR ERROR. Si el recuadro está vacío, no hay nada que analizar.</p>
+        <div class="ai-chat upa-ai">
+            <p id="upaAiReply" class="ai-ask">IA del script UPA: los botones de arriba siguen creando el .PSC. Aquí puedes preguntarme qué hace el código, el chip, o pegar el error del programador.</p>
+            <div id="upaAiLog" class="ai-chat-log"></div>
+            <div class="help-recipe-bar upa-talk">
+                <textarea id="upaAiText" rows="2" placeholder="Pregúntame el script, el chip, o pega el error de UPA…"></textarea>
+                <button type="button" id="upaAiSend" class="ai-send-btn">DECIRLE</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -617,29 +633,31 @@
 </div>
 <div id="attackToast" class="attack-toast hidden"></div>
 
-<script src="mark-book.js?v=mente9"></script>
-<script src="operation-registry.js?v=mente9"></script>
-<script src="expression-tree.js?v=mente9"></script>
-<script src="math-engine.js?v=mente9"></script>
-<script src="expression-generator.js?v=mente9"></script>
-<script src="fitness-engine.js?v=mente9"></script>
-<script src="validation-engine.js?v=mente9"></script>
-<script src="checksum-engine.js?v=mente9"></script>
-<script src="knowledge-base.js?v=mente9"></script>
-<script src="bin-world.js?v=mente9"></script>
-<script src="mind-engine.js?v=mente9"></script>
-<script src="hunters.js?v=mente9"></script>
-<script src="dna-discovery.js?v=mente9"></script>
-<script src="editor-upa.js?v=mente9"></script>
-<script src="write-machine.js?v=mente9"></script>
-<script src="bin-object.js?v=mente9"></script>
-<script src="family-library.js?v=mente9"></script>
-<script src="omega-kernel.js?v=mente9"></script>
-<script src="bin-core.js?v=mente9"></script>
-<script src="discovery-manager.js?v=mente9"></script>
-<script src="ai-coach.js?v=mente9"></script>
-<script src="deep-attack.js?v=mente9"></script>
-<script src="app.js?v=mente9"></script>
+<script src="mark-book.js?v=mente12"></script>
+<script src="operation-registry.js?v=mente12"></script>
+<script src="expression-tree.js?v=mente12"></script>
+<script src="math-engine.js?v=mente12"></script>
+<script src="expression-generator.js?v=mente12"></script>
+<script src="fitness-engine.js?v=mente12"></script>
+<script src="validation-engine.js?v=mente12"></script>
+<script src="checksum-engine.js?v=mente12"></script>
+<script src="knowledge-base.js?v=mente12"></script>
+<script src="bin-world.js?v=mente12"></script>
+<script src="mind-engine.js?v=mente12"></script>
+<script src="hunters.js?v=mente12"></script>
+<script src="dna-discovery.js?v=mente12"></script>
+<script src="editor-upa.js?v=mente13"></script>
+<script src="write-machine.js?v=mente12"></script>
+<script src="bin-object.js?v=mente12"></script>
+<script src="family-library.js?v=mente12"></script>
+<script src="omega-kernel.js?v=mente12"></script>
+<script src="bin-core.js?v=mente12"></script>
+<script src="discovery-manager.js?v=mente12"></script>
+<script src="algo-net.js?v=mente12"></script>
+<script src="ai-coach.js?v=mente14"></script>
+<script src="upa-coach.js?v=mente12"></script>
+<script src="deep-attack.js?v=mente12"></script>
+<script src="app.js?v=mente14"></script>
 
 </body>
 </html>

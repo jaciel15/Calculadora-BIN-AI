@@ -54,6 +54,25 @@ const MarkBook = {
         this.refresh(addr);
     },
 
+    applyRange(kind, start, end) {
+        if (!this.kinds[kind]) return;
+        const cap = (typeof currentBIN !== "undefined" && currentBIN && currentBIN.original)
+            ? currentBIN.original.length
+            : 0x100000;
+        const a = Math.max(0, Math.min(Number(start), Number(end)));
+        const b = Math.min(cap - 1, Math.max(Number(start), Number(end)));
+        if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return;
+        this.setBrush(kind);
+        for (let addr = a; addr <= b; addr++) this.paint(addr);
+        const snap = this.snapshot(kind);
+        if (snap.length) {
+            this.lessons[kind] = this.compact((this.lessons[kind] || []).concat(snap));
+            this.claimExclusive(kind, snap);
+        }
+        this.persist();
+        this.renderGuide();
+    },
+
     stroke(from, to) {
         if (to === null || to === undefined) return;
         if (from === null || from === undefined || from === to) {
@@ -105,6 +124,7 @@ const MarkBook = {
     },
 
     recipeText() {
+        if (typeof AiCoach !== "undefined" && AiCoach.compiled) return String(AiCoach.compiled || "").trim();
         const el = document.getElementById("helpRecipe");
         return el ? String(el.value || "").trim() : "";
     },

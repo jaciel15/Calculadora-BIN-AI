@@ -190,6 +190,17 @@ const CodeBook = {
                 writeHow: "floor(KM/32) LE16."
             },
             {
+                id: "GEN_SWAP16_X",
+                name: "Genérico SWAP16(KM)",
+                origin: "Patrón público EEPROM swapeada",
+                formula: "SWAP16(X)",
+                width: 2,
+                endian: "LE",
+                chk: "",
+                recipe: "El KM uint16 con los dos bytes intercambiados.",
+                writeHow: "SWAP16 del KM."
+            },
+            {
                 id: "GEN_SWAP16_X10",
                 name: "Genérico SWAP16(KM×10)",
                 origin: "Patrón público EEPROM swapeada",

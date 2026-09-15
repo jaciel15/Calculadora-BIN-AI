@@ -650,8 +650,9 @@ function renderAnalysis(analysis) {
     refreshIdentity();
     renderDiffTable(analysis.omega ? analysis.omega.diffWorld : null);
     showHEX(currentBIN.working);
-    if (analysis.best && analysis.best.familyId === "YAMAHA_R5F10" && currentBIN.original && currentBIN.original.length === 8192 && $("helpRecipe")) {
-        $("helpRecipe").value = R5F_RECIPE;
+    if (analysis.best && analysis.best.familyId === "YAMAHA_R5F10" && currentBIN.original && currentBIN.original.length === 8192) {
+        if (typeof AiCoach !== "undefined") AiCoach.notice("family", R5F_RECIPE);
+        else if ($("helpRecipe")) $("helpRecipe").value = R5F_RECIPE;
     }
     addLogRows();
 }
@@ -763,7 +764,10 @@ function bindKmInputs() {
         if (!el || el.getAttribute("data-km-wired")) return;
         el.setAttribute("data-km-wired", "1");
         el.addEventListener("input", refreshKmReadout);
-        el.addEventListener("change", refreshKmReadout);
+        el.addEventListener("change", function () {
+            refreshKmReadout();
+            if (typeof AiCoach !== "undefined" && /knownKm/.test(id)) AiCoach.notice("km");
+        });
     });
 }
 
@@ -900,7 +904,7 @@ async function loadBIN(event) {
         MarkBook.clear();
         MarkBook.revealed = false;
     }
-    if ($("helpRecipe") && !(currentBIN.family && currentBIN.family.family && currentBIN.family.family.id === "YAMAHA_R5F10")) {
+    if (typeof AiCoach === "undefined" && $("helpRecipe") && !(currentBIN.family && currentBIN.family.family && currentBIN.family.family.id === "YAMAHA_R5F10")) {
         $("helpRecipe").value = "";
     }
     $("fileName").textContent = currentBIN.fileName;
@@ -935,15 +939,18 @@ async function loadBIN(event) {
         }
         $("omegaCard").textContent = currentBIN.family.family.id + "\n" + currentBIN.family.family.status + "\n" + currentBIN.family.family.writeHow;
         $("omegaThink").textContent = "Familia de kernel reconocida al cargar.";
-        if (currentBIN.family.family.id === "YAMAHA_R5F10" && $("helpRecipe")) {
-            $("helpRecipe").value = R5F_RECIPE;
-        }
     }
     setStatus(dump.complete ? "COMPLETO" : "INCOMPLETO", dump.complete);
     if (!currentBIN.family && $("omegaThink")) {
         $("omegaThink").textContent = dump.note + " No recorto a un chip. Con BIN 2 y KM 1 / KM 2, ATAQUE 10 MIN descifra solo lo que cambia.";
     }
     addLogRows();
+    if (typeof AiCoach !== "undefined") {
+        if (currentBIN.family && currentBIN.family.family && currentBIN.family.family.id === "YAMAHA_R5F10") {
+            AiCoach.fromText(R5F_RECIPE);
+        }
+        AiCoach.notice("bin1");
+    }
 }
 
 function runAnalysis(extra) {
@@ -1362,6 +1369,7 @@ function showUpaModal() {
     }
     renderUpaScripts();
     $("upaModal").classList.add("open");
+    if (typeof UpaCoach !== "undefined") UpaCoach.bind();
     if (many && !$("upaSource").value) {
         if (confirm("Hay varias versiones. ¿Creo AUTODETECT de lectura y escritura ahora?")) {
             if ($("upaMode")) $("upaMode").value = "auto";
@@ -1413,6 +1421,7 @@ function buildUpaScript(kind, defaultName) {
     window._upaKind = kind;
     binCore.addLog("UPA SCRIPT", "Generé " + kind + " · " + algos.length + " versiones TMS Pascal");
     addLogRows();
+    if (typeof UpaCoach !== "undefined") UpaCoach.seenScript(script, kind);
     return script;
 }
 
@@ -1632,7 +1641,8 @@ function associateSelectedCode() {
     const width = book ? book.width : (item.width > 16 ? 3 : item.width);
     const endian = book ? book.endian : item.endian;
     const chk = book ? book.chk : item.chk;
-    if ($("helpRecipe")) $("helpRecipe").value = recipe;
+    if (typeof AiCoach !== "undefined" && recipe) AiCoach.notice("recipe", recipe);
+    else if ($("helpRecipe")) $("helpRecipe").value = recipe;
     if (typeof MarkBook !== "undefined") MarkBook.persist();
     if (formula && formula !== "FINO" && formula !== "DEMOSTRADO" && formula !== "LUGAR DEMOSTRADO") {
         KnowledgeBase.upsertManual({
@@ -1859,6 +1869,7 @@ async function loadBIN2(event) {
         showHEX(currentBIN.working);
     }
     addLogRows();
+    if (typeof AiCoach !== "undefined") AiCoach.notice("bin2");
 }
 
 async function loadBIN3(event) {
@@ -1887,6 +1898,7 @@ async function loadBIN3(event) {
     if (binCore.currentBIN) binCore.addLog("COMPARADOR", dump.note + " BIN 3: " + dump.fileName);
     if (currentBIN) showHEX(currentBIN.working);
     addLogRows();
+    if (typeof AiCoach !== "undefined") AiCoach.notice("bin3");
     if (knownKm3() !== null) startDeepAttack();
 }
 
@@ -1974,6 +1986,10 @@ async function startDeepAttack() {
     setStatus("CARGANDO", "busy");
     if (status) status.textContent = "En carga. KM 1 = " + km1 + " · KM 2 = " + km2 + ". 5 min fijos. Si no cierra, 10. Si aún no, 15. Tus colores y el complemento también entran.";
     if (clock) clock.textContent = "0:00 / 15:00";
+    if (typeof AiCoach !== "undefined") {
+        if (AiCoach._attackSaid) AiCoach._attackSaid = false;
+        else AiCoach.notice("attack");
+    }
     await new Promise(function (resolve) { setTimeout(resolve, 50); });
     let report;
     try {
@@ -2024,9 +2040,9 @@ async function startDeepAttack() {
     setStatus("LISTO", "ok");
     await new Promise(function (resolve) { setTimeout(resolve, 900); });
     if (overlay) overlay.classList.add("hidden");
-    if ($("aiReply")) $("aiReply").textContent = report.reply || report.message;
     if ($("omegaThink")) $("omegaThink").textContent = report.reply || report.message;
-    if (typeof AiCoach !== "undefined") AiCoach.hearAttack(report.reply || report.message);
+    if (typeof AiCoach !== "undefined") AiCoach.hearAttack(report);
+    else if ($("aiReply")) $("aiReply").textContent = report.reply || report.message;
     if (report.best) {
         if (!currentBIN.analysis) {
             currentBIN.analysis = {
@@ -2267,16 +2283,11 @@ function wireUI() {
     if ($("brainInput")) $("brainInput").addEventListener("change", importBrain);
     bindClick("markAcceptBtn", acceptMarkLesson);
     bindClick("markSkipBtn", skipMarkLesson);
-    if ($("helpRecipe")) {
-        const saveRecipe = () => { if (typeof MarkBook !== "undefined") MarkBook.persist(); };
-        $("helpRecipe").addEventListener("change", saveRecipe);
-        $("helpRecipe").addEventListener("input", saveRecipe);
-    }
     if ($("hintInvertBytes")) {
         $("hintInvertBytes").addEventListener("change", function () {
             if (typeof MarkBook !== "undefined") MarkBook.persist();
-            if ($("aiReply") && $("hintInvertBytes").checked) {
-                $("aiReply").textContent = "Entendido: tal vez los bytes están invertidos. En ATAQUE probaré LE, BE, SWAP16, nibble-swap y NOT, y te responderé si sí o no.";
+            if (typeof AiCoach !== "undefined" && AiCoach.alive) {
+                AiCoach.hear($("hintInvertBytes").checked ? "bytes invertidos" : "orden normal little endian");
             }
         });
     }
@@ -2309,6 +2320,7 @@ function wireUI() {
     bindClick("analyzePairBtn", runPairAnalysis);
     bindClick("attackBtn", startDeepAttack);
     if (typeof AiCoach !== "undefined") AiCoach.bind();
+    if (typeof UpaCoach !== "undefined") UpaCoach.bind();
     bindClick("attackPosterMainSave", downloadAttackPoster);
     bindKmInputs();
     refreshKmReadout();
@@ -2379,6 +2391,7 @@ function wireUI() {
         binCore.addLog("UPA SCRIPT", tip);
         addLogRows();
         alert(tip);
+        if (typeof UpaCoach !== "undefined") UpaCoach.seenError(tip, text);
     });
     if ($("upaScriptBody")) {
         $("upaScriptBody").addEventListener("click", (event) => {
